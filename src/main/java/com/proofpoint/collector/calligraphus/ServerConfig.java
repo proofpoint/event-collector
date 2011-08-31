@@ -18,6 +18,7 @@ package com.proofpoint.collector.calligraphus;
 import com.google.common.base.Preconditions;
 import com.proofpoint.configuration.Config;
 import com.proofpoint.configuration.ConfigDescription;
+import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.units.Duration;
 
 import javax.validation.constraints.NotNull;
@@ -26,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 public class ServerConfig
 {
     private Duration maxBufferTime = new Duration(1, TimeUnit.MINUTES);
+    private DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
 
     @Config("collector.max-buffer-time")
     @ConfigDescription("maximum length of time to buffer events locally before persisting them")
@@ -41,5 +43,24 @@ public class ServerConfig
     public Duration getMaxBufferTime()
     {
         return maxBufferTime;
+    }
+
+    @Config("collector.target-file-size")
+    @ConfigDescription("target size of final files in storage area (maximum size can be double)")
+    public ServerConfig setTargetFileSize(DataSize targetFileSize)
+    {
+        DataSize minSize = new DataSize(5, DataSize.Unit.MEGABYTE);
+        DataSize maxSize = new DataSize(2, DataSize.Unit.GIGABYTE);
+        Preconditions.checkNotNull(targetFileSize, "targetFileSize must not be null");
+        Preconditions.checkArgument(targetFileSize.compareTo(minSize) >= 0, "targetFileSize must be at least " + minSize);
+        Preconditions.checkArgument(targetFileSize.compareTo(maxSize) <= 0, "targetFileSize must be at most " + maxSize);
+        this.targetFileSize = targetFileSize;
+        return this;
+    }
+
+    @NotNull
+    public DataSize getTargetFileSize()
+    {
+        return targetFileSize;
     }
 }

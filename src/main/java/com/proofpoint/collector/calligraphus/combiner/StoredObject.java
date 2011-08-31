@@ -2,17 +2,24 @@ package com.proofpoint.collector.calligraphus.combiner;
 
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
+import org.codehaus.jackson.annotate.JsonCreator;
+import org.codehaus.jackson.annotate.JsonProperty;
+
+import java.net.URI;
 
 public class StoredObject
 {
     private final String name;
-    private final StorageArea storageArea;
+    private final URI storageArea;
     private final String etag;
     private final long size;
     private final long lastModified;
 
-    public StoredObject(String name, StorageArea storageArea)
+    public StoredObject(String name, URI storageArea)
     {
+        Preconditions.checkNotNull(name, "name is null");
+        Preconditions.checkNotNull(storageArea, "storageArea is null");
+
         this.name = name;
         this.storageArea = storageArea;
         this.etag = null;
@@ -20,7 +27,13 @@ public class StoredObject
         this.lastModified = 0;
     }
 
-    public StoredObject(String name, StorageArea storageArea, String etag, long size, long lastModified)
+    @JsonCreator
+    public StoredObject(
+            @JsonProperty("name") String name,
+            @JsonProperty("storageArea") URI storageArea,
+            @JsonProperty("etag") String etag,
+            @JsonProperty("size") long size,
+            @JsonProperty("lastModified") long lastModified)
     {
         Preconditions.checkNotNull(name, "name is null");
         Preconditions.checkNotNull(storageArea, "storageArea is null");
@@ -32,26 +45,31 @@ public class StoredObject
         this.lastModified = lastModified;
     }
 
+    @JsonProperty
     public String getName()
     {
         return name;
     }
 
-    public StorageArea getStorageArea()
+    @JsonProperty
+    public URI getStorageArea()
     {
         return storageArea;
     }
 
+    @JsonProperty
     public String getETag()
     {
         return etag;
     }
 
+    @JsonProperty
     public long getSize()
     {
         return size;
     }
 
+    @JsonProperty
     public long getLastModified()
     {
         return lastModified;

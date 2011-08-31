@@ -9,7 +9,12 @@ import org.jets3t.service.model.MultipartCompleted;
 import org.jets3t.service.model.MultipartUpload;
 import org.jets3t.service.model.S3Object;
 
+import java.net.URI;
 import java.util.List;
+
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Bucket;
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3ObjectName;
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Path;
 
 public class S3StorageSystem implements StorageSystem
 {
@@ -22,20 +27,16 @@ public class S3StorageSystem implements StorageSystem
     }
 
     @Override
-    public List<StoredObject> listObjects(StorageArea storageArea)
+    public List<StoredObject> listObjects(URI storageArea)
     {
-        Preconditions.checkArgument(storageArea instanceof S3StorageArea,
-                "storageArea is not an instance of %s, but is a %s",
-                S3StorageArea.class.getName(),
-                storageArea.getClass().getName());
+        S3StorageHelper.checkValidS3Uri(storageArea);
 
         try {
-
-            S3StorageArea s3StorageArea = (S3StorageArea) storageArea;
-            S3Object[] s3Objects = s3Service.listObjects(s3StorageArea.getBucket(), s3StorageArea.getPath(), "/", 1000L);
+            String s3Path = getS3Path(storageArea);
+            S3Object[] s3Objects = s3Service.listObjects(getS3Bucket(storageArea), s3Path, "/", 1000L);
             ImmutableList.Builder<StoredObject> builder = ImmutableList.builder();
             for (S3Object s3Object : s3Objects) {
-                builder.add(new StoredObject(s3Object.getName().substring(s3StorageArea.getPath().length()),
+                builder.add(new StoredObject(s3Object.getName().substring(s3Path.length()),
                         storageArea,
                         s3Object.getETag(),
                         s3Object.getContentLength(),
@@ -51,10 +52,10 @@ public class S3StorageSystem implements StorageSystem
     @Override
     public StoredObject createCombinedObject(StoredObject target, List<StoredObject> newCombinedObjectParts)
     {
-        S3StorageArea targetStorageArea = (S3StorageArea) target.getStorageArea();
+        URI targetStorageArea = target.getStorageArea();
         MultipartUpload upload;
         try {
-            upload = s3Service.multipartStartUpload(targetStorageArea.getBucket(), new S3Object(targetStorageArea.getPath() + target));
+            upload = s3Service.multipartStartUpload(getS3Bucket(targetStorageArea), new S3Object(getS3ObjectName(target)));
         }
         catch (S3ServiceException e) {
             throw Throwables.propagate(e);
@@ -63,11 +64,15 @@ public class S3StorageSystem implements StorageSystem
         try {
             int partNumber = 1;
             for (StoredObject newCombinedObjectPart : newCombinedObjectParts) {
+                URI sourceStorageArea = newCombinedObjectPart.getStorageArea();
+                String sourceBucket = getS3Bucket(sourceStorageArea);
+                String sourcePath = getS3Path(sourceStorageArea);
+
                 s3Service.multipartUploadPartCopy(
                         upload,
                         partNumber,
-                        targetStorageArea.getBucket(),
-                        targetStorageArea.getPath() + newCombinedObjectPart.getName(),
+                        sourceBucket,
+                        sourcePath + newCombinedObjectPart.getName(),
                         null, // ifModifiedSince
                         null, // ifUnmodifiedSince
                         null, // ifMatchTags
@@ -79,7 +84,8 @@ public class S3StorageSystem implements StorageSystem
             }
 
             MultipartCompleted completed = s3Service.multipartCompleteUpload(upload);
-            return new StoredObject(completed.getObjectKey(), targetStorageArea, completed.getEtag(), target.getSize(), target.getLastModified());
+            S3Object combinedObject = s3Service.getObject(getS3Bucket(targetStorageArea), getS3ObjectName(target));
+            return new StoredObject(completed.getObjectKey(), targetStorageArea, combinedObject.getETag(), combinedObject.getContentLength(), combinedObject.getLastModifiedDate().getTime());
         }
         catch (ServiceException e) {
             try {

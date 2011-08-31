@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.MapMaker;
 
 import javax.annotation.Nullable;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
@@ -12,27 +13,27 @@ import static com.google.common.collect.Lists.newArrayList;
 
 public class TestingStorageSystem implements StorageSystem
 {
-    private final Map<StorageArea, List<StoredObject>> objects = new MapMaker().makeComputingMap(new Function<StorageArea, List<StoredObject>>()
+    private final Map<URI, List<StoredObject>> objects = new MapMaker().makeComputingMap(new Function<URI, List<StoredObject>>()
     {
         @Override
-        public List<StoredObject> apply(@Nullable StorageArea input)
+        public List<StoredObject> apply(@Nullable URI input)
         {
             return newArrayList();
         }
     });
 
-    public void addObject(StorageArea storageArea, StoredObject storedObject)
+    public void addObject(URI storageArea, StoredObject storedObject)
     {
         objects.get(storageArea).add(storedObject);
     }
 
-    public void removeObject(StorageArea storageArea, StoredObject storedObject)
+    public void removeObject(URI storageArea, StoredObject storedObject)
     {
         objects.get(storageArea).remove(storedObject);
     }
 
     @Override
-    public List<StoredObject> listObjects(StorageArea storageArea)
+    public List<StoredObject> listObjects(URI storageArea)
     {
         List<StoredObject> storedObjects = objects.get(storageArea);
         return ImmutableList.copyOf(storedObjects);

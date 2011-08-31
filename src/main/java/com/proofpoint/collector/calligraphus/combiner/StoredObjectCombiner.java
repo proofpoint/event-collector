@@ -3,6 +3,7 @@ package com.proofpoint.collector.calligraphus.combiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
+import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -22,7 +23,7 @@ public class StoredObjectCombiner
         this.storageSystem = storageSystem;
     }
 
-    public CombinedStoredObject combineObjects(StorageArea stagingArea, StorageArea targetArea)
+    public CombinedStoredObject combineObjects(URI stagingArea, URI targetArea)
     {
         CombinedStoredObject currentCombinedObject;
         List<StoredObject> newCombinedObjectParts;
@@ -33,7 +34,7 @@ public class StoredObjectCombiner
 
             // Only update the object if the this node is was the last writer or 5 minutes have passed
             currentCombinedObject = metadataStore.getCombinedObjectManifest(stagingArea, targetArea);
-            if (!nodeId.equals(currentCombinedObject.getCreator()) && System.currentTimeMillis() - currentCombinedObject.getManifestTimestamp() <= TimeUnit.MINUTES.toMillis(5)) {
+            if (!nodeId.equals(currentCombinedObject.getCreator()) && System.currentTimeMillis() - currentCombinedObject.getCreatedTimestamp() <= TimeUnit.MINUTES.toMillis(5)) {
                 return null;
             }
 
@@ -56,7 +57,7 @@ public class StoredObjectCombiner
             // ERROR: if objects in staging do NOT have the same md5s in the current targetCombinedObject
             if (!stagedObjects.containsAll(currentCombinedObjectManifest)) {
                 throw new IllegalStateException(String.format("MD5 hashes for combined objects in %s do not match MD5 hashes in staging area",
-                        currentCombinedObject.getStoredObject().getName()));
+                        currentCombinedObject.getName()));
             }
 
             // newObjectList = current targetCombinedObject list + new objects not contained in this list
@@ -72,7 +73,7 @@ public class StoredObjectCombiner
         return new CombinedStoredObject(combinedObject, nodeId, System.currentTimeMillis(), newCombinedObjectParts);
     }
 
-    private void processLateData(StorageArea stagingArea, StorageArea targetArea)
+    private void processLateData(URI stagingArea, URI targetArea)
     {
         // todo do something :)
     }

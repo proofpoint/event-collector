@@ -21,6 +21,7 @@ import org.joda.time.DateTime;
 
 import javax.annotation.concurrent.Immutable;
 import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Pattern;
 import java.util.Map;
 import java.util.UUID;
 
@@ -50,6 +51,7 @@ public class Event
 
     @JsonProperty
     @NotNull(message = "is missing")
+    @Pattern(regexp = "[A-Za-z][A-Za-z0-9]*", message = "must be alphanumeric")
     public String getType()
     {
         return type;

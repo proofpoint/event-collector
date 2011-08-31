@@ -58,10 +58,8 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
                 return false;
             }
         }
-        else {
-            if (persistentCombinedStoredObject.getETag() != null) {
-                return false;
-            }
+        else if (currentCombinedObject.getETag() != null) {
+            return false;
         }
 
         long totalSize = 0;

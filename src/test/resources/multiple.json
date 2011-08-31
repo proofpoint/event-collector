@@ -8,5 +8,15 @@
             "foo": "bar",
             "hello": "world"
         }
+    },
+    {
+        "type": "test",
+        "uuid": "F96BB844-92BE-49AD-AC3C-FBC8CC25757F",
+        "host": "test.local",
+        "timestamp": "2011-03-30T16:10:31.000Z",
+        "data": {
+            "foo": "what",
+            "hello": "bye"
+        }
     }
 ]

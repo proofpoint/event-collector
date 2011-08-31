@@ -16,39 +16,34 @@
 package com.proofpoint.collector.calligraphus;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableList.Builder;
 import com.google.inject.Inject;
 
-import javax.ws.rs.GET;
+import javax.ws.rs.Consumes;
+import javax.ws.rs.POST;
 import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import java.util.List;
 
-import static com.proofpoint.collector.calligraphus.PersonRepresentation.from;
-
-@Path("/v1/person")
-public class PersonsResource
+@Path("/v2/event")
+public class EventResource
 {
-    private final PersonStore store;
+    private final EventWriter writer;
 
     @Inject
-    public PersonsResource(PersonStore store)
+    public EventResource(EventWriter writer)
     {
-        Preconditions.checkNotNull(store, "store must not be null");
-
-        this.store = store;
+        Preconditions.checkNotNull(writer, "writer must not be null");
+        this.writer = writer;
     }
 
-    @GET
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response listAll()
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response post(List<Event> events)
     {
-        Builder<PersonRepresentation> builder = ImmutableList.builder();
-        for (Person person : store.getAll()) {
-            builder.add(from(person, null));
+        for (Event event : events) {
+            writer.write(event);
         }
-        return Response.ok(builder.build()).build();
+        return Response.status(Response.Status.ACCEPTED).build();
     }
 }

@@ -17,36 +17,29 @@ package com.proofpoint.collector.calligraphus;
 
 import com.google.common.base.Preconditions;
 import com.proofpoint.configuration.Config;
-import com.proofpoint.configuration.LegacyConfig;
+import com.proofpoint.configuration.ConfigDescription;
 import com.proofpoint.units.Duration;
 
 import javax.validation.constraints.NotNull;
 import java.util.concurrent.TimeUnit;
 
-public class StoreConfig
+public class ServerConfig
 {
-    private Duration ttl = new Duration(1, TimeUnit.HOURS);
+    private Duration maxBufferTime = new Duration(1, TimeUnit.MINUTES);
 
-    @Deprecated
-    @LegacyConfig(value = "store.ttl-in-ms", replacedBy = "store.ttl")
-    public StoreConfig setTtlInMs(int duration)
+    @Config("collector.max-buffer-time")
+    @ConfigDescription("maximum length of time to buffer events locally before persisting them")
+    public ServerConfig setMaxBufferTime(Duration maxBufferTime)
     {
-        return setTtl(new Duration(duration, TimeUnit.MILLISECONDS));
-    }
-
-    @Config("store.ttl")
-    public StoreConfig setTtl(Duration ttl)
-    {
-        Preconditions.checkNotNull(ttl, "ttl must not be null");
-        Preconditions.checkArgument(ttl.toMillis() > 0, "ttl must be > 0");
-
-        this.ttl = ttl;
+        Preconditions.checkNotNull(maxBufferTime, "maxBufferTime must not be null");
+        Preconditions.checkArgument(maxBufferTime.toMillis() >= 1000, "maxBufferTime must be at least 1 second");
+        this.maxBufferTime = maxBufferTime;
         return this;
     }
 
     @NotNull
-    public Duration getTtl()
+    public Duration getMaxBufferTime()
     {
-        return ttl;
+        return maxBufferTime;
     }
 }

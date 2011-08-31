@@ -22,7 +22,6 @@ import org.weakref.jmx.guice.MBeanModule;
 
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
-import static com.proofpoint.event.client.EventBinder.eventBinder;
 
 public class MainModule
         implements Module
@@ -32,15 +31,13 @@ public class MainModule
         binder.requireExplicitBindings();
         binder.disableCircularProxies();
 
-        binder.bind(PersonStore.class).in(Scopes.SINGLETON);
-        MBeanModule.newExporter(binder).export(PersonStore.class).withGeneratedName();
+        binder.bind(EventWriter.class).to(S3EventWriter.class).in(Scopes.SINGLETON);
+        MBeanModule.newExporter(binder).export(S3EventWriter.class).withGeneratedName();
 
-        binder.bind(PersonsResource.class).in(Scopes.SINGLETON);
-        binder.bind(PersonResource.class).in(Scopes.SINGLETON);
+        binder.bind(EventResource.class).in(Scopes.SINGLETON);
 
-        bindConfig(binder).to(StoreConfig.class);
-        eventBinder(binder).bindEventClient(PersonEvent.class);
+        bindConfig(binder).to(ServerConfig.class);
 
-        discoveryBinder(binder).bindHttpAnnouncement("person");
+        discoveryBinder(binder).bindHttpAnnouncement("collector");
     }
 }

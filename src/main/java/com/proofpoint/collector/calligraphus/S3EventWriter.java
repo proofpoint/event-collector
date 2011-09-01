@@ -42,7 +42,7 @@ public class S3EventWriter
                 @Override
                 public OutputPartition apply(@Nullable EventPartition partition)
                 {
-                    return new OutputPartition(partition, uploader, objectMapper, targetFileSize);
+                    return new OutputPartition(partition, uploader, objectMapper, targetFileSize, maxBufferTime);
                 }
             });
 
@@ -62,7 +62,7 @@ public class S3EventWriter
             {
                 for (OutputPartition partition : outputFiles.values()) {
                     try {
-                        if (partition.isOlderThan(maxBufferTime)) {
+                        if (partition.isAtMaxAge()) {
                             partition.close();
                         }
                     }
@@ -101,18 +101,24 @@ public class S3EventWriter
         private final S3Uploader uploader;
         private final ObjectMapper objectMapper;
         private final DataSize targetFileSize;
+        private final Duration maxBufferTime;
 
         private File file;
         private CountingOutputStream output;
         private JsonGenerator generator;
         private long createdTime;
 
-        public OutputPartition(EventPartition eventPartition, S3Uploader uploader, ObjectMapper objectMapper, DataSize targetFileSize)
+        public OutputPartition(EventPartition eventPartition,
+                S3Uploader uploader,
+                ObjectMapper objectMapper,
+                DataSize targetFileSize,
+                Duration maxBufferTime)
         {
             this.eventPartition = eventPartition;
             this.uploader = uploader;
             this.objectMapper = objectMapper;
             this.targetFileSize = targetFileSize;
+            this.maxBufferTime = maxBufferTime;
         }
 
         private synchronized void open()
@@ -135,8 +141,8 @@ public class S3EventWriter
 
             generator.writeObject(event);
 
-            // roll file if it is over the target size
-            if (output.getCount() >= targetFileSize.toBytes()) {
+            // roll file if it is over the target size or max age
+            if ((output.getCount() >= targetFileSize.toBytes()) || (isAtMaxAge())) {
                 close();
             }
         }
@@ -158,9 +164,9 @@ public class S3EventWriter
             generator = null;
         }
 
-        public synchronized boolean isOlderThan(Duration maxAge)
+        public synchronized boolean isAtMaxAge()
         {
-            return (generator != null) && (Duration.nanosSince(createdTime).compareTo(maxAge) > 0);
+            return (generator != null) && (Duration.nanosSince(createdTime).compareTo(maxBufferTime) > 0);
         }
     }
 }

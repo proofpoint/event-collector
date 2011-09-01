@@ -22,6 +22,7 @@ import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import javax.ws.rs.core.Response;
+import java.io.IOException;
 import java.util.UUID;
 
 import static org.testng.Assert.assertEquals;
@@ -41,6 +42,7 @@ public class TestEventResource
 
     @Test
     public void testPost()
+            throws IOException
     {
         ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
         Event event = new Event("test", UUID.randomUUID(), "test.local", new DateTime(), data);

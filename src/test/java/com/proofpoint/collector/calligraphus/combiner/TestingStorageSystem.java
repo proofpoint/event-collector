@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.MapMaker;
 
 import javax.annotation.Nullable;
+import java.io.File;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -43,5 +44,11 @@ public class TestingStorageSystem implements StorageSystem
     public StoredObject createCombinedObject(StoredObject target, List<StoredObject> newCombinedObjectParts)
     {
         return target;
+    }
+
+    @Override
+    public StoredObject putObject(StoredObject target, File source)
+    {
+        throw new UnsupportedOperationException();
     }
 }

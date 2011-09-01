@@ -17,8 +17,17 @@ package com.proofpoint.collector.calligraphus;
 
 import com.google.inject.Binder;
 import com.google.inject.Module;
+import com.google.inject.Provides;
 import com.google.inject.Scopes;
+import com.proofpoint.collector.calligraphus.combiner.ExtendedRestS3Service;
+import com.proofpoint.collector.calligraphus.combiner.S3StorageSystem;
+import com.proofpoint.collector.calligraphus.combiner.StorageSystem;
+import org.jets3t.service.S3ServiceException;
+import org.jets3t.service.security.AWSCredentials;
+import org.jets3t.service.security.ProviderCredentials;
 import org.weakref.jmx.guice.MBeanModule;
+
+import javax.inject.Singleton;
 
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
@@ -31,6 +40,11 @@ public class MainModule
         binder.requireExplicitBindings();
         binder.disableCircularProxies();
 
+        binder.bind(EventPartitioner.class).in(Scopes.SINGLETON);
+        binder.bind(S3Uploader.class).in(Scopes.SINGLETON);
+
+        binder.bind(StorageSystem.class).to(S3StorageSystem.class).in(Scopes.SINGLETON);
+
         binder.bind(EventWriter.class).to(S3EventWriter.class).in(Scopes.SINGLETON);
         MBeanModule.newExporter(binder).export(S3EventWriter.class).withGeneratedName();
 
@@ -39,5 +53,20 @@ public class MainModule
         bindConfig(binder).to(ServerConfig.class);
 
         discoveryBinder(binder).bindHttpAnnouncement("collector");
+    }
+
+    @Provides
+    @Singleton
+    private ExtendedRestS3Service provideExtendedRestS3Service(ProviderCredentials credentials)
+            throws S3ServiceException
+    {
+        return new ExtendedRestS3Service(credentials);
+    }
+
+    @Provides
+    @Singleton
+    private ProviderCredentials provideProviderCredentials(ServerConfig config)
+    {
+        return new AWSCredentials(config.getAwsAccessKey(), config.getAwsSecretKey());
     }
 }

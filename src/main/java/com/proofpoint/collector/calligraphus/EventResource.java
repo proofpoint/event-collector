@@ -23,6 +23,7 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import java.io.IOException;
 import java.util.List;
 
 @Path("/v2/event")
@@ -40,6 +41,7 @@ public class EventResource
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     public Response post(List<Event> events)
+            throws IOException
     {
         for (Event event : events) {
             writer.write(event);

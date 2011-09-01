@@ -21,13 +21,23 @@ import com.proofpoint.configuration.ConfigDescription;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.units.Duration;
 
+import javax.validation.constraints.Max;
+import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Pattern;
+import java.io.File;
 import java.util.concurrent.TimeUnit;
 
 public class ServerConfig
 {
     private Duration maxBufferTime = new Duration(1, TimeUnit.MINUTES);
     private DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
+    private File localStagingDirectory = new File("staging");
+    private int maxUploadThreads = 10;
+    private String awsAccessKey;
+    private String awsSecretKey;
+    private String s3StagingLocation;
+    private String s3DataLocation;
 
     @Config("collector.max-buffer-time")
     @ConfigDescription("maximum length of time to buffer events locally before persisting them")
@@ -62,5 +72,90 @@ public class ServerConfig
     public DataSize getTargetFileSize()
     {
         return targetFileSize;
+    }
+
+    @Config("collector.local-staging-directory")
+    @ConfigDescription("local directory to store files before they are uploaded -- should persist across restarts")
+    public ServerConfig setLocalStagingDirectory(File localStagingDirectory)
+    {
+        this.localStagingDirectory = localStagingDirectory;
+        return this;
+    }
+
+    @NotNull
+    public File getLocalStagingDirectory()
+    {
+        return localStagingDirectory;
+    }
+
+    @Config("collector.max-upload-threads")
+    @ConfigDescription("maximum number of concurrent uploads")
+    public ServerConfig setMaxUploadThreads(int maxUploadThreads)
+    {
+        this.maxUploadThreads = maxUploadThreads;
+        return this;
+    }
+
+    @Min(1)
+    @Max(500)
+    public int getMaxUploadThreads()
+    {
+        return maxUploadThreads;
+    }
+
+    @Config("collector.aws-access-key")
+    public ServerConfig setAwsAccessKey(String awsAccessKey)
+    {
+        this.awsAccessKey = awsAccessKey;
+        return this;
+    }
+
+    @NotNull
+    public String getAwsAccessKey()
+    {
+        return awsAccessKey;
+    }
+
+    @Config("collector.aws-secret-key")
+    public ServerConfig setAwsSecretKey(String awsSecretKey)
+    {
+        this.awsSecretKey = awsSecretKey;
+        return this;
+    }
+
+    @NotNull
+    public String getAwsSecretKey()
+    {
+        return awsSecretKey;
+    }
+
+    @Config("collector.s3-staging-location")
+    @ConfigDescription("base S3 URI to staging location")
+    public ServerConfig setS3StagingLocation(String s3StagingLocation)
+    {
+        this.s3StagingLocation = s3StagingLocation;
+        return this;
+    }
+
+    @NotNull
+    @Pattern(regexp = "s3://[A-Za-z0-9-]+/([A-Za-z0-9-]+/)*", message = "is malformed")
+    public String getS3StagingLocation()
+    {
+        return s3StagingLocation;
+    }
+
+    @Config("collector.s3-data-location")
+    @ConfigDescription("base S3 URI to data location")
+    public ServerConfig setS3DataLocation(String s3DataLocation)
+    {
+        this.s3DataLocation = s3DataLocation;
+        return this;
+    }
+
+    @NotNull
+    @Pattern(regexp = "s3://[A-Za-z0-9-]+/([A-Za-z0-9-]+/)*", message = "is malformed")
+    public String getS3DataLocation()
+    {
+        return s3DataLocation;
     }
 }

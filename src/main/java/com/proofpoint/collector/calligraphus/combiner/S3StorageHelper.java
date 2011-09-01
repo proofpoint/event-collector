@@ -1,6 +1,7 @@
 package com.proofpoint.collector.calligraphus.combiner;
 
 import com.google.common.base.Preconditions;
+import org.jets3t.service.model.S3Object;
 
 import java.net.URI;
 
@@ -58,5 +59,16 @@ public final class S3StorageHelper
                 "s3StorageArea does not contain a bucket, but is a %s",
                 s3StorageArea);
 
+    }
+
+    public static StoredObject getStoredObject(URI s3StorageArea, S3Object s3Object)
+    {
+        checkValidS3Uri(s3StorageArea);
+        return new StoredObject(
+                s3Object.getKey(),
+                s3StorageArea,
+                s3Object.getETag(),
+                s3Object.getContentLength(),
+                s3Object.getLastModifiedDate().getTime());
     }
 }

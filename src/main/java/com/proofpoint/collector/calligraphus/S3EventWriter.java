@@ -13,9 +13,11 @@ import org.codehaus.jackson.map.ObjectMapper;
 
 import javax.annotation.Nullable;
 import javax.annotation.PreDestroy;
+import javax.inject.Inject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -46,6 +48,7 @@ public class S3EventWriter
                 }
             });
 
+    @Inject
     public S3EventWriter(S3Uploader uploader, EventPartitioner partitioner, ObjectMapper objectMapper, ServerConfig config)
     {
         this.uploader = uploader;
@@ -124,13 +127,15 @@ public class S3EventWriter
         private synchronized void open()
                 throws IOException
         {
-            if (generator == null) {
+            if (generator != null) {
                 return;
             }
 
-            file = new File("");
+            file = uploader.generateNextFilename();
             output = new CountingOutputStream(new FileOutputStream(file));
-            generator = objectMapper.getJsonFactory().createJsonGenerator(output, JsonEncoding.UTF8);
+            OutputStream snappyOut = new RawSnappyOutputStream(output);
+
+            generator = objectMapper.getJsonFactory().createJsonGenerator(snappyOut, JsonEncoding.UTF8);
             createdTime = System.nanoTime();
         }
 

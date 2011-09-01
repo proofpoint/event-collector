@@ -16,6 +16,7 @@
 package com.proofpoint.collector.calligraphus;
 
 import com.google.common.base.Charsets;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.io.Resources;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
@@ -34,7 +35,6 @@ import org.testng.annotations.Test;
 
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.concurrent.ExecutionException;
 
 import static javax.ws.rs.core.Response.Status;
@@ -50,13 +50,19 @@ public class TestServer
             throws Exception
     {
         // TODO: wrap all this stuff in a TestBootstrap class
+        ImmutableMap<String, String> config = ImmutableMap.of(
+                "collector.aws-access-key", "fake-aws-access-key",
+                "collector.aws-secret-key", "fake-aws-secret-key",
+                "collector.s3-staging-location", "s3://test-staging/",
+                "collector.s3-data-location", "s3://test-data/"
+        );
         Injector injector = Guice.createInjector(
                 new TestingNodeModule(),
                 new TestingHttpServerModule(),
                 new JsonModule(),
                 new JaxrsModule(),
                 new MainModule(),
-                new ConfigurationModule(new ConfigurationFactory(Collections.<String, String>emptyMap())));
+                new ConfigurationModule(new ConfigurationFactory(config)));
 
         server = injector.getInstance(TestingHttpServer.class);
 

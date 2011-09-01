@@ -17,6 +17,7 @@ import java.util.List;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Bucket;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3ObjectName;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Path;
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.toStoredObject;
 
 public class S3StorageSystem
         implements StorageSystem
@@ -95,7 +96,7 @@ public class S3StorageSystem
                 throw new IllegalStateException("completed etag is different from combined object etag");
             }
 
-            return S3StorageHelper.getStoredObject(targetStorageArea, combinedObject);
+            return toStoredObject(targetStorageArea, combinedObject);
         }
         catch (ServiceException e) {
             try {
@@ -114,7 +115,7 @@ public class S3StorageSystem
             S3Object object = new S3Object(source);
             object.setKey(getS3ObjectName(target));
             S3Object result = s3Service.putObject(getS3Bucket(target.getStorageArea()), object);
-            return S3StorageHelper.getStoredObject(target.getStorageArea(), result);
+            return toStoredObject(target.getStorageArea(), result);
         }
         catch (Exception e) {
             throw Throwables.propagate(e);

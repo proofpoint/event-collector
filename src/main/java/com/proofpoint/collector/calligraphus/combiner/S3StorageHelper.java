@@ -1,5 +1,6 @@
 package com.proofpoint.collector.calligraphus.combiner;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import org.jets3t.service.model.S3Object;
 
@@ -61,7 +62,7 @@ public final class S3StorageHelper
 
     }
 
-    public static StoredObject getStoredObject(URI s3StorageArea, S3Object s3Object)
+    public static StoredObject toStoredObject(URI s3StorageArea, S3Object s3Object)
     {
         checkValidS3Uri(s3StorageArea);
         return new StoredObject(
@@ -70,5 +71,15 @@ public final class S3StorageHelper
                 s3Object.getETag(),
                 s3Object.getContentLength(),
                 s3Object.getLastModifiedDate().getTime());
+    }
+
+    public static URI buildS3StorageArea(String base, String... parts)
+    {
+        if (!base.endsWith("/")) {
+            base += "/";
+        }
+        URI uri = URI.create(base + Joiner.on('/').join(parts));
+        checkValidS3Uri(uri);
+        return uri;
     }
 }

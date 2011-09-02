@@ -5,6 +5,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.collector.calligraphus.combiner.StorageSystem;
 import com.proofpoint.collector.calligraphus.combiner.StoredObject;
 import com.proofpoint.experimental.units.DataSize;
+import com.proofpoint.log.Logger;
 
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
@@ -19,7 +20,8 @@ import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.bui
 
 public class S3Uploader
 {
-    private final static long SMALL_FILE_CUTOFF = new DataSize(5, DataSize.Unit.MEGABYTE).toBytes();
+    private static final long SMALL_FILE_CUTOFF = new DataSize(5, DataSize.Unit.MEGABYTE).toBytes();
+    private static final Logger log = Logger.get(S3Uploader.class);
     private final StorageSystem storageSystem;
     private final File localStagingDirectory;
     private final ExecutorService executor;
@@ -71,5 +73,8 @@ public class S3Uploader
         URI storageArea = buildS3StorageArea(s3StagingLocation, partition.getEventType(), partition.getTimeBucket(), stageType);
         StoredObject target = new StoredObject(file.getName(), storageArea);
         storageSystem.putObject(target, file);
+        if (!file.delete()) {
+            log.warn("failed to delete local staging file: %s", file.getAbsolutePath());
+        }
     }
 }

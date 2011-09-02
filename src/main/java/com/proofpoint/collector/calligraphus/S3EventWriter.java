@@ -10,6 +10,7 @@ import com.proofpoint.units.Duration;
 import org.codehaus.jackson.JsonEncoding;
 import org.codehaus.jackson.JsonGenerator;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.util.MinimalPrettyPrinter;
 
 import javax.annotation.Nullable;
 import javax.annotation.PreDestroy;
@@ -136,6 +137,10 @@ public class S3EventWriter
             OutputStream snappyOut = new RawSnappyOutputStream(output);
 
             generator = objectMapper.getJsonFactory().createJsonGenerator(snappyOut, JsonEncoding.UTF8);
+            MinimalPrettyPrinter prettyPrinter = new MinimalPrettyPrinter();
+            prettyPrinter.setRootValueSeparator("\n");
+            generator.setPrettyPrinter(prettyPrinter);
+
             createdTime = System.nanoTime();
         }
 

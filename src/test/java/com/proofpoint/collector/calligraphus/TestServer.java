@@ -17,6 +17,7 @@ package com.proofpoint.collector.calligraphus;
 
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.io.Files;
 import com.google.common.io.Resources;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
@@ -34,6 +35,7 @@ import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import javax.ws.rs.core.MediaType;
+import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 
@@ -44,13 +46,17 @@ public class TestServer
 {
     private AsyncHttpClient client;
     private TestingHttpServer server;
+    private File tempStageDir;
 
     @BeforeMethod
     public void setup()
             throws Exception
     {
+        tempStageDir = Files.createTempDir();
+
         // TODO: wrap all this stuff in a TestBootstrap class
         ImmutableMap<String, String> config = ImmutableMap.of(
+                "collector.local-staging-directory", tempStageDir.getAbsolutePath(),
                 "collector.aws-access-key", "fake-aws-access-key",
                 "collector.aws-secret-key", "fake-aws-secret-key",
                 "collector.s3-staging-location", "s3://test-staging/",
@@ -80,6 +86,14 @@ public class TestServer
 
         if (client != null) {
             client.close();
+        }
+
+        try {
+            // TODO: this is broken on Mac OS X
+            Files.deleteRecursively(tempStageDir);
+        }
+        catch (IOException e) {
+            // ignore
         }
     }
 

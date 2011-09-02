@@ -137,6 +137,8 @@ public class S3EventWriter
             OutputStream snappyOut = new RawSnappyOutputStream(output);
 
             generator = objectMapper.getJsonFactory().createJsonGenerator(snappyOut, JsonEncoding.UTF8);
+            generator.disable(JsonGenerator.Feature.FLUSH_PASSED_TO_STREAM);
+
             MinimalPrettyPrinter prettyPrinter = new MinimalPrettyPrinter();
             prettyPrinter.setRootValueSeparator("\n");
             generator.setPrettyPrinter(prettyPrinter);

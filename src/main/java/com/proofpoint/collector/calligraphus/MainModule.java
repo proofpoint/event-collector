@@ -46,7 +46,7 @@ public class MainModule
         binder.bind(StorageSystem.class).to(S3StorageSystem.class).in(Scopes.SINGLETON);
 
         binder.bind(EventWriter.class).to(S3EventWriter.class).in(Scopes.SINGLETON);
-        MBeanModule.newExporter(binder).export(S3EventWriter.class).withGeneratedName();
+        MBeanModule.newExporter(binder).export(EventWriter.class).withGeneratedName();
 
         binder.bind(EventResource.class).in(Scopes.SINGLETON);
 

@@ -16,8 +16,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3StorageArea;
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3ObjectName;
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 
 public class S3Uploader
 {
@@ -71,12 +70,12 @@ public class S3Uploader
     private void upload(EventPartition partition, File file)
     {
         String stageType = (file.length() >= SMALL_FILE_CUTOFF) ? "large" : "small";
-        URI storageArea = buildS3StorageArea(s3StagingLocation, partition.getEventType(), partition.getTimeBucket(), stageType);
-        StoredObject target = new StoredObject(file.getName(), storageArea);
+        URI location = buildS3Location(s3StagingLocation, partition.getEventType(), partition.getTimeBucket(), stageType, file.getName());
+        StoredObject target = new StoredObject(location);
 
-        log.info("starting upload: %s", getS3ObjectName(target));
+        log.info("starting upload: %s", target.getLocation());
         storageSystem.putObject(target, file);
-        log.info("completed upload: %s", getS3ObjectName(target));
+        log.info("completed upload: %s", target.getLocation());
 
         if (!file.delete()) {
             log.warn("failed to delete local staging file: %s", file.getAbsolutePath());

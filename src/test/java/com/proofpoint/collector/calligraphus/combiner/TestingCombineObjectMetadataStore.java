@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Name;
 
 public class TestingCombineObjectMetadataStore implements CombineObjectMetadataStore
@@ -30,17 +31,9 @@ public class TestingCombineObjectMetadataStore implements CombineObjectMetadataS
         String s3Name = getS3Name(stagingArea);
         Preconditions.checkNotNull(s3Name, "s3Name is null");
 
-        CombinedStoredObject combinedStoredObject = metadata.get(new StoredObject(s3Name, targetArea));
+        CombinedStoredObject combinedStoredObject = metadata.get(new StoredObject(buildS3Location(targetArea, s3Name)));
         if (combinedStoredObject == null) {
-            combinedStoredObject = new CombinedStoredObject(s3Name,
-                    targetArea,
-                    null,
-                    0,
-                    0,
-                    nodeId,
-                    0,
-                    ImmutableList.<StoredObject>of()
-            );
+            combinedStoredObject = new CombinedStoredObject(buildS3Location(targetArea, getS3Name(stagingArea)), nodeId);
         }
 
         return combinedStoredObject;
@@ -55,8 +48,7 @@ public class TestingCombineObjectMetadataStore implements CombineObjectMetadataS
         }
 
         CombinedStoredObject newCombinedObject = new CombinedStoredObject(
-                currentCombinedObject.getName(),
-                currentCombinedObject.getStorageArea(),
+                currentCombinedObject.getLocation(),
                 UUID.randomUUID().toString(),
                 totalSize,
                 System.currentTimeMillis(),

@@ -14,10 +14,10 @@ import java.io.File;
 import java.net.URI;
 import java.util.List;
 
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Bucket;
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3ObjectName;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Path;
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.toStoredObject;
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.updateStoredObject;
 
 public class S3StorageSystem
         implements StorageSystem
@@ -41,8 +41,8 @@ public class S3StorageSystem
             S3Object[] s3Objects = s3Service.listObjects(getS3Bucket(storageArea), s3Path, "/", 1000L);
             ImmutableList.Builder<StoredObject> builder = ImmutableList.builder();
             for (S3Object s3Object : s3Objects) {
-                builder.add(new StoredObject(s3Object.getName().substring(s3Path.length()),
-                        storageArea,
+                builder.add(new StoredObject(
+                        buildS3Location(storageArea, s3Object.getName().substring(s3Path.length())),
                         s3Object.getETag(),
                         s3Object.getContentLength(),
                         s3Object.getLastModifiedDate().getTime()));
@@ -57,10 +57,9 @@ public class S3StorageSystem
     @Override
     public StoredObject createCombinedObject(StoredObject target, List<StoredObject> newCombinedObjectParts)
     {
-        URI targetStorageArea = target.getStorageArea();
         MultipartUpload upload;
         try {
-            upload = s3Service.multipartStartUpload(getS3Bucket(targetStorageArea), new S3Object(getS3ObjectName(target)));
+            upload = s3Service.multipartStartUpload(getS3Bucket(target.getLocation()), new S3Object(getS3Path(target.getLocation())));
         }
         catch (S3ServiceException e) {
             throw Throwables.propagate(e);
@@ -69,15 +68,12 @@ public class S3StorageSystem
         try {
             int partNumber = 1;
             for (StoredObject newCombinedObjectPart : newCombinedObjectParts) {
-                URI sourceStorageArea = newCombinedObjectPart.getStorageArea();
-                String sourceBucket = getS3Bucket(sourceStorageArea);
-                String sourcePath = getS3Path(sourceStorageArea);
 
                 s3Service.multipartUploadPartCopy(
                         upload,
                         partNumber,
-                        sourceBucket,
-                        sourcePath + newCombinedObjectPart.getName(),
+                        getS3Bucket(newCombinedObjectPart.getLocation()),
+                        getS3Path(newCombinedObjectPart.getLocation()),
                         null, // ifModifiedSince
                         null, // ifUnmodifiedSince
                         null, // ifMatchTags
@@ -89,14 +85,14 @@ public class S3StorageSystem
             }
 
             MultipartCompleted completed = s3Service.multipartCompleteUpload(upload);
-            S3Object combinedObject = s3Service.getObject(getS3Bucket(targetStorageArea), getS3ObjectName(target));
+            S3Object combinedObject = s3Service.getObject(getS3Bucket(target.getLocation()), getS3Path(target.getLocation()));
 
             if (!completed.getEtag().equals(combinedObject.getETag())) {
                 // this might happen in rare cases due to S3's eventual consistency
                 throw new IllegalStateException("completed etag is different from combined object etag");
             }
 
-            return toStoredObject(targetStorageArea, combinedObject);
+            return updateStoredObject(target, combinedObject);
         }
         catch (ServiceException e) {
             try {
@@ -113,9 +109,9 @@ public class S3StorageSystem
     {
         try {
             S3Object object = new S3Object(source);
-            object.setKey(getS3ObjectName(target));
-            S3Object result = s3Service.putObject(getS3Bucket(target.getStorageArea()), object);
-            return toStoredObject(target.getStorageArea(), result);
+            object.setKey(target.getLocation().toString());
+            S3Object result = s3Service.putObject(getS3Bucket(target.getLocation()), object);
+            return updateStoredObject(target, result);
         }
         catch (Exception e) {
             throw Throwables.propagate(e);

@@ -7,21 +7,19 @@ import org.codehaus.jackson.annotate.JsonProperty;
 
 import java.net.URI;
 
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Name;
+
 public class StoredObject
 {
-    private final String name;
-    private final URI storageArea;
+    private final URI location;
     private final String etag;
     private final long size;
     private final long lastModified;
 
-    public StoredObject(String name, URI storageArea)
+    public StoredObject(URI location)
     {
-        Preconditions.checkNotNull(name, "name is null");
-        Preconditions.checkNotNull(storageArea, "storageArea is null");
-
-        this.name = name;
-        this.storageArea = storageArea;
+        Preconditions.checkNotNull(location, "location is null");
+        this.location = location;
         this.etag = null;
         this.size = -1;
         this.lastModified = 0;
@@ -29,32 +27,26 @@ public class StoredObject
 
     @JsonCreator
     public StoredObject(
-            @JsonProperty("name") String name,
-            @JsonProperty("storageArea") URI storageArea,
+            @JsonProperty("location") URI location,
             @JsonProperty("etag") String etag,
             @JsonProperty("size") long size,
             @JsonProperty("lastModified") long lastModified)
     {
-        Preconditions.checkNotNull(name, "name is null");
-        Preconditions.checkNotNull(storageArea, "storageArea is null");
+        Preconditions.checkNotNull(location, "location is null");
+        Preconditions.checkNotNull(etag, "etag is null");
+        Preconditions.checkArgument(size >= 0, "size is negative");
+        Preconditions.checkArgument(lastModified >= 0, "lastModified is negative");
 
-        this.name = name;
-        this.storageArea = storageArea;
+        this.location = location;
         this.etag = etag;
         this.size = size;
         this.lastModified = lastModified;
     }
 
     @JsonProperty
-    public String getName()
+    public URI getLocation()
     {
-        return name;
-    }
-
-    @JsonProperty
-    public URI getStorageArea()
-    {
-        return storageArea;
+        return location;
     }
 
     @JsonProperty
@@ -75,7 +67,6 @@ public class StoredObject
         return lastModified;
     }
 
-
     @Override
     public boolean equals(Object o)
     {
@@ -91,10 +82,7 @@ public class StoredObject
         if (etag != null ? !etag.equals(that.etag) : that.etag != null) {
             return false;
         }
-        if (!name.equals(that.name)) {
-            return false;
-        }
-        if (!storageArea.equals(that.storageArea)) {
+        if (!location.equals(that.location)) {
             return false;
         }
 
@@ -104,8 +92,7 @@ public class StoredObject
     @Override
     public int hashCode()
     {
-        int result = name.hashCode();
-        result = 31 * result + storageArea.hashCode();
+        int result = location.hashCode();
         result = 31 * result + (etag != null ? etag.hashCode() : 0);
         return result;
     }
@@ -115,8 +102,7 @@ public class StoredObject
     {
         final StringBuilder sb = new StringBuilder();
         sb.append("StoredObject");
-        sb.append("{name='").append(name).append('\'');
-        sb.append(", storageArea=").append(storageArea);
+        sb.append("{location='").append(location).append('\'');
         sb.append(", etag='").append(etag).append('\'');
         sb.append(", size=").append(size);
         sb.append(", lastModified=").append(lastModified);
@@ -124,12 +110,13 @@ public class StoredObject
         return sb.toString();
     }
 
+    // todo move me
     public static Function<StoredObject, String> GET_NAME_FUNCTION = new Function<StoredObject, String>()
     {
         @Override
         public String apply(StoredObject storedObject)
         {
-            return storedObject.getName();
+            return getS3Name(storedObject.getLocation());
         }
     };
 }

@@ -57,7 +57,7 @@ public class StoredObjectCombiner
             // ERROR: if objects in staging do NOT have the same md5s in the current targetCombinedObject
             if (!stagedObjects.containsAll(currentCombinedObjectManifest)) {
                 throw new IllegalStateException(String.format("MD5 hashes for combined objects in %s do not match MD5 hashes in staging area",
-                        currentCombinedObject.getName()));
+                        currentCombinedObject.getLocation()));
             }
 
             // newObjectList = current targetCombinedObject list + new objects not contained in this list

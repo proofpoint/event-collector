@@ -12,6 +12,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Bucket;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Name;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Path;
@@ -31,27 +32,21 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
     @Override
     public CombinedStoredObject getCombinedObjectManifest(URI stagingArea, URI targetArea)
     {
-        File metadataFile = createMetadataFile(targetArea, stagingArea);
+        URI targetCombinedObject = buildS3Location(targetArea, getS3Name(stagingArea));
+
+        File metadataFile = createMetadataFile(targetCombinedObject);
         CombinedStoredObject combinedStoredObject = readMetadataFile(metadataFile);
         if (combinedStoredObject != null) {
             return combinedStoredObject;
         }
 
-        return new CombinedStoredObject(getS3Name(stagingArea),
-                targetArea,
-                null,
-                0,
-                0,
-                null,
-                0,
-                ImmutableList.<StoredObject>of()
-        );
+        return new CombinedStoredObject(targetCombinedObject, nodeId);
     }
 
     @Override
     public boolean replaceCombinedObjectManifest(CombinedStoredObject currentCombinedObject, List<StoredObject> newCombinedObjectParts)
     {
-        File metadataFile = createMetadataFile(currentCombinedObject.getStorageArea(), currentCombinedObject.getName());
+        File metadataFile = createMetadataFile(currentCombinedObject.getLocation());
         CombinedStoredObject persistentCombinedStoredObject = readMetadataFile(metadataFile);
         if (persistentCombinedStoredObject != null) {
             if (!persistentCombinedStoredObject.getETag().endsWith(currentCombinedObject.getETag())) {
@@ -68,8 +63,7 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
         }
 
         CombinedStoredObject newCombinedObject = new CombinedStoredObject(
-                currentCombinedObject.getName(),
-                currentCombinedObject.getStorageArea(),
+                currentCombinedObject.getLocation(),
                 UUID.randomUUID().toString(),
                 totalSize,
                 System.currentTimeMillis(),
@@ -87,14 +81,9 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
         }
     }
 
-    private File createMetadataFile(URI targetArea, URI stagingArea)
+    private File createMetadataFile(URI location)
     {
-        return createMetadataFile(targetArea, getS3Name(stagingArea));
-    }
-
-    private File createMetadataFile(URI targetArea, String name)
-    {
-        File file = new File(directory, getS3Bucket(targetArea) + "/" + getS3Path(targetArea) + name + ".json");
+        File file = new File(directory, getS3Bucket(location) + "/" + getS3Path(location) + getS3Name(location) + ".json");
         return file;
     }
 

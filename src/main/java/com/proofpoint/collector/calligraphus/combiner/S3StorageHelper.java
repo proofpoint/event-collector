@@ -12,10 +12,6 @@ public final class S3StorageHelper
     {
     }
 
-    public static String getS3ObjectName(StoredObject storedObject) {
-        return getS3Path(storedObject.getStorageArea()) + storedObject.getName();
-    }
-
     public static String getS3Bucket(URI s3StorageArea)
     {
         checkValidS3Uri(s3StorageArea);
@@ -62,18 +58,25 @@ public final class S3StorageHelper
 
     }
 
-    public static StoredObject toStoredObject(URI s3StorageArea, S3Object s3Object)
+    public static StoredObject updateStoredObject(StoredObject storedObject, S3Object s3Object)
     {
-        checkValidS3Uri(s3StorageArea);
+        Preconditions.checkNotNull(storedObject, "storedObject is null");
+        Preconditions.checkNotNull(s3Object, "s3Object is null");
+        Preconditions.checkArgument(getS3Path(storedObject.getLocation()).equals(s3Object.getKey()));
+
         return new StoredObject(
-                s3Object.getKey(),
-                s3StorageArea,
+                storedObject.getLocation(),
                 s3Object.getETag(),
                 s3Object.getContentLength(),
                 s3Object.getLastModifiedDate().getTime());
     }
 
-    public static URI buildS3StorageArea(String base, String... parts)
+    public static URI buildS3Location(URI base, String... parts)
+    {
+        return buildS3Location(base.toString(), parts);
+    }
+
+    public static URI buildS3Location(String base, String... parts)
     {
         if (!base.endsWith("/")) {
             base += "/";

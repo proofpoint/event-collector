@@ -26,10 +26,19 @@ public class CombinedStoredObject
         this.sourceParts = sourceParts;
     }
 
+    public CombinedStoredObject(
+            URI location,
+            String creator)
+    {
+        this.storedObject = new StoredObject(location);
+        this.creator = creator;
+        this.createdTimestamp = 0;
+        this.sourceParts = ImmutableList.of();
+    }
+
     @JsonCreator
     public CombinedStoredObject(
-            @JsonProperty("name") String name,
-            @JsonProperty("storageArea") URI storageArea,
+            @JsonProperty("location") URI location,
             @JsonProperty("etag") String etag,
             @JsonProperty("size") long size,
             @JsonProperty("lastModified") long lastModified,
@@ -37,22 +46,16 @@ public class CombinedStoredObject
             @JsonProperty("createdTimestamp") long createdTimestamp,
             @JsonProperty("sourceParts") List<StoredObject> sourceParts)
     {
-        this.storedObject = new StoredObject(name, storageArea, etag, size, lastModified);
+        this.storedObject = new StoredObject(location, etag, size, lastModified);
         this.creator = creator;
         this.createdTimestamp = createdTimestamp;
         this.sourceParts = ImmutableList.copyOf(sourceParts);
     }
 
     @JsonProperty
-    public String getName()
+    public URI getLocation()
     {
-        return storedObject.getName();
-    }
-
-    @JsonProperty
-    public URI getStorageArea()
-    {
-        return storedObject.getStorageArea();
+        return storedObject.getLocation();
     }
 
     @JsonProperty

@@ -12,63 +12,72 @@ public final class S3StorageHelper
     {
     }
 
-    public static String getS3Bucket(URI s3StorageArea)
+    public static String getS3Bucket(URI location)
     {
-        checkValidS3Uri(s3StorageArea);
-        return s3StorageArea.getAuthority();
+        checkValidS3Uri(location);
+        return location.getAuthority();
     }
 
-    public static String getS3Path(URI s3StorageArea)
+    public static String getS3ObjectKey(URI location)
     {
-        checkValidS3Uri(s3StorageArea);
-        String path = s3StorageArea.getPath();
-        if (!path.endsWith("/")) {
-            path += "/";
-        }
+        checkValidS3Uri(location);
+        String path = location.getPath();
         if (path.startsWith("/")) {
             path = path.substring(1);
         }
         return path;
     }
 
-    public static String getS3Name(URI s3StorageArea)
+    public static String getS3FileName(URI location)
     {
-        checkValidS3Uri(s3StorageArea);
-        String name = s3StorageArea.getPath().substring(s3StorageArea.getPath().lastIndexOf('/') + 1);
+        checkValidS3Uri(location);
+
+        String path = location.getPath();
+        if (path .endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
+        String name = path.substring(path.lastIndexOf('/') + 1);
         if (name.isEmpty()) {
             return null;
         }
         return name;
     }
 
-    public static void checkValidS3Uri(URI s3StorageArea)
+    public static void checkValidS3Uri(URI location)
     {
-        Preconditions.checkArgument("s3".equals(s3StorageArea.getScheme()),
-                "s3StorageArea is not a S3 uri, but is a %s",
-                s3StorageArea);
+        Preconditions.checkArgument("s3".equals(location.getScheme()),
+                "location is not a S3 uri, but is a %s",
+                location);
 
-        Preconditions.checkArgument(s3StorageArea.isAbsolute(),
-                "s3StorageArea is not an absolute uri, but is a %s",
-                s3StorageArea);
+        Preconditions.checkArgument(location.isAbsolute(),
+                "location is not an absolute uri, but is a %s",
+                location);
 
-        String authority = s3StorageArea.getAuthority();
+        String authority = location.getAuthority();
         Preconditions.checkArgument(authority == null || !authority.isEmpty(),
-                "s3StorageArea does not contain a bucket, but is a %s",
-                s3StorageArea);
-
+                "location does not contain a bucket, but is a %s",
+                location);
     }
 
     public static StoredObject updateStoredObject(StoredObject storedObject, S3Object s3Object)
     {
         Preconditions.checkNotNull(storedObject, "storedObject is null");
         Preconditions.checkNotNull(s3Object, "s3Object is null");
-        Preconditions.checkArgument(getS3Path(storedObject.getLocation()).equals(s3Object.getKey()));
+        Preconditions.checkArgument(storedObject.getLocation().equals(getLocation(s3Object)));
 
         return new StoredObject(
                 storedObject.getLocation(),
                 s3Object.getETag(),
                 s3Object.getContentLength(),
                 s3Object.getLastModifiedDate().getTime());
+    }
+
+    public static URI getLocation(S3Object s3Object)
+    {
+        URI uri = URI.create("s3://" + Joiner.on('/').join(s3Object.getBucketName(), s3Object.getKey()));
+        checkValidS3Uri(uri);
+        return uri;
     }
 
     public static URI buildS3Location(URI base, String... parts)

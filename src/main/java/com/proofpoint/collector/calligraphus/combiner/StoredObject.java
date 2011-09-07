@@ -7,7 +7,7 @@ import org.codehaus.jackson.annotate.JsonProperty;
 
 import java.net.URI;
 
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Name;
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3FileName;
 
 public class StoredObject
 {
@@ -116,7 +116,7 @@ public class StoredObject
         @Override
         public String apply(StoredObject storedObject)
         {
-            return getS3Name(storedObject.getLocation());
+            return getS3FileName(storedObject.getLocation());
         }
     };
 }

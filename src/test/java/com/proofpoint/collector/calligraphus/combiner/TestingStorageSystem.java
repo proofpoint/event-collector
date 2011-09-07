@@ -34,6 +34,12 @@ public class TestingStorageSystem implements StorageSystem
     }
 
     @Override
+    public List<URI> listDirectories(URI storageArea)
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public List<StoredObject> listObjects(URI storageArea)
     {
         List<StoredObject> storedObjects = objects.get(storageArea);

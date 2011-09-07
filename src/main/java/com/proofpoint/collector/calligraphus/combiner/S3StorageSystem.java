@@ -5,9 +5,11 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import org.jets3t.service.S3ServiceException;
 import org.jets3t.service.ServiceException;
+import org.jets3t.service.StorageObjectsChunk;
 import org.jets3t.service.model.MultipartCompleted;
 import org.jets3t.service.model.MultipartUpload;
 import org.jets3t.service.model.S3Object;
+import org.jets3t.service.model.StorageObject;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -16,7 +18,7 @@ import java.util.List;
 
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Bucket;
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Path;
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3ObjectKey;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.updateStoredObject;
 
 public class S3StorageSystem
@@ -32,15 +34,35 @@ public class S3StorageSystem
     }
 
     @Override
+    public List<URI> listDirectories(URI storageArea)
+    {
+        S3StorageHelper.checkValidS3Uri(storageArea);
+
+        try {
+            String s3Path = getS3ObjectKey(storageArea);
+            String s3Bucket = getS3Bucket(storageArea);
+            StorageObjectsChunk storageObjectsChunk = s3Service.listObjectsChunked(s3Bucket, s3Path, "/", 0, null, true);
+            ImmutableList.Builder<URI> builder = ImmutableList.builder();
+            for (String prefix : storageObjectsChunk.getCommonPrefixes()) {
+                builder.add(buildS3Location("s3://", s3Bucket, prefix));
+            }
+            return builder.build();
+        }
+        catch (ServiceException e) {
+            throw Throwables.propagate(e);
+        }
+    }
+
+    @Override
     public List<StoredObject> listObjects(URI storageArea)
     {
         S3StorageHelper.checkValidS3Uri(storageArea);
 
         try {
-            String s3Path = getS3Path(storageArea);
-            S3Object[] s3Objects = s3Service.listObjects(getS3Bucket(storageArea), s3Path, "/", 1000L);
+            String s3Path = getS3ObjectKey(storageArea);
+            StorageObjectsChunk storageObjectsChunk = s3Service.listObjectsChunked(getS3Bucket(storageArea), s3Path, "/", 0, null, true);
             ImmutableList.Builder<StoredObject> builder = ImmutableList.builder();
-            for (S3Object s3Object : s3Objects) {
+            for (StorageObject s3Object : storageObjectsChunk.getObjects()) {
                 builder.add(new StoredObject(
                         buildS3Location(storageArea, s3Object.getName().substring(s3Path.length())),
                         s3Object.getETag(),
@@ -49,7 +71,7 @@ public class S3StorageSystem
             }
             return builder.build();
         }
-        catch (S3ServiceException e) {
+        catch (ServiceException e) {
             throw Throwables.propagate(e);
         }
     }
@@ -59,7 +81,7 @@ public class S3StorageSystem
     {
         MultipartUpload upload;
         try {
-            upload = s3Service.multipartStartUpload(getS3Bucket(target.getLocation()), new S3Object(getS3Path(target.getLocation())));
+            upload = s3Service.multipartStartUpload(getS3Bucket(target.getLocation()), new S3Object(getS3ObjectKey(target.getLocation())));
         }
         catch (S3ServiceException e) {
             throw Throwables.propagate(e);
@@ -73,7 +95,7 @@ public class S3StorageSystem
                         upload,
                         partNumber,
                         getS3Bucket(newCombinedObjectPart.getLocation()),
-                        getS3Path(newCombinedObjectPart.getLocation()),
+                        getS3ObjectKey(newCombinedObjectPart.getLocation()),
                         null, // ifModifiedSince
                         null, // ifUnmodifiedSince
                         null, // ifMatchTags
@@ -85,7 +107,7 @@ public class S3StorageSystem
             }
 
             MultipartCompleted completed = s3Service.multipartCompleteUpload(upload);
-            S3Object combinedObject = s3Service.getObject(getS3Bucket(target.getLocation()), getS3Path(target.getLocation()));
+            S3Object combinedObject = s3Service.getObject(getS3Bucket(target.getLocation()), getS3ObjectKey(target.getLocation()));
 
             if (!completed.getEtag().equals(combinedObject.getETag())) {
                 // this might happen in rare cases due to S3's eventual consistency

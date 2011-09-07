@@ -1,16 +1,12 @@
 package com.proofpoint.collector.calligraphus.combiner;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
-
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Name;
 
 public class TestingCombineObjectMetadataStore implements CombineObjectMetadataStore
 {
@@ -23,17 +19,13 @@ public class TestingCombineObjectMetadataStore implements CombineObjectMetadataS
     }
 
     @Override
-    public CombinedStoredObject getCombinedObjectManifest(URI stagingArea, URI targetArea)
+    public CombinedStoredObject getCombinedObjectManifest(URI combinedObjectLocation)
     {
-        Preconditions.checkNotNull(stagingArea, "stagingArea is null");
-        Preconditions.checkNotNull(targetArea, "targetArea is null");
+        Preconditions.checkNotNull(combinedObjectLocation, "combinedObjectLocation is null");
 
-        String s3Name = getS3Name(stagingArea);
-        Preconditions.checkNotNull(s3Name, "s3Name is null");
-
-        CombinedStoredObject combinedStoredObject = metadata.get(new StoredObject(buildS3Location(targetArea, s3Name)));
+        CombinedStoredObject combinedStoredObject = metadata.get(new StoredObject(combinedObjectLocation));
         if (combinedStoredObject == null) {
-            combinedStoredObject = new CombinedStoredObject(buildS3Location(targetArea, getS3Name(stagingArea)), nodeId);
+            combinedStoredObject = new CombinedStoredObject(combinedObjectLocation, nodeId);
         }
 
         return combinedStoredObject;

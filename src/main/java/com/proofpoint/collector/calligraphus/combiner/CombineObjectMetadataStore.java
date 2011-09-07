@@ -5,7 +5,7 @@ import java.util.List;
 
 public interface CombineObjectMetadataStore
 {
-    CombinedStoredObject getCombinedObjectManifest(URI stagingArea, URI targetArea);
+    CombinedStoredObject getCombinedObjectManifest(URI combinedObjectLocation);
 
     boolean replaceCombinedObjectManifest(CombinedStoredObject currentCombinedObject, List<StoredObject> newCombinedObjectParts);
 }

@@ -6,6 +6,8 @@ import java.util.List;
 
 public interface StorageSystem
 {
+    List<URI> listDirectories(URI storageArea);
+
     List<StoredObject> listObjects(URI storageArea);
 
     StoredObject createCombinedObject(StoredObject target, List<StoredObject> newCombinedObjectParts);

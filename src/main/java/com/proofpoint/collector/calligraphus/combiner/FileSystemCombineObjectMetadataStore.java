@@ -2,7 +2,6 @@ package com.proofpoint.collector.calligraphus.combiner;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableList;
 import com.google.common.io.Files;
 import com.proofpoint.json.JsonCodec;
 
@@ -12,10 +11,8 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Bucket;
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Name;
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Path;
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3ObjectKey;
 
 public class FileSystemCombineObjectMetadataStore implements CombineObjectMetadataStore
 {
@@ -30,17 +27,15 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
     }
 
     @Override
-    public CombinedStoredObject getCombinedObjectManifest(URI stagingArea, URI targetArea)
+    public CombinedStoredObject getCombinedObjectManifest(URI combinedObjectLocation)
     {
-        URI targetCombinedObject = buildS3Location(targetArea, getS3Name(stagingArea));
-
-        File metadataFile = createMetadataFile(targetCombinedObject);
+        File metadataFile = createMetadataFile(combinedObjectLocation);
         CombinedStoredObject combinedStoredObject = readMetadataFile(metadataFile);
         if (combinedStoredObject != null) {
             return combinedStoredObject;
         }
 
-        return new CombinedStoredObject(targetCombinedObject, nodeId);
+        return new CombinedStoredObject(combinedObjectLocation, nodeId);
     }
 
     @Override
@@ -83,7 +78,7 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
 
     private File createMetadataFile(URI location)
     {
-        File file = new File(directory, getS3Bucket(location) + "/" + getS3Path(location) + getS3Name(location) + ".json");
+        File file = new File(directory, getS3Bucket(location) + "/" + getS3ObjectKey(location) + ".metadata");
         return file;
     }
 

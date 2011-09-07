@@ -25,10 +25,10 @@ public class TestStoredObjectCombiner
         storageSystem.addObject(stagingArea, b);
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore("test");
-        StoredObjectCombiner objectCombiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem);
-        objectCombiner.combineObjects(stagingArea, targetArea);
+        StoredObjectCombiner objectCombiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea);
+        objectCombiner.combineObjects(targetArea, ImmutableList.<StoredObject>of(a, b));
 
-        CombinedStoredObject combinedObjectManifest = metadataStore.getCombinedObjectManifest(stagingArea, targetArea);
+        CombinedStoredObject combinedObjectManifest = metadataStore.getCombinedObjectManifest(targetArea);
         Assert.assertEquals(combinedObjectManifest.getSourceParts(), ImmutableList.<Object>of(a, b));
     }
 }

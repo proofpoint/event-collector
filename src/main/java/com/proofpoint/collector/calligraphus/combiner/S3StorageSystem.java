@@ -79,6 +79,13 @@ public class S3StorageSystem
     @Override
     public StoredObject createCombinedObject(StoredObject target, List<StoredObject> newCombinedObjectParts)
     {
+        // verify size
+        for (StoredObject newCombinedObjectPart : newCombinedObjectParts) {
+            Preconditions.checkArgument(newCombinedObjectPart.getSize() >= 5 * 1024 * 1024,
+                    "Source part %s for combined object is less than 5 MB",
+                    newCombinedObjectPart);
+        }
+
         MultipartUpload upload;
         try {
             upload = s3Service.multipartStartUpload(getS3Bucket(target.getLocation()), new S3Object(getS3ObjectKey(target.getLocation())));
@@ -107,9 +114,10 @@ public class S3StorageSystem
             }
 
             MultipartCompleted completed = s3Service.multipartCompleteUpload(upload);
-            S3Object combinedObject = s3Service.getObject(getS3Bucket(target.getLocation()), getS3ObjectKey(target.getLocation()));
+            S3Object combinedObject = (S3Object) s3Service.getObjectDetails(getS3Bucket(target.getLocation()), getS3ObjectKey(target.getLocation()));
 
-            if (!completed.getEtag().equals(combinedObject.getETag())) {
+            // jets3t doesn't strip the quotes from the etag in the multipart api
+            if (!completed.getEtag().equals('\"' + combinedObject.getETag() + '\"')) {
                 // this might happen in rare cases due to S3's eventual consistency
                 throw new IllegalStateException("completed etag is different from combined object etag");
             }
@@ -131,7 +139,7 @@ public class S3StorageSystem
     {
         try {
             S3Object object = new S3Object(source);
-            object.setKey(target.getLocation().toString());
+            object.setKey(S3StorageHelper.getS3ObjectKey(target.getLocation()));
             S3Object result = s3Service.putObject(getS3Bucket(target.getLocation()), object);
             return updateStoredObject(target, result);
         }

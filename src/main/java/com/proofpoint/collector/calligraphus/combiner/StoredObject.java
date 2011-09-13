@@ -119,4 +119,12 @@ public class StoredObject
             return getS3FileName(storedObject.getLocation());
         }
     };
+    public static Function<StoredObject, URI> GET_LOCATION_FUNCTION = new Function<StoredObject, URI>()
+    {
+        @Override
+        public URI apply(StoredObject storedObject)
+        {
+            return storedObject.getLocation();
+        }
+    };
 }

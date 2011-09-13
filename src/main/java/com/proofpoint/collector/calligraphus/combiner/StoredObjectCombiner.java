@@ -101,7 +101,7 @@ public class StoredObjectCombiner
         for (URI eventBaseUri : storageSystem.listDirectories(stagingBaseUri)) {
             for (URI timeSliceBaseUri : storageSystem.listDirectories(eventBaseUri)) {
                 for (String size : ImmutableList.of("large", "small")) {
-                    URI stagingArea = buildS3Location(timeSliceBaseUri, size);
+                    URI stagingArea = buildS3Location(timeSliceBaseUri, size + "/");
                     List<StoredObject> stagedObjects = storageSystem.listObjects(stagingArea);
                     if (!stagedObjects.isEmpty()) {
                         URI targetObjectLocation = buildS3Location(targetBaseUri, getS3FileName(eventBaseUri), getS3FileName(timeSliceBaseUri), size + ".json.snappy");
@@ -135,7 +135,7 @@ public class StoredObjectCombiner
                 return null;
             }
 
-            // GOTO late data handling: if objects in staging are does NOT contain ANY objects in the current targetCombinedObject
+            // GOTO late data handling: if objects in staging does NOT contain ANY objects in the current targetCombinedObject
             if (!currentCombinedObjectManifest.isEmpty() && Collections.disjoint(existingCombinedObjectPartNames, stagedObjectNames)) {
                 processLateData(targetObjectLocation, stagedObjects);
                 return null;
@@ -150,7 +150,7 @@ public class StoredObjectCombiner
             // ERROR: if objects in staging do NOT have the same md5s in the current targetCombinedObject
             if (!stagedObjects.containsAll(currentCombinedObjectManifest)) {
                 throw new IllegalStateException(String.format("MD5 hashes for combined objects in %s do not match MD5 hashes in staging area",
-                        currentCombinedObject.getLocation()));
+                        targetObjectLocation));
             }
 
             // newObjectList = current targetCombinedObject list + new objects not contained in this list

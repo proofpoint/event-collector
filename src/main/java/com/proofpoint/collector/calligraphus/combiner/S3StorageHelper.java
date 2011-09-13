@@ -64,7 +64,11 @@ public final class S3StorageHelper
     {
         Preconditions.checkNotNull(storedObject, "storedObject is null");
         Preconditions.checkNotNull(s3Object, "s3Object is null");
-        Preconditions.checkArgument(storedObject.getLocation().equals(getLocation(s3Object)));
+        Preconditions.checkArgument(S3StorageHelper.getS3ObjectKey(storedObject.getLocation()).equals(s3Object.getKey()));
+        // jets3t doesn't set the bucket name in responses
+        if (s3Object.getBucketName() != null) {
+            Preconditions.checkArgument(S3StorageHelper.getS3Bucket(storedObject.getLocation()).equals(s3Object.getBucketName()));
+        }
 
         return new StoredObject(
                 storedObject.getLocation(),

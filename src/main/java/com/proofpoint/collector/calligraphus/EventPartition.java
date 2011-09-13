@@ -8,15 +8,18 @@ import javax.annotation.concurrent.Immutable;
 public class EventPartition
 {
     private final String eventType;
-    private final String timeBucket;
+    private final String majorTimeBucket;
+    private final String minorTimeBucket;
 
-    public EventPartition(String eventType, String timeBucket)
+    public EventPartition(String eventType, String majorTimeBucket, String minorTimeBucket)
     {
         Preconditions.checkNotNull(eventType, "eventType is null");
-        Preconditions.checkNotNull(eventType, "timeBucket is null");
+        Preconditions.checkNotNull(majorTimeBucket, "majorTimeBucket is null");
+        Preconditions.checkNotNull(minorTimeBucket, "minorTimeBucket is null");
 
         this.eventType = eventType;
-        this.timeBucket = timeBucket;
+        this.majorTimeBucket = majorTimeBucket;
+        this.minorTimeBucket = minorTimeBucket;
     }
 
     public String getEventType()
@@ -24,15 +27,20 @@ public class EventPartition
         return eventType;
     }
 
-    public String getTimeBucket()
+    public String getMajorTimeBucket()
     {
-        return timeBucket;
+        return majorTimeBucket;
+    }
+
+    public String getMinorTimeBucket()
+    {
+        return minorTimeBucket;
     }
 
     @Override
     public String toString()
     {
-        return eventType + "/" + timeBucket;
+        return eventType + "/" + majorTimeBucket + "/" + minorTimeBucket;
     }
 
     @SuppressWarnings("RedundantIfStatement")
@@ -51,7 +59,10 @@ public class EventPartition
         if (!eventType.equals(that.eventType)) {
             return false;
         }
-        if (!timeBucket.equals(that.timeBucket)) {
+        if (!majorTimeBucket.equals(that.majorTimeBucket)) {
+            return false;
+        }
+        if (!minorTimeBucket.equals(that.minorTimeBucket)) {
             return false;
         }
 
@@ -62,7 +73,8 @@ public class EventPartition
     public int hashCode()
     {
         int result = eventType.hashCode();
-        result = 31 * result + timeBucket.hashCode();
+        result = 31 * result + majorTimeBucket.hashCode();
+        result = 31 * result + minorTimeBucket.hashCode();
         return result;
     }
 }

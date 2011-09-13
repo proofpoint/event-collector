@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentMap;
 public class TestingCombineObjectMetadataStore implements CombineObjectMetadataStore
 {
     private final String nodeId;
-    private final ConcurrentMap<StoredObject, CombinedStoredObject> metadata = Maps.newConcurrentMap();
+    private final ConcurrentMap<URI, CombinedStoredObject> metadata = Maps.newConcurrentMap();
 
     TestingCombineObjectMetadataStore(String nodeId)
     {
@@ -23,7 +23,7 @@ public class TestingCombineObjectMetadataStore implements CombineObjectMetadataS
     {
         Preconditions.checkNotNull(combinedObjectLocation, "combinedObjectLocation is null");
 
-        CombinedStoredObject combinedStoredObject = metadata.get(new StoredObject(combinedObjectLocation));
+        CombinedStoredObject combinedStoredObject = metadata.get(combinedObjectLocation);
         if (combinedStoredObject == null) {
             combinedStoredObject = new CombinedStoredObject(combinedObjectLocation, nodeId);
         }
@@ -39,8 +39,9 @@ public class TestingCombineObjectMetadataStore implements CombineObjectMetadataS
             totalSize += storedObject.getSize();
         }
 
+        URI location = currentCombinedObject.getLocation();
         CombinedStoredObject newCombinedObject = new CombinedStoredObject(
-                currentCombinedObject.getLocation(),
+                location,
                 UUID.randomUUID().toString(),
                 totalSize,
                 System.currentTimeMillis(),
@@ -50,10 +51,10 @@ public class TestingCombineObjectMetadataStore implements CombineObjectMetadataS
         );
 
         if (currentCombinedObject.getETag() == null) {
-            return metadata.putIfAbsent(currentCombinedObject.getStoredObject(), newCombinedObject) == null;
+            return metadata.putIfAbsent(location, newCombinedObject) == null;
         }
         else {
-            return metadata.replace(currentCombinedObject.getStoredObject(), currentCombinedObject, newCombinedObject);
+            return metadata.replace(location, currentCombinedObject, newCombinedObject);
         }
     }
 }

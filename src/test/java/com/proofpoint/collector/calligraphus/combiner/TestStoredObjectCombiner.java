@@ -15,20 +15,21 @@ public class TestStoredObjectCombiner
     public void test()
             throws Exception
     {
-        URI stagingArea = URI.create("s3://bucket/staging");
-        URI targetArea = URI.create("s3://bucket/target");
+        URI stagingArea = URI.create("s3://bucket/staging/");
+        URI targetArea = URI.create("s3://bucket/target/");
 
         TestingStorageSystem storageSystem = new TestingStorageSystem();
-        StoredObject a = new StoredObject(buildS3Location(stagingArea, "a"), UUID.randomUUID().toString(), 1000, 0);
+        StoredObject a = new StoredObject(buildS3Location(stagingArea, "event", "day", "hour", "a"), UUID.randomUUID().toString(), 1000, 0);
         storageSystem.addObject(stagingArea, a);
-        StoredObject b = new StoredObject(buildS3Location(stagingArea, "b"), UUID.randomUUID().toString(), 1000, 0);
+        StoredObject b = new StoredObject(buildS3Location(stagingArea, "event", "day", "hour", "b"), UUID.randomUUID().toString(), 1000, 0);
         storageSystem.addObject(stagingArea, b);
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore("test");
         StoredObjectCombiner objectCombiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea);
-        objectCombiner.combineObjects(targetArea, ImmutableList.<StoredObject>of(a, b));
+        objectCombiner.combineObjects(buildS3Location(stagingArea, "event", "day", "hour"), ImmutableList.<StoredObject>of(a, b));
 
-        CombinedStoredObject combinedObjectManifest = metadataStore.getCombinedObjectManifest(targetArea);
+        URI targetUri = buildS3Location(stagingArea, "event", "day", "hour.small.json.snappy");
+        CombinedStoredObject combinedObjectManifest = metadataStore.getCombinedObjectManifest(targetUri);
         Assert.assertEquals(combinedObjectManifest.getSourceParts(), ImmutableList.<Object>of(a, b));
     }
 }

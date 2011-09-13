@@ -85,14 +85,24 @@ public class S3StorageSystem
     @Override
     public StoredObject createCombinedObject(StoredObject target, List<StoredObject> newCombinedObjectParts)
     {
+        Preconditions.checkNotNull(target, "target is null");
+        Preconditions.checkNotNull(newCombinedObjectParts, "newCombinedObjectParts is null");
+        Preconditions.checkArgument(!newCombinedObjectParts.isEmpty(), "newCombinedObjectParts is empty");
+
+        boolean setIsSmall = newCombinedObjectParts.get(0).getSize() < 5 * 1024 * 1024;
+
         // verify size
         for (StoredObject newCombinedObjectPart : newCombinedObjectParts) {
-            if (newCombinedObjectPart.getSize() < 5 * 1024 * 1024) {
-                return createCombinedObjectSmall(target, newCombinedObjectParts);
-            }
+            boolean fileIsSmall = newCombinedObjectPart.getSize() < 5 * 1024 * 1024;
+            Preconditions.checkArgument(fileIsSmall == setIsSmall, "newCombinedObjectParts contains mixes large and small files");
         }
 
-        return createCombinedObjectLarge(target, newCombinedObjectParts);
+        if (setIsSmall) {
+            return createCombinedObjectSmall(target, newCombinedObjectParts);
+        }
+        else {
+            return createCombinedObjectLarge(target, newCombinedObjectParts);
+        }
     }
 
     private StoredObject createCombinedObjectLarge(StoredObject target, List<StoredObject> newCombinedObjectParts)

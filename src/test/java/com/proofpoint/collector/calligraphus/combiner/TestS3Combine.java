@@ -38,6 +38,7 @@ public class TestS3Combine
     public static final String TIME_SLICE = "2011-08-01";
     private static final int MIN_LARGE_FILE_LENGTH = 5 * 1024 * 1024;
     private static final int MIN_SMALL_FILE_LENGTH = 10 * 1024;
+    private static final String HOUR = "08";
 
     private StoredObjectCombiner objectCombiner;
     private URI stagingBaseUri;
@@ -76,18 +77,13 @@ public class TestS3Combine
     public void testLargeCombine()
             throws Exception
     {
-        URI target = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, "large.json.snappy");
+        URI target = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, HOUR + ".large.json.snappy");
 
-        //  create 2 file names for staging
+        // upload two 5 MB files
         String base = UUID.randomUUID().toString().replace("-", "");
-        List<URI> objectNames = Lists.newArrayList();
-        for (int i = 0; i < 2; i++) {
-            objectNames.add(createStagingFileName(base, i, "large"));
-        }
-
-        // upload 5 MB file for to each name
         Map<URI, InputSupplier<? extends InputStream>> files = newHashMap();
-        for (URI name : objectNames) {
+        for (int i = 0; i < 2; i++) {
+            URI name = createStagingFileName(base, files.size());
             File file = uploadFile(name, MIN_LARGE_FILE_LENGTH);
             files.put(name, Files.newInputStreamSupplier(file));
         }
@@ -103,11 +99,9 @@ public class TestS3Combine
             Assert.fail("broken");
         }
 
-        // upload more chunks
+        // upload two more chunks
         for (int i = 0; i < 2; i++) {
-            objectNames.add(createStagingFileName(base, i, "large"));
-        }
-        for (URI name : objectNames) {
+            URI name = createStagingFileName(base, files.size());
             File file = uploadFile(name, MIN_LARGE_FILE_LENGTH);
             files.put(name, Files.newInputStreamSupplier(file));
         }
@@ -128,19 +122,14 @@ public class TestS3Combine
     public void testSmallCombine()
             throws Exception
     {
-        URI target = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, "small.json.snappy");
+        URI target = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, HOUR + ".small.json.snappy");
 
-        //  create 2 file names for staging
+        // upload two 10 KB file for to each name
         String base = UUID.randomUUID().toString().replace("-", "");
-        List<URI> objectNames = Lists.newArrayList();
-        for (int i = 0; i < 2; i++) {
-            objectNames.add(createStagingFileName(base, i, "small"));
-        }
-
-        // upload 10 KB file for to each name
         Map<URI, InputSupplier<? extends InputStream>> files = newHashMap();
-        for (URI name : objectNames) {
-            File file = uploadFile(name, 10 * 1024);
+        for (int i = 0; i < 2; i++) {
+            URI name = createStagingFileName(base, files.size());
+            File file = uploadFile(name, MIN_SMALL_FILE_LENGTH);
             files.put(name, Files.newInputStreamSupplier(file));
         }
 
@@ -156,11 +145,9 @@ public class TestS3Combine
             Assert.fail("broken");
         }
 
-        // upload more chunks
+        // upload two more chunks
         for (int i = 0; i < 2; i++) {
-            objectNames.add(createStagingFileName(base, i, "small"));
-        }
-        for (URI name : objectNames) {
+            URI name = createStagingFileName(base, files.size());
             File file = uploadFile(name, MIN_SMALL_FILE_LENGTH);
             files.put(name, Files.newInputStreamSupplier(file));
         }
@@ -206,9 +193,9 @@ public class TestS3Combine
         return new String(out);
     }
 
-    private URI createStagingFileName(String base, int i, String size)
+    private URI createStagingFileName(String base, int i)
     {
-        return S3StorageHelper.buildS3Location(stagingBaseUri, EVENT_TYPE, TIME_SLICE, size, String.format("part-%s-%04d", base, i));
+        return S3StorageHelper.buildS3Location(stagingBaseUri, EVENT_TYPE, TIME_SLICE, HOUR, String.format("part-%s-%04d", base, i));
     }
 
     private File uploadFile(URI location, int minFileLength)

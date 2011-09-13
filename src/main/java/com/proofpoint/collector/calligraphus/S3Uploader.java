@@ -4,7 +4,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.collector.calligraphus.combiner.StorageSystem;
 import com.proofpoint.collector.calligraphus.combiner.StoredObject;
-import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.log.Logger;
 
 import javax.annotation.PreDestroy;
@@ -20,7 +19,6 @@ import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.bui
 
 public class S3Uploader
 {
-    private static final long SMALL_FILE_CUTOFF = new DataSize(5, DataSize.Unit.MEGABYTE).toBytes();
     private static final Logger log = Logger.get(S3Uploader.class);
     private final StorageSystem storageSystem;
     private final File localStagingDirectory;
@@ -69,8 +67,11 @@ public class S3Uploader
 
     private void upload(EventPartition partition, File file)
     {
-        String stageType = (file.length() >= SMALL_FILE_CUTOFF) ? "large" : "small";
-        URI location = buildS3Location(s3StagingLocation, partition.getEventType(), partition.getTimeBucket(), stageType, file.getName());
+        URI location = buildS3Location(s3StagingLocation,
+                partition.getEventType(),
+                partition.getMajorTimeBucket(),
+                partition.getMinorTimeBucket(),
+                file.getName());
         StoredObject target = new StoredObject(location);
 
         log.info("starting upload: %s", target.getLocation());

@@ -100,11 +100,12 @@ public class StoredObjectCombiner
     {
         for (URI eventBaseUri : storageSystem.listDirectories(stagingBaseUri)) {
             for (URI timeSliceBaseUri : storageSystem.listDirectories(eventBaseUri)) {
-                for (String size : ImmutableList.of("large", "small")) {
-                    URI stagingArea = buildS3Location(timeSliceBaseUri, size + "/");
+                for (URI hourBaseUri : storageSystem.listDirectories(timeSliceBaseUri)) {
+                    String hour = getS3FileName(hourBaseUri);
+                    URI stagingArea = buildS3Location(timeSliceBaseUri, hour + "/");
                     List<StoredObject> stagedObjects = storageSystem.listObjects(stagingArea);
                     if (!stagedObjects.isEmpty()) {
-                        URI targetObjectLocation = buildS3Location(targetBaseUri, getS3FileName(eventBaseUri), getS3FileName(timeSliceBaseUri), size + ".json.snappy");
+                        URI targetObjectLocation = buildS3Location(targetBaseUri, getS3FileName(eventBaseUri), getS3FileName(timeSliceBaseUri), hour);
                         combineObjects(targetObjectLocation, stagedObjects);
                     }
                 }
@@ -112,7 +113,29 @@ public class StoredObjectCombiner
         }
     }
 
-    public CombinedStoredObject combineObjects(URI targetObjectLocation, List<StoredObject> stagedObjects)
+    public void combineObjects(URI baseURI, List<StoredObject> stagedObjects)
+    {
+        // Split files based on size size
+        List<StoredObject> smallFiles = Lists.newArrayListWithCapacity(stagedObjects.size());
+        List<StoredObject> largeFiles = Lists.newArrayListWithCapacity(stagedObjects.size());
+        for (StoredObject stagedObject : stagedObjects) {
+            if (stagedObject.getSize() < 5 * 1024 * 1024) {
+                smallFiles.add(stagedObject);
+            } else {
+                largeFiles.add(stagedObject);
+            }
+        }
+        if (!smallFiles.isEmpty()) {
+            URI targetObjectLocation = URI.create(baseURI.toString() + ".small.json.snappy");
+            combineObjectSet(targetObjectLocation, smallFiles);
+        }
+        if (!largeFiles.isEmpty()) {
+            URI targetObjectLocation = URI.create(baseURI.toString() + ".large.json.snappy");
+            combineObjectSet(targetObjectLocation, largeFiles);
+        }
+    }
+
+    private CombinedStoredObject combineObjectSet(URI targetObjectLocation, List<StoredObject> stagedObjects)
     {
         CombinedStoredObject currentCombinedObject;
         List<StoredObject> newCombinedObjectParts;

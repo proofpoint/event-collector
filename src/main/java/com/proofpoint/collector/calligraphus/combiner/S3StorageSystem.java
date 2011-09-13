@@ -3,6 +3,10 @@ package com.proofpoint.collector.calligraphus.combiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.io.ByteStreams;
+import com.google.common.io.Files;
+import com.google.common.io.InputSupplier;
 import org.jets3t.service.S3ServiceException;
 import org.jets3t.service.ServiceException;
 import org.jets3t.service.StorageObjectsChunk;
@@ -13,6 +17,8 @@ import org.jets3t.service.model.StorageObject;
 
 import javax.inject.Inject;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
 
@@ -81,11 +87,16 @@ public class S3StorageSystem
     {
         // verify size
         for (StoredObject newCombinedObjectPart : newCombinedObjectParts) {
-            Preconditions.checkArgument(newCombinedObjectPart.getSize() >= 5 * 1024 * 1024,
-                    "Source part %s for combined object is less than 5 MB",
-                    newCombinedObjectPart);
+            if (newCombinedObjectPart.getSize() < 5 * 1024 * 1024) {
+                return createCombinedObjectSmall(target, newCombinedObjectParts);
+            }
         }
 
+        return createCombinedObjectLarge(target, newCombinedObjectParts);
+    }
+
+    private StoredObject createCombinedObjectLarge(StoredObject target, List<StoredObject> newCombinedObjectParts)
+    {
         MultipartUpload upload;
         try {
             upload = s3Service.multipartStartUpload(getS3Bucket(target.getLocation()), new S3Object(getS3ObjectKey(target.getLocation())));
@@ -134,6 +145,32 @@ public class S3StorageSystem
         }
     }
 
+    private StoredObject createCombinedObjectSmall(StoredObject target, List<StoredObject> newCombinedObjectParts)
+    {
+        ImmutableList.Builder<InputSupplier<InputStream>> builder = ImmutableList.builder();
+        List<URI> sourceParts = Lists.transform(newCombinedObjectParts, StoredObject.GET_LOCATION_FUNCTION);
+        for (URI sourcePart : sourceParts) {
+            builder.add(getInputSupplier(sourcePart));
+        }
+        InputSupplier<InputStream> source = ByteStreams.join(builder.build());
+
+        File tempFile = null;
+        try {
+            tempFile = File.createTempFile(S3StorageHelper.getS3FileName(target.getLocation()), ".small.s3.data");
+            Files.copy(source, tempFile);
+            StoredObject result = putObject(target, tempFile);
+            return result;
+        }
+        catch (IOException e) {
+            throw Throwables.propagate(e);
+        }
+        finally {
+            if (tempFile != null) {
+                tempFile.delete();
+            }
+        }
+    }
+
     @Override
     public StoredObject putObject(StoredObject target, File source)
     {
@@ -145,6 +182,46 @@ public class S3StorageSystem
         }
         catch (Exception e) {
             throw Throwables.propagate(e);
+        }
+    }
+
+    public StoredObject getObjectDetails(URI target)
+    {
+        try {
+            return updateStoredObject(new StoredObject(target), (S3Object) s3Service.getObjectDetails(getS3Bucket(target), getS3ObjectKey(target)));
+        }
+        catch (ServiceException e) {
+            throw Throwables.propagate(e);
+        }
+    }
+
+    public InputSupplier<InputStream> getInputSupplier(URI target) {
+        return new S3InputSupplier(s3Service, target);
+    }
+
+
+    private static class S3InputSupplier implements InputSupplier<InputStream>
+    {
+        private final ExtendedRestS3Service service;
+        private final URI target;
+
+        private S3InputSupplier(ExtendedRestS3Service service, URI target)
+        {
+            this.service = service;
+            this.target = target;
+        }
+
+        @Override
+        public InputStream getInput()
+                throws IOException
+        {
+            try {
+                S3Object object = service.getObject(getS3Bucket(target), getS3ObjectKey(target));
+                return object.getDataInputStream();
+            }
+            catch (ServiceException e) {
+                throw Throwables.propagate(e);
+            }
         }
     }
 }

@@ -11,8 +11,6 @@ import com.google.common.io.Files;
 import com.google.common.io.InputSupplier;
 import com.proofpoint.json.JsonCodec;
 import org.jets3t.service.S3ServiceException;
-import org.jets3t.service.ServiceException;
-import org.jets3t.service.model.S3Object;
 import org.jets3t.service.security.AWSCredentials;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
@@ -23,6 +21,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
@@ -37,9 +36,9 @@ public class TestS3Combine
     public static final String BUCKET_NAME = "proofpoint-test-jets3t";
     public static final String EVENT_TYPE = "test-event";
     public static final String TIME_SLICE = "2011-08-01";
-    private static final int MIN_FILE_LENGTH = 5 * 1024 * 1024;
+    private static final int MIN_LARGE_FILE_LENGTH = 5 * 1024 * 1024;
+    private static final int MIN_SMALL_FILE_LENGTH = 10 * 1024;
 
-    private ExtendedRestS3Service service;
     private StoredObjectCombiner objectCombiner;
     private URI stagingBaseUri;
     private URI targetBaseUri;
@@ -56,7 +55,7 @@ public class TestS3Combine
         String awsSecretKey = map.get("private-key");
 
         AWSCredentials awsCredentials = new AWSCredentials(awsAccessKey, awsSecretKey);
-        service = new ExtendedRestS3Service(awsCredentials);
+        ExtendedRestS3Service service = new ExtendedRestS3Service(awsCredentials);
 
         service.getOrCreateBucket(BUCKET_NAME);
 
@@ -74,7 +73,7 @@ public class TestS3Combine
     }
 
     @Test(enabled = false)
-    public void test()
+    public void testLargeCombine()
             throws Exception
     {
         URI target = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, "large.json.snappy");
@@ -83,13 +82,13 @@ public class TestS3Combine
         String base = UUID.randomUUID().toString().replace("-", "");
         List<URI> objectNames = Lists.newArrayList();
         for (int i = 0; i < 2; i++) {
-            objectNames.add(createStagingFileName(base, i));
+            objectNames.add(createStagingFileName(base, i, "large"));
         }
 
         // upload 5 MB file for to each name
         Map<URI, InputSupplier<? extends InputStream>> files = newHashMap();
         for (URI name : objectNames) {
-            File file = uploadFile(name);
+            File file = uploadFile(name, MIN_LARGE_FILE_LENGTH);
             files.put(name, Files.newInputStreamSupplier(file));
         }
 
@@ -97,7 +96,7 @@ public class TestS3Combine
         objectCombiner.combineObjects();
 
         // verify the contents
-        S3InputSupplier s3InputSupplier = new S3InputSupplier(service, target);
+        InputSupplier<? extends InputStream> s3InputSupplier = storageSystem.getInputSupplier(target);
 
         InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(files, target);
         if (!ByteStreams.equal(combinedInputs, s3InputSupplier)) {
@@ -106,10 +105,10 @@ public class TestS3Combine
 
         // upload more chunks
         for (int i = 0; i < 2; i++) {
-            objectNames.add(createStagingFileName(base, i));
+            objectNames.add(createStagingFileName(base, i, "large"));
         }
         for (URI name : objectNames) {
-            File file = uploadFile(name);
+            File file = uploadFile(name, MIN_LARGE_FILE_LENGTH);
             files.put(name, Files.newInputStreamSupplier(file));
         }
 
@@ -117,7 +116,7 @@ public class TestS3Combine
         objectCombiner.combineObjects();
 
         // verify the contents
-        s3InputSupplier = new S3InputSupplier(service, target);
+        s3InputSupplier = storageSystem.getInputSupplier(target);
 
         combinedInputs = getCombinedInputsSupplier(files, target);
         if (!ByteStreams.equal(combinedInputs, s3InputSupplier)) {
@@ -125,14 +124,73 @@ public class TestS3Combine
         }
     }
 
+    @Test(enabled = false)
+    public void testSmallCombine()
+            throws Exception
+    {
+        URI target = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, "small.json.snappy");
+
+        //  create 2 file names for staging
+        String base = UUID.randomUUID().toString().replace("-", "");
+        List<URI> objectNames = Lists.newArrayList();
+        for (int i = 0; i < 2; i++) {
+            objectNames.add(createStagingFileName(base, i, "small"));
+        }
+
+        // upload 10 KB file for to each name
+        Map<URI, InputSupplier<? extends InputStream>> files = newHashMap();
+        for (URI name : objectNames) {
+            File file = uploadFile(name, 10 * 1024);
+            files.put(name, Files.newInputStreamSupplier(file));
+        }
+
+        // combine the files
+        objectCombiner.combineObjects();
+
+        // verify the contents
+        StoredObject combinedObject = storageSystem.getObjectDetails(target);
+
+        InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(files, target);
+        String sourceMD5 = encodeHex(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
+        if (!sourceMD5.equals(combinedObject.getETag())) {
+            Assert.fail("broken");
+        }
+
+        // upload more chunks
+        for (int i = 0; i < 2; i++) {
+            objectNames.add(createStagingFileName(base, i, "small"));
+        }
+        for (URI name : objectNames) {
+            File file = uploadFile(name, MIN_SMALL_FILE_LENGTH);
+            files.put(name, Files.newInputStreamSupplier(file));
+        }
+
+        // combine the files
+        objectCombiner.combineObjects();
+
+        // verify the contents
+        combinedObject = storageSystem.getObjectDetails(target);
+
+        combinedInputs = getCombinedInputsSupplier(files, target);
+        sourceMD5 = encodeHex(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
+        if (!sourceMD5.equals(combinedObject.getETag())) {
+            Assert.fail("broken");
+        }
+    }
+
     private InputSupplier<InputStream> getCombinedInputsSupplier(Map<URI, InputSupplier<? extends InputStream>> files, URI target)
     {
+        // get the manifest for the target
         CombinedStoredObject combinedObjectManifest = metadataStore.getCombinedObjectManifest(target);
-        List<StoredObject> sourceParts = combinedObjectManifest.getSourceParts();
-        List<URI> sourcePartsLocation = Lists.transform(sourceParts, GET_LOCATION_FUNCTION);
+
+        // get the locations of each part (in order)
+        List<URI> sourcePartsLocation = Lists.transform(combinedObjectManifest.getSourceParts(), GET_LOCATION_FUNCTION);
+
+        // sort the supplied files map based on this explicit order
         Map<URI, InputSupplier<? extends InputStream>> parts = newTreeMap(Ordering.explicit(sourcePartsLocation));
         parts.putAll(files);
 
+        // join the parts
         return ByteStreams.join(parts.values());
     }
 
@@ -148,12 +206,12 @@ public class TestS3Combine
         return new String(out);
     }
 
-    private URI createStagingFileName(String base, int i)
+    private URI createStagingFileName(String base, int i, String size)
     {
-        return S3StorageHelper.buildS3Location(stagingBaseUri, EVENT_TYPE, TIME_SLICE, "large", String.format("part-%s-%04d", base, i));
+        return S3StorageHelper.buildS3Location(stagingBaseUri, EVENT_TYPE, TIME_SLICE, size, String.format("part-%s-%04d", base, i));
     }
 
-    private File uploadFile(URI location)
+    private File uploadFile(URI location, int minFileLength)
             throws NoSuchAlgorithmException, IOException, S3ServiceException
     {
 
@@ -162,7 +220,7 @@ public class TestS3Combine
         try {
             // write contents to a temp file
             countingOutputStream = new CountingOutputStream(new FileOutputStream(tempFile));
-            while (countingOutputStream.getCount() < MIN_FILE_LENGTH) {
+            while (countingOutputStream.getCount() < minFileLength) {
                 String line = "This is object " + location + " at offset " + countingOutputStream.getCount() + "\n";
                 countingOutputStream.write(line.getBytes(Charsets.UTF_8));
             }
@@ -178,30 +236,5 @@ public class TestS3Combine
             throw Throwables.propagate(t);
         }
         return tempFile;
-    }
-
-    private static class S3InputSupplier implements InputSupplier<InputStream>
-    {
-        private final ExtendedRestS3Service service;
-        private final URI target;
-
-        private S3InputSupplier(ExtendedRestS3Service service, URI target)
-        {
-            this.service = service;
-            this.target = target;
-        }
-
-        @Override
-        public InputStream getInput()
-                throws IOException
-        {
-            try {
-                S3Object object = service.getObject(S3StorageHelper.getS3Bucket(target), S3StorageHelper.getS3ObjectKey(target));
-                return object.getDataInputStream();
-            }
-            catch (ServiceException e) {
-                throw Throwables.propagate(e);
-            }
-        }
     }
 }

@@ -52,7 +52,7 @@ public class MainModule
 
         bindConfig(binder).to(ServerConfig.class);
 
-        discoveryBinder(binder).bindHttpAnnouncement("event");
+        discoveryBinder(binder).bindHttpAnnouncement("collector");
     }
 
     @Provides

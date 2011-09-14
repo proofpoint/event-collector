@@ -13,6 +13,7 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.util.MinimalPrettyPrinter;
 
 import javax.annotation.Nullable;
+import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import java.io.File;
@@ -57,7 +58,11 @@ public class S3EventWriter
         this.objectMapper = objectMapper;
         this.maxBufferTime = config.getMaxBufferTime();
         this.targetFileSize = config.getTargetFileSize();
+    }
 
+    @PostConstruct
+    public void start()
+    {
         // roll files that have been open too long
         Runnable closer = new Runnable()
         {

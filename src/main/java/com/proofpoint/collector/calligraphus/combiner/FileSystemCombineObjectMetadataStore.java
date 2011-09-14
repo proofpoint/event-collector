@@ -3,8 +3,11 @@ package com.proofpoint.collector.calligraphus.combiner;
 import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
 import com.google.common.io.Files;
+import com.proofpoint.collector.calligraphus.ServerConfig;
 import com.proofpoint.json.JsonCodec;
+import com.proofpoint.node.NodeInfo;
 
+import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -18,12 +21,19 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
 {
     private final JsonCodec<CombinedStoredObject> jsonCodec = JsonCodec.jsonCodec(CombinedStoredObject.class);
     private final String nodeId;
-    private final File directory;
+    private final File metadataDirectory;
 
-    public FileSystemCombineObjectMetadataStore(String nodeId, File directory)
+    @Inject
+    public FileSystemCombineObjectMetadataStore(NodeInfo nodeInfo, ServerConfig config)
+    {
+        this.nodeId = nodeInfo.getNodeId();
+        this.metadataDirectory = config.getCombinerMetadataDirectory();
+    }
+
+    public FileSystemCombineObjectMetadataStore(String nodeId, File metadataDirectory)
     {
         this.nodeId = nodeId;
-        this.directory = directory;
+        this.metadataDirectory = metadataDirectory;
     }
 
     @Override
@@ -78,7 +88,7 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
 
     private File createMetadataFile(URI location)
     {
-        File file = new File(directory, getS3Bucket(location) + "/" + getS3ObjectKey(location) + ".metadata");
+        File file = new File(metadataDirectory, getS3Bucket(location) + "/" + getS3ObjectKey(location) + ".metadata");
         return file;
     }
 

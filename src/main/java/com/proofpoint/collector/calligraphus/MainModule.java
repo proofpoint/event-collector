@@ -19,9 +19,12 @@ import com.google.inject.Binder;
 import com.google.inject.Module;
 import com.google.inject.Provides;
 import com.google.inject.Scopes;
+import com.proofpoint.collector.calligraphus.combiner.CombineObjectMetadataStore;
 import com.proofpoint.collector.calligraphus.combiner.ExtendedRestS3Service;
+import com.proofpoint.collector.calligraphus.combiner.FileSystemCombineObjectMetadataStore;
 import com.proofpoint.collector.calligraphus.combiner.S3StorageSystem;
 import com.proofpoint.collector.calligraphus.combiner.StorageSystem;
+import com.proofpoint.collector.calligraphus.combiner.StoredObjectCombiner;
 import org.jets3t.service.S3ServiceException;
 import org.jets3t.service.security.AWSCredentials;
 import org.jets3t.service.security.ProviderCredentials;
@@ -49,6 +52,10 @@ public class MainModule
         MBeanModule.newExporter(binder).export(EventWriter.class).withGeneratedName();
 
         binder.bind(EventResource.class).in(Scopes.SINGLETON);
+
+        binder.bind(StoredObjectCombiner.class).in(Scopes.SINGLETON);
+        binder.bind(StorageSystem.class).to(S3StorageSystem.class).in(Scopes.SINGLETON);
+        binder.bind(CombineObjectMetadataStore.class).to(FileSystemCombineObjectMetadataStore.class).in(Scopes.SINGLETON);
 
         bindConfig(binder).to(ServerConfig.class);
 

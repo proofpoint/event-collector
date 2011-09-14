@@ -33,6 +33,7 @@ public class ServerConfig
     private Duration maxBufferTime = new Duration(1, TimeUnit.MINUTES);
     private DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
     private File localStagingDirectory = new File("staging");
+    private File combinerMetadataDirectory = new File("combiner-metadata");
     private int maxUploadThreads = 10;
     private String awsAccessKey;
     private String awsSecretKey;
@@ -86,6 +87,20 @@ public class ServerConfig
     public File getLocalStagingDirectory()
     {
         return localStagingDirectory;
+    }
+
+    @Config("collector.combiner-metadata-directory")
+    @ConfigDescription("directory to store information about the file combine process -- should persist across restarts")
+    public ServerConfig setCombinerMetadataDirectory(File combinerMetadataDirectory)
+    {
+        this.combinerMetadataDirectory = combinerMetadataDirectory;
+        return this;
+    }
+
+    @NotNull
+    public File getCombinerMetadataDirectory()
+    {
+        return combinerMetadataDirectory;
     }
 
     @Config("collector.max-upload-threads")

@@ -78,6 +78,7 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
         );
         String json = jsonCodec.toJson(newCombinedObject);
         try {
+            metadataFile.getParentFile().mkdirs();
             Files.write(json, metadataFile, Charsets.UTF_8);
             return true;
         }
@@ -94,6 +95,9 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
 
     private CombinedStoredObject readMetadataFile(File metadataFile)
     {
+        if (!metadataFile.exists()) {
+            return null;
+        }
         try {
             String json = Files.toString(metadataFile, Charsets.UTF_8);
             CombinedStoredObject combinedStoredObject = jsonCodec.fromJson(json);

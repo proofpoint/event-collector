@@ -23,21 +23,20 @@ import javax.annotation.concurrent.Immutable;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Pattern;
 import java.util.Map;
-import java.util.UUID;
 
 @SuppressWarnings("UnusedDeclaration")
 @Immutable
 public class Event
 {
     private final String type;
-    private final UUID uuid;
+    private final String uuid;
     private final String host;
     private final DateTime timestamp;
     private final Map<String, ?> data;
 
     @JsonCreator
     public Event(@JsonProperty("type") String type,
-            @JsonProperty("uuid") UUID uuid,
+            @JsonProperty("uuid") String uuid,
             @JsonProperty("host") String host,
             @JsonProperty("timestamp") DateTime timestamp,
             @JsonProperty("data") Map<String, ?> data)
@@ -59,7 +58,7 @@ public class Event
 
     @JsonProperty
     @NotNull(message = "is missing")
-    public UUID getUuid()
+    public String getUuid()
     {
         return uuid;
     }

@@ -45,7 +45,7 @@ public class TestEventResource
             throws IOException
     {
         ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
-        Event event = new Event("test", UUID.randomUUID(), "test.local", new DateTime(), data);
+        Event event = new Event("test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
 
         Response response = resource.post(ImmutableList.of(event));
 

@@ -18,7 +18,7 @@ public class TestEvent
     public void testEventValidation()
     {
         String type = "test";
-        UUID uuid = UUID.randomUUID();
+        String uuid = UUID.randomUUID().toString();
         String host = "test.local";
         DateTime time = new DateTime();
         Map<String, ?> data = Collections.emptyMap();

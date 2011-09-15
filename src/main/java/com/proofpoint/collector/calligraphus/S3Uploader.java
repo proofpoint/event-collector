@@ -75,7 +75,7 @@ public class S3Uploader
         StoredObject target = new StoredObject(location);
 
         log.info("starting upload: %s", target.getLocation());
-        storageSystem.putObject(target, file);
+        storageSystem.putObject(target.getLocation(), file);
         log.info("completed upload: %s", target.getLocation());
 
         if (!file.delete()) {

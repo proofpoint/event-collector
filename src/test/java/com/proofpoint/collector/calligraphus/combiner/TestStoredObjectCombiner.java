@@ -24,7 +24,7 @@ public class TestStoredObjectCombiner
         StoredObject b = new StoredObject(buildS3Location(stagingArea, "event", "day", "hour", "b"), UUID.randomUUID().toString(), 1000, 0);
         storageSystem.addObject(stagingArea, b);
 
-        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore("test");
+        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore("nodeId");
         StoredObjectCombiner objectCombiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea);
         objectCombiner.combineObjects(buildS3Location(stagingArea, "event", "day", "hour"), ImmutableList.<StoredObject>of(a, b));
 

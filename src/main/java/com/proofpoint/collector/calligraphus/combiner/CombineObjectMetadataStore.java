@@ -7,5 +7,5 @@ public interface CombineObjectMetadataStore
 {
     CombinedStoredObject getCombinedObjectManifest(URI combinedObjectLocation);
 
-    boolean replaceCombinedObjectManifest(CombinedStoredObject currentCombinedObject, List<StoredObject> newCombinedObjectParts);
+    boolean replaceCombinedObjectManifest(CombinedStoredObject currentCombinedObject, CombinedStoredObject newCombinedObject);
 }

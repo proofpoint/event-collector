@@ -21,7 +21,7 @@ public class StoredObject
         Preconditions.checkNotNull(location, "location is null");
         this.location = location;
         this.etag = null;
-        this.size = -1;
+        this.size = 0;
         this.lastModified = 0;
     }
 
@@ -33,7 +33,6 @@ public class StoredObject
             @JsonProperty("lastModified") long lastModified)
     {
         Preconditions.checkNotNull(location, "location is null");
-        Preconditions.checkNotNull(etag, "etag is null");
         Preconditions.checkArgument(size >= 0, "size is negative");
         Preconditions.checkArgument(lastModified >= 0, "lastModified is negative");
 

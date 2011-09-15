@@ -83,9 +83,9 @@ public class S3StorageSystem
     }
 
     @Override
-    public StoredObject createCombinedObject(StoredObject target, List<StoredObject> newCombinedObjectParts)
+    public StoredObject createCombinedObject(URI location, List<StoredObject> newCombinedObjectParts)
     {
-        Preconditions.checkNotNull(target, "target is null");
+        Preconditions.checkNotNull(location, "location is null");
         Preconditions.checkNotNull(newCombinedObjectParts, "newCombinedObjectParts is null");
         Preconditions.checkArgument(!newCombinedObjectParts.isEmpty(), "newCombinedObjectParts is empty");
 
@@ -98,18 +98,18 @@ public class S3StorageSystem
         }
 
         if (setIsSmall) {
-            return createCombinedObjectSmall(target, newCombinedObjectParts);
+            return createCombinedObjectSmall(location, newCombinedObjectParts);
         }
         else {
-            return createCombinedObjectLarge(target, newCombinedObjectParts);
+            return createCombinedObjectLarge(location, newCombinedObjectParts);
         }
     }
 
-    private StoredObject createCombinedObjectLarge(StoredObject target, List<StoredObject> newCombinedObjectParts)
+    private StoredObject createCombinedObjectLarge(URI location, List<StoredObject> newCombinedObjectParts)
     {
         MultipartUpload upload;
         try {
-            upload = s3Service.multipartStartUpload(getS3Bucket(target.getLocation()), new S3Object(getS3ObjectKey(target.getLocation())));
+            upload = s3Service.multipartStartUpload(getS3Bucket(location), new S3Object(getS3ObjectKey(location)));
         }
         catch (S3ServiceException e) {
             throw Throwables.propagate(e);
@@ -135,7 +135,7 @@ public class S3StorageSystem
             }
 
             MultipartCompleted completed = s3Service.multipartCompleteUpload(upload);
-            S3Object combinedObject = (S3Object) s3Service.getObjectDetails(getS3Bucket(target.getLocation()), getS3ObjectKey(target.getLocation()));
+            S3Object combinedObject = (S3Object) s3Service.getObjectDetails(getS3Bucket(location), getS3ObjectKey(location));
 
             // jets3t doesn't strip the quotes from the etag in the multipart api
             if (!completed.getEtag().equals('\"' + combinedObject.getETag() + '\"')) {
@@ -143,7 +143,7 @@ public class S3StorageSystem
                 throw new IllegalStateException("completed etag is different from combined object etag");
             }
 
-            return updateStoredObject(target, combinedObject);
+            return updateStoredObject(location, combinedObject);
         }
         catch (ServiceException e) {
             try {
@@ -155,7 +155,7 @@ public class S3StorageSystem
         }
     }
 
-    private StoredObject createCombinedObjectSmall(StoredObject target, List<StoredObject> newCombinedObjectParts)
+    private StoredObject createCombinedObjectSmall(URI location, List<StoredObject> newCombinedObjectParts)
     {
         ImmutableList.Builder<InputSupplier<InputStream>> builder = ImmutableList.builder();
         List<URI> sourceParts = Lists.transform(newCombinedObjectParts, StoredObject.GET_LOCATION_FUNCTION);
@@ -166,9 +166,9 @@ public class S3StorageSystem
 
         File tempFile = null;
         try {
-            tempFile = File.createTempFile(S3StorageHelper.getS3FileName(target.getLocation()), ".small.s3.data");
+            tempFile = File.createTempFile(S3StorageHelper.getS3FileName(location), ".small.s3.data");
             Files.copy(source, tempFile);
-            StoredObject result = putObject(target, tempFile);
+            StoredObject result = putObject(location, tempFile);
             return result;
         }
         catch (IOException e) {
@@ -182,13 +182,13 @@ public class S3StorageSystem
     }
 
     @Override
-    public StoredObject putObject(StoredObject target, File source)
+    public StoredObject putObject(URI location, File source)
     {
         try {
             S3Object object = new S3Object(source);
-            object.setKey(S3StorageHelper.getS3ObjectKey(target.getLocation()));
-            S3Object result = s3Service.putObject(getS3Bucket(target.getLocation()), object);
-            return updateStoredObject(target, result);
+            object.setKey(S3StorageHelper.getS3ObjectKey(location));
+            S3Object result = s3Service.putObject(getS3Bucket(location), object);
+            return updateStoredObject(location, result);
         }
         catch (Exception e) {
             throw Throwables.propagate(e);
@@ -198,7 +198,8 @@ public class S3StorageSystem
     public StoredObject getObjectDetails(URI target)
     {
         try {
-            return updateStoredObject(new StoredObject(target), (S3Object) s3Service.getObjectDetails(getS3Bucket(target), getS3ObjectKey(target)));
+            final StoredObject storedObject = new StoredObject(target);
+            return updateStoredObject(storedObject.getLocation(), (S3Object) s3Service.getObjectDetails(getS3Bucket(target), getS3ObjectKey(target)));
         }
         catch (ServiceException e) {
             throw Throwables.propagate(e);

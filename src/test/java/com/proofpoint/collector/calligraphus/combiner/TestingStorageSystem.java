@@ -9,6 +9,7 @@ import java.io.File;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.google.common.collect.Lists.newArrayList;
 
@@ -47,13 +48,17 @@ public class TestingStorageSystem implements StorageSystem
     }
 
     @Override
-    public StoredObject createCombinedObject(StoredObject target, List<StoredObject> newCombinedObjectParts)
+    public StoredObject createCombinedObject(URI location, List<StoredObject> newCombinedObjectParts)
     {
-        return target;
+        long size = 0;
+        for (StoredObject newCombinedObjectPart : newCombinedObjectParts) {
+            size += newCombinedObjectPart.getSize();
+        }
+        return new StoredObject(location, UUID.randomUUID().toString(), size, System.currentTimeMillis());
     }
 
     @Override
-    public StoredObject putObject(StoredObject target, File source)
+    public StoredObject putObject(URI location, File source)
     {
         throw new UnsupportedOperationException();
     }

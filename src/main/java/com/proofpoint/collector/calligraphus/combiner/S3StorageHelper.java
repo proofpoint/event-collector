@@ -60,28 +60,21 @@ public final class S3StorageHelper
                 location);
     }
 
-    public static StoredObject updateStoredObject(StoredObject storedObject, S3Object s3Object)
+    public static StoredObject updateStoredObject(URI location, S3Object s3Object)
     {
-        Preconditions.checkNotNull(storedObject, "storedObject is null");
+        Preconditions.checkNotNull(location, "location is null");
         Preconditions.checkNotNull(s3Object, "s3Object is null");
-        Preconditions.checkArgument(S3StorageHelper.getS3ObjectKey(storedObject.getLocation()).equals(s3Object.getKey()));
+        Preconditions.checkArgument(S3StorageHelper.getS3ObjectKey(location).equals(s3Object.getKey()));
         // jets3t doesn't set the bucket name in responses
         if (s3Object.getBucketName() != null) {
-            Preconditions.checkArgument(S3StorageHelper.getS3Bucket(storedObject.getLocation()).equals(s3Object.getBucketName()));
+            Preconditions.checkArgument(S3StorageHelper.getS3Bucket(location).equals(s3Object.getBucketName()));
         }
 
         return new StoredObject(
-                storedObject.getLocation(),
+                location,
                 s3Object.getETag(),
                 s3Object.getContentLength(),
                 s3Object.getLastModifiedDate().getTime());
-    }
-
-    public static URI getLocation(S3Object s3Object)
-    {
-        URI uri = URI.create("s3://" + Joiner.on('/').join(s3Object.getBucketName(), s3Object.getKey()));
-        checkValidS3Uri(uri);
-        return uri;
     }
 
     public static URI buildS3Location(URI base, String... parts)

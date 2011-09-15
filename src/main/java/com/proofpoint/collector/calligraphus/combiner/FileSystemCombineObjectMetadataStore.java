@@ -1,7 +1,7 @@
 package com.proofpoint.collector.calligraphus.combiner;
 
 import com.google.common.base.Charsets;
-import com.google.common.base.Throwables;
+import com.google.common.base.Preconditions;
 import com.google.common.io.Files;
 import com.proofpoint.collector.calligraphus.ServerConfig;
 import com.proofpoint.json.JsonCodec;
@@ -11,8 +11,6 @@ import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.util.List;
-import java.util.UUID;
 
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Bucket;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3ObjectKey;
@@ -39,45 +37,39 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
     @Override
     public CombinedStoredObject getCombinedObjectManifest(URI combinedObjectLocation)
     {
-        File metadataFile = createMetadataFile(combinedObjectLocation);
-        CombinedStoredObject combinedStoredObject = readMetadataFile(metadataFile);
+        CombinedStoredObject combinedStoredObject = readMetadataFile(combinedObjectLocation);
         if (combinedStoredObject != null) {
             return combinedStoredObject;
         }
 
-        return new CombinedStoredObject(combinedObjectLocation, nodeId);
+        return CombinedStoredObject.createInitialCombinedStoredObject(combinedObjectLocation, nodeId);
     }
 
     @Override
-    public boolean replaceCombinedObjectManifest(CombinedStoredObject currentCombinedObject, List<StoredObject> newCombinedObjectParts)
+    public boolean replaceCombinedObjectManifest(CombinedStoredObject currentCombinedObject, CombinedStoredObject newCombinedObject)
     {
-        File metadataFile = createMetadataFile(currentCombinedObject.getLocation());
-        CombinedStoredObject persistentCombinedStoredObject = readMetadataFile(metadataFile);
+        Preconditions.checkNotNull(currentCombinedObject, "currentCombinedObject is null");
+        Preconditions.checkNotNull(newCombinedObject, "newCombinedObject is null");
+        Preconditions.checkArgument(currentCombinedObject.getLocation().equals(newCombinedObject.getLocation()), "newCombinedObject location is different from currentCombineObject location ");
+
+        CombinedStoredObject persistentCombinedStoredObject = readMetadataFile(newCombinedObject.getLocation());
         if (persistentCombinedStoredObject != null) {
-            if (!persistentCombinedStoredObject.getETag().endsWith(currentCombinedObject.getETag())) {
+            if (persistentCombinedStoredObject.getVersion() != currentCombinedObject.getVersion()) {
                 return false;
             }
         }
-        else if (currentCombinedObject.getETag() != null) {
+        else if (currentCombinedObject.getVersion() != 0) {
             return false;
         }
 
-        long totalSize = 0;
-        for (StoredObject storedObject : newCombinedObjectParts) {
-            totalSize += storedObject.getSize();
-        }
+        return writeMetadataFile(newCombinedObject);
+    }
 
-        CombinedStoredObject newCombinedObject = new CombinedStoredObject(
-                currentCombinedObject.getLocation(),
-                UUID.randomUUID().toString(),
-                totalSize,
-                System.currentTimeMillis(),
-                nodeId,
-                System.currentTimeMillis(),
-                newCombinedObjectParts
-        );
+    private boolean writeMetadataFile(CombinedStoredObject newCombinedObject)
+    {
         String json = jsonCodec.toJson(newCombinedObject);
         try {
+            File metadataFile = toMetadataFile(newCombinedObject.getLocation());
             metadataFile.getParentFile().mkdirs();
             Files.write(json, metadataFile, Charsets.UTF_8);
             return true;
@@ -87,14 +79,15 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
         }
     }
 
-    private File createMetadataFile(URI location)
+    private File toMetadataFile(URI location)
     {
         File file = new File(metadataDirectory, getS3Bucket(location) + "/" + getS3ObjectKey(location) + ".metadata");
         return file;
     }
 
-    private CombinedStoredObject readMetadataFile(File metadataFile)
+    private CombinedStoredObject readMetadataFile(URI location)
     {
+        File metadataFile = toMetadataFile(location);
         if (!metadataFile.exists()) {
             return null;
         }
@@ -104,8 +97,7 @@ public class FileSystemCombineObjectMetadataStore implements CombineObjectMetada
             return combinedStoredObject;
         }
         catch (IOException e) {
-            // todo what to do here?
-            throw Throwables.propagate(e);
+            throw new RuntimeException("Metadata file for " + location + " is corrupt");
         }
     }
 }

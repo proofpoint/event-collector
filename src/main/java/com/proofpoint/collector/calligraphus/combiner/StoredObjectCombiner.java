@@ -138,7 +138,7 @@ public class StoredObjectCombiner
     private CombinedStoredObject combineObjectSet(URI targetObjectLocation, List<StoredObject> stagedObjects)
     {
         CombinedStoredObject currentCombinedObject;
-        List<StoredObject> newCombinedObjectParts;
+        CombinedStoredObject newCombinedObject;
         do {
             // gets the file names
             List<String> stagedObjectNames = Lists.transform(stagedObjects, StoredObject.GET_NAME_FUNCTION);
@@ -179,14 +179,16 @@ public class StoredObjectCombiner
             // newObjectList = current targetCombinedObject list + new objects not contained in this list
             List<StoredObject> missingObjects = newArrayList(stagedObjects);
             missingObjects.removeAll(currentCombinedObjectManifest);
-            newCombinedObjectParts = ImmutableList.<StoredObject>builder().addAll(currentCombinedObjectManifest).addAll(missingObjects).build();
+            List<StoredObject> newCombinedObjectParts = ImmutableList.<StoredObject>builder().addAll(currentCombinedObjectManifest).addAll(missingObjects).build();
+
+            newCombinedObject = currentCombinedObject.update(nodeId, newCombinedObjectParts);
 
             // write new combined object manifest
-        } while (!metadataStore.replaceCombinedObjectManifest(currentCombinedObject, newCombinedObjectParts));
+        } while (!metadataStore.replaceCombinedObjectManifest(currentCombinedObject, newCombinedObject));
 
         // perform combination
-        StoredObject combinedObject = storageSystem.createCombinedObject(currentCombinedObject.getStoredObject(), newCombinedObjectParts);
-        return new CombinedStoredObject(combinedObject, nodeId, System.currentTimeMillis(), newCombinedObjectParts);
+        storageSystem.createCombinedObject(newCombinedObject.getLocation(), newCombinedObject.getSourceParts());
+        return newCombinedObject;
     }
 
     private void processLateData(URI targetArea, List<StoredObject> stagedObjects)

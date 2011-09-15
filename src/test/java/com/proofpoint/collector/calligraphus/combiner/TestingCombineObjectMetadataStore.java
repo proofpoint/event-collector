@@ -4,8 +4,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 
 import java.net.URI;
-import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 
 public class TestingCombineObjectMetadataStore implements CombineObjectMetadataStore
@@ -25,32 +23,31 @@ public class TestingCombineObjectMetadataStore implements CombineObjectMetadataS
 
         CombinedStoredObject combinedStoredObject = metadata.get(combinedObjectLocation);
         if (combinedStoredObject == null) {
-            combinedStoredObject = new CombinedStoredObject(combinedObjectLocation, nodeId);
+            combinedStoredObject = CombinedStoredObject.createInitialCombinedStoredObject(combinedObjectLocation, nodeId);
         }
 
         return combinedStoredObject;
     }
 
     @Override
-    public boolean replaceCombinedObjectManifest(CombinedStoredObject currentCombinedObject, List<StoredObject> newCombinedObjectParts)
+    public boolean replaceCombinedObjectManifest(CombinedStoredObject currentCombinedObject, CombinedStoredObject newCombinedObject)
     {
-        long totalSize = 0;
-        for (StoredObject storedObject : newCombinedObjectParts) {
-            totalSize += storedObject.getSize();
+        Preconditions.checkNotNull(currentCombinedObject, "currentCombinedObject is null");
+        Preconditions.checkNotNull(newCombinedObject, "newCombinedObject is null");
+        Preconditions.checkArgument(currentCombinedObject.getLocation().equals(newCombinedObject.getLocation()), "newCombinedObject location is different from currentCombineObject location ");
+
+        CombinedStoredObject persistentCombinedStoredObject = metadata.get(newCombinedObject.getLocation());
+        if (persistentCombinedStoredObject != null) {
+            if (persistentCombinedStoredObject.getVersion() != currentCombinedObject.getVersion()) {
+                return false;
+            }
+        }
+        else if (currentCombinedObject.getVersion() != 0) {
+            return false;
         }
 
         URI location = currentCombinedObject.getLocation();
-        CombinedStoredObject newCombinedObject = new CombinedStoredObject(
-                location,
-                UUID.randomUUID().toString(),
-                totalSize,
-                System.currentTimeMillis(),
-                nodeId,
-                System.currentTimeMillis(),
-                newCombinedObjectParts
-        );
-
-        if (currentCombinedObject.getETag() == null) {
+        if (currentCombinedObject.getVersion() == 0) {
             return metadata.putIfAbsent(location, newCombinedObject) == null;
         }
         else {

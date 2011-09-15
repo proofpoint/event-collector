@@ -215,7 +215,8 @@ public class TestS3Combine
             countingOutputStream.close();
 
             // upload
-            storageSystem.putObject(new StoredObject(location), tempFile);
+            final StoredObject target = new StoredObject(location);
+            storageSystem.putObject(target.getLocation(), tempFile);
         }
         catch (Throwable t) {
             Closeables.closeQuietly(countingOutputStream);

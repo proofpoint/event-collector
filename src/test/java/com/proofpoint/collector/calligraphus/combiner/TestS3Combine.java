@@ -83,7 +83,7 @@ public class TestS3Combine
         String base = UUID.randomUUID().toString().replace("-", "");
         Map<URI, InputSupplier<? extends InputStream>> files = newHashMap();
         for (int i = 0; i < 2; i++) {
-            URI name = createStagingFileName(base, files.size());
+            URI name = createStagingFileName(base, i + 10);
             File file = uploadFile(name, MIN_LARGE_FILE_LENGTH);
             files.put(name, Files.newInputStreamSupplier(file));
         }
@@ -101,7 +101,7 @@ public class TestS3Combine
 
         // upload two more chunks
         for (int i = 0; i < 2; i++) {
-            URI name = createStagingFileName(base, files.size());
+            URI name = createStagingFileName(base, i);
             File file = uploadFile(name, MIN_LARGE_FILE_LENGTH);
             files.put(name, Files.newInputStreamSupplier(file));
         }
@@ -116,6 +116,13 @@ public class TestS3Combine
         if (!ByteStreams.equal(combinedInputs, s3InputSupplier)) {
             Assert.fail("broken");
         }
+
+        // verify version combiner doesn't recombine unchanged files
+        CombinedStoredObject combinedObjectManifest = metadataStore.getCombinedObjectManifest(target);
+        long currentVersion = combinedObjectManifest.getVersion();
+        objectCombiner.combineObjects();
+        CombinedStoredObject newCombinedStoredObjectManifest = metadataStore.getCombinedObjectManifest(target);
+        Assert.assertEquals(newCombinedStoredObjectManifest.getVersion(), currentVersion);
     }
 
     @Test(enabled = false)
@@ -128,7 +135,7 @@ public class TestS3Combine
         String base = UUID.randomUUID().toString().replace("-", "");
         Map<URI, InputSupplier<? extends InputStream>> files = newHashMap();
         for (int i = 0; i < 2; i++) {
-            URI name = createStagingFileName(base, files.size());
+            URI name = createStagingFileName(base, i + 10);
             File file = uploadFile(name, MIN_SMALL_FILE_LENGTH);
             files.put(name, Files.newInputStreamSupplier(file));
         }
@@ -147,7 +154,7 @@ public class TestS3Combine
 
         // upload two more chunks
         for (int i = 0; i < 2; i++) {
-            URI name = createStagingFileName(base, files.size());
+            URI name = createStagingFileName(base, i);
             File file = uploadFile(name, MIN_SMALL_FILE_LENGTH);
             files.put(name, Files.newInputStreamSupplier(file));
         }
@@ -163,6 +170,13 @@ public class TestS3Combine
         if (!sourceMD5.equals(combinedObject.getETag())) {
             Assert.fail("broken");
         }
+
+        // verify version combiner doesn't recombine unchanged files
+        CombinedStoredObject combinedObjectManifest = metadataStore.getCombinedObjectManifest(target);
+        long currentVersion = combinedObjectManifest.getVersion();
+        objectCombiner.combineObjects();
+        CombinedStoredObject newCombinedStoredObjectManifest = metadataStore.getCombinedObjectManifest(target);
+        Assert.assertEquals(newCombinedStoredObjectManifest.getVersion(), currentVersion);
     }
 
     private InputSupplier<InputStream> getCombinedInputsSupplier(Map<URI, InputSupplier<? extends InputStream>> files, URI target)

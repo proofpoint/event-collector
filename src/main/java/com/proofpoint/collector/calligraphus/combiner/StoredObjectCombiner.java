@@ -15,12 +15,14 @@ import javax.inject.Inject;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.collect.Lists.newArrayList;
+import static com.google.common.collect.Sets.newHashSet;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3FileName;
 
@@ -154,7 +156,7 @@ public class StoredObjectCombiner
             List<String> existingCombinedObjectPartNames = Lists.transform(currentCombinedObjectManifest, StoredObject.GET_NAME_FUNCTION);
 
             // if files already combined, return
-            if (existingCombinedObjectPartNames.equals(stagedObjectNames)) {
+            if (newHashSet(existingCombinedObjectPartNames).equals(newHashSet(stagedObjectNames))) {
                 return null;
             }
 

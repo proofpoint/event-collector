@@ -40,6 +40,7 @@ public class StoredObjectCombiner
     private final StorageSystem storageSystem;
     private final URI stagingBaseUri;
     private final URI targetBaseUri;
+    private final boolean enabled;
 
     @Inject
     public StoredObjectCombiner(NodeInfo nodeInfo, CombineObjectMetadataStore metadataStore, StorageSystem storageSystem, ServerConfig config)
@@ -54,10 +55,10 @@ public class StoredObjectCombiner
         this.storageSystem = storageSystem;
         this.stagingBaseUri = URI.create(config.getS3StagingLocation());
         this.targetBaseUri = URI.create(config.getS3DataLocation());
-
+        this.enabled = config.isCombinerEnabled();
     }
 
-    public StoredObjectCombiner(String nodeId, CombineObjectMetadataStore metadataStore, StorageSystem storageSystem, URI stagingBaseUri, URI targetBaseUri)
+    public StoredObjectCombiner(String nodeId, CombineObjectMetadataStore metadataStore, StorageSystem storageSystem, URI stagingBaseUri, URI targetBaseUri, boolean enabled)
     {
         Preconditions.checkNotNull(nodeId, "nodeId is null");
         Preconditions.checkNotNull(metadataStore, "metadataStore is null");
@@ -70,11 +71,15 @@ public class StoredObjectCombiner
         this.storageSystem = storageSystem;
         this.stagingBaseUri = stagingBaseUri;
         this.targetBaseUri = targetBaseUri;
+        this.enabled = enabled;
     }
 
     @PostConstruct
     public void start()
     {
+        if (!enabled) {
+            return;
+        }
         Runnable combiner = new Runnable()
         {
             @Override

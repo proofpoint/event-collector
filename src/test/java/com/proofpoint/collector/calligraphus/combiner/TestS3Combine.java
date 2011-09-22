@@ -70,7 +70,8 @@ public class TestS3Combine
                 metadataStore,
                 storageSystem,
                 stagingBaseUri,
-                targetBaseUri);
+                targetBaseUri,
+                true);
     }
 
     @Test(enabled = false)

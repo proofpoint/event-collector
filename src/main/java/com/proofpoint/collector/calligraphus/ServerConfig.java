@@ -39,6 +39,7 @@ public class ServerConfig
     private String awsSecretKey;
     private String s3StagingLocation;
     private String s3DataLocation;
+    private boolean combinerEnabled = true;
 
     @Config("collector.max-buffer-time")
     @ConfigDescription("maximum length of time to buffer events locally before persisting them")
@@ -89,7 +90,7 @@ public class ServerConfig
         return localStagingDirectory;
     }
 
-    @Config("collector.combiner-metadata-directory")
+    @Config("collector.combiner.metadata-directory")
     @ConfigDescription("directory to store information about the file combine process -- should persist across restarts")
     public ServerConfig setCombinerMetadataDirectory(File combinerMetadataDirectory)
     {
@@ -172,5 +173,17 @@ public class ServerConfig
     public String getS3DataLocation()
     {
         return s3DataLocation;
+    }
+
+    @Config("collector.combiner.enabled")
+    public ServerConfig setCombinerEnabled(boolean combinerEnabled)
+    {
+        this.combinerEnabled = combinerEnabled;
+        return this;
+    }
+
+    public boolean isCombinerEnabled()
+    {
+        return combinerEnabled;
     }
 }

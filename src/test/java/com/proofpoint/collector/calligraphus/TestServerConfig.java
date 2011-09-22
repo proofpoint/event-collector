@@ -44,6 +44,7 @@ public class TestServerConfig
                 .setAwsSecretKey(null)
                 .setS3StagingLocation(null)
                 .setS3DataLocation(null)
+                .setCombinerEnabled(true)
         );
     }
 
@@ -54,12 +55,13 @@ public class TestServerConfig
                 .put("collector.max-buffer-time", "2h")
                 .put("collector.target-file-size", "768MB")
                 .put("collector.local-staging-directory", "testdir")
-                .put("collector.combiner-metadata-directory", "test-combiner")
+                .put("collector.combiner.metadata-directory", "test-combiner")
                 .put("collector.max-upload-threads", "42")
                 .put("collector.aws-access-key", "my-access-key")
                 .put("collector.aws-secret-key", "my-secret-key")
                 .put("collector.s3-staging-location", "s3://example-staging/")
                 .put("collector.s3-data-location", "s3://example-data/")
+                .put("collector.combiner.enabled", "false")
                 .build();
 
         ServerConfig expected = new ServerConfig()
@@ -71,7 +73,8 @@ public class TestServerConfig
                 .setAwsAccessKey("my-access-key")
                 .setAwsSecretKey("my-secret-key")
                 .setS3StagingLocation("s3://example-staging/")
-                .setS3DataLocation("s3://example-data/");
+                .setS3DataLocation("s3://example-data/")
+                .setCombinerEnabled(false);
 
         ConfigAssertions.assertFullMapping(properties, expected);
     }

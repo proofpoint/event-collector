@@ -15,7 +15,6 @@ import javax.inject.Inject;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -128,7 +127,8 @@ public class StoredObjectCombiner
         for (StoredObject stagedObject : stagedObjects) {
             if (stagedObject.getSize() < 5 * 1024 * 1024) {
                 smallFiles.add(stagedObject);
-            } else {
+            }
+            else {
                 largeFiles.add(stagedObject);
             }
         }
@@ -191,7 +191,8 @@ public class StoredObjectCombiner
             newCombinedObject = currentCombinedObject.update(nodeId, newCombinedObjectParts);
 
             // write new combined object manifest
-        } while (!metadataStore.replaceCombinedObjectManifest(currentCombinedObject, newCombinedObject));
+        }
+        while (!metadataStore.replaceCombinedObjectManifest(currentCombinedObject, newCombinedObject));
 
         // perform combination
         storageSystem.createCombinedObject(newCombinedObject.getLocation(), newCombinedObject.getSourceParts());

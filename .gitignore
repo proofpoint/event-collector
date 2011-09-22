@@ -16,3 +16,4 @@ test-output
 .externalToolBuilders
 *~
 staging/
+combiner-metadata/

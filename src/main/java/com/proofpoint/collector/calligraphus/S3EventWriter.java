@@ -11,6 +11,7 @@ import org.codehaus.jackson.JsonEncoding;
 import org.codehaus.jackson.JsonGenerator;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.util.MinimalPrettyPrinter;
+import org.iq80.snappy.SnappyOutputStream;
 
 import javax.annotation.Nullable;
 import javax.annotation.PostConstruct;
@@ -139,7 +140,7 @@ public class S3EventWriter
 
             file = uploader.generateNextFilename();
             output = new CountingOutputStream(new FileOutputStream(file));
-            OutputStream snappyOut = new RawSnappyOutputStream(output);
+            OutputStream snappyOut = new SnappyOutputStream(output);
 
             generator = objectMapper.getJsonFactory().createJsonGenerator(snappyOut, JsonEncoding.UTF8);
             generator.disable(JsonGenerator.Feature.FLUSH_PASSED_TO_STREAM);

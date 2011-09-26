@@ -17,6 +17,19 @@
         <main-class>com.proofpoint.collector.calligraphus.Main</main-class>
     </properties>
 
+    <distributionManagement>
+        <snapshotRepository>
+            <id>proofpoint-snapshots</id>
+            <name>Proofpoint Snapshots Repository</name>
+            <url>http://maven.us.proofpoint.com/nexus/content/repositories/proofpoint-eng-snapshots</url>
+        </snapshotRepository>
+        <repository>
+            <id>proofpoint-releases</id>
+            <name>Proofpoint Releases Repository</name>
+            <url>http://maven.us.proofpoint.com/nexus/content/repositories/proofpoint-eng</url>
+        </repository>
+    </distributionManagement>
+
 
     <dependencies>
         <dependency>

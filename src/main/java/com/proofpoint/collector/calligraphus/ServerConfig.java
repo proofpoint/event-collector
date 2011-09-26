@@ -39,7 +39,7 @@ public class ServerConfig
     private String awsSecretKey;
     private String s3StagingLocation;
     private String s3DataLocation;
-    private boolean combinerEnabled = true;
+    private boolean combinerEnabled = false;
 
     @Config("collector.max-buffer-time")
     @ConfigDescription("maximum length of time to buffer events locally before persisting them")

@@ -91,4 +91,15 @@ public final class S3StorageHelper
         checkValidS3Uri(uri);
         return uri;
     }
+
+    public static URI appendSuffix(URI base, String suffix)
+    {
+        if (base.toString().endsWith(".")) {
+            throw new IllegalArgumentException("base ends with dot: " + base);
+        }
+        if (suffix.startsWith(".")) {
+            throw new IllegalArgumentException("suffix starts with dot: " + base);
+        }
+        return URI.create(base + "." + suffix);
+    }
 }

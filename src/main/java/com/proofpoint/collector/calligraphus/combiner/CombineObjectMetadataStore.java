@@ -1,11 +1,10 @@
 package com.proofpoint.collector.calligraphus.combiner;
 
 import java.net.URI;
-import java.util.List;
 
 public interface CombineObjectMetadataStore
 {
-    CombinedStoredObject getCombinedObjectManifest(URI combinedObjectLocation);
+    CombinedGroup getCombinedGroupManifest(URI combinedGroupPrefix);
 
-    boolean replaceCombinedObjectManifest(CombinedStoredObject currentCombinedObject, CombinedStoredObject newCombinedObject);
+    boolean replaceCombinedGroupManifest(CombinedGroup currentGroup, CombinedGroup newGroup);
 }

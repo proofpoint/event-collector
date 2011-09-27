@@ -1,10 +1,13 @@
 package com.proofpoint.collector.calligraphus.combiner;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.collector.calligraphus.ServerConfig;
+import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.log.Logger;
 import com.proofpoint.node.NodeInfo;
 import com.proofpoint.units.Duration;
@@ -14,16 +17,19 @@ import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import java.io.IOException;
 import java.net.URI;
-import java.util.Collections;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import static com.google.common.collect.Lists.newArrayList;
 import static com.google.common.collect.Sets.newHashSet;
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.appendSuffix;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3FileName;
+import static java.lang.String.format;
+import static java.lang.System.currentTimeMillis;
 
 public class StoredObjectCombiner
 {
@@ -39,6 +45,7 @@ public class StoredObjectCombiner
     private final StorageSystem storageSystem;
     private final URI stagingBaseUri;
     private final URI targetBaseUri;
+    private final long targetFileSize;
     private final boolean enabled;
 
     @Inject
@@ -54,22 +61,31 @@ public class StoredObjectCombiner
         this.storageSystem = storageSystem;
         this.stagingBaseUri = URI.create(config.getS3StagingLocation());
         this.targetBaseUri = URI.create(config.getS3DataLocation());
+        this.targetFileSize = config.getTargetFileSize().toBytes();
         this.enabled = config.isCombinerEnabled();
     }
 
-    public StoredObjectCombiner(String nodeId, CombineObjectMetadataStore metadataStore, StorageSystem storageSystem, URI stagingBaseUri, URI targetBaseUri, boolean enabled)
+    public StoredObjectCombiner(String nodeId,
+            CombineObjectMetadataStore metadataStore,
+            StorageSystem storageSystem,
+            URI stagingBaseUri,
+            URI targetBaseUri,
+            DataSize targetFileSize,
+            boolean enabled)
     {
         Preconditions.checkNotNull(nodeId, "nodeId is null");
         Preconditions.checkNotNull(metadataStore, "metadataStore is null");
         Preconditions.checkNotNull(storageSystem, "storageSystem is null");
         Preconditions.checkNotNull(stagingBaseUri, "stagingBaseUri is null");
         Preconditions.checkNotNull(targetBaseUri, "targetBaseUri is null");
+        Preconditions.checkNotNull(targetFileSize, "targetFileSize is null");
 
         this.nodeId = nodeId;
         this.metadataStore = metadataStore;
         this.storageSystem = storageSystem;
         this.stagingBaseUri = stagingBaseUri;
         this.targetBaseUri = targetBaseUri;
+        this.targetFileSize = targetFileSize.toBytes();
         this.enabled = enabled;
     }
 
@@ -121,86 +137,121 @@ public class StoredObjectCombiner
 
     public void combineObjects(URI baseURI, List<StoredObject> stagedObjects)
     {
-        // Split files based on size size
+        // split files into small and large groups based on size
         List<StoredObject> smallFiles = Lists.newArrayListWithCapacity(stagedObjects.size());
         List<StoredObject> largeFiles = Lists.newArrayListWithCapacity(stagedObjects.size());
         for (StoredObject stagedObject : stagedObjects) {
-            if (stagedObject.getSize() < 5 * 1024 * 1024) {
+            if (stagedObject.getSize() == 0) {
+                // ignore empty object
+            }
+            else if (stagedObject.getSize() < 5 * 1024 * 1024) {
                 smallFiles.add(stagedObject);
             }
             else {
                 largeFiles.add(stagedObject);
             }
         }
-        if (!smallFiles.isEmpty()) {
-            URI targetObjectLocation = URI.create(baseURI.toString() + ".small.json.snappy");
-            combineObjectSet(targetObjectLocation, smallFiles);
+        combineObjectGroup(appendSuffix(baseURI, "small"), smallFiles);
+        combineObjectGroup(appendSuffix(baseURI, "large"), largeFiles);
+    }
+
+    private void combineObjectGroup(URI baseURI, List<StoredObject> stagedObjects)
+    {
+        if (stagedObjects.isEmpty()) {
+            return;
         }
-        if (!largeFiles.isEmpty()) {
-            URI targetObjectLocation = URI.create(baseURI.toString() + ".large.json.snappy");
-            combineObjectSet(targetObjectLocation, largeFiles);
+
+        CombinedGroup currentGroup = metadataStore.getCombinedGroupManifest(baseURI);
+
+        // only update the object if this node was the last writer or some time has passed
+        if ((!nodeId.equals(currentGroup.getCreator())) && !groupIsMinutesOld(currentGroup, 5)) {
+            return;
+        }
+
+        // create new manifest from existing manifest with new staged objects
+        CombinedGroup newGroup = buildCombinedGroup(currentGroup, baseURI, stagedObjects);
+
+        // attempt to write new manifest
+        if (!metadataStore.replaceCombinedGroupManifest(currentGroup, newGroup)) {
+            return;
+        }
+
+        // execute combines
+        for (CombinedStoredObject object : newGroup.getCombinedObjects()) {
+            if (currentGroup.isCombinedObjectNewOrChanged(object)) {
+                storageSystem.createCombinedObject(object.getLocation(), object.getSourceParts());
+            }
         }
     }
 
-    private CombinedStoredObject combineObjectSet(URI targetObjectLocation, List<StoredObject> stagedObjects)
+    private CombinedGroup buildCombinedGroup(CombinedGroup group, URI baseURI, List<StoredObject> stagedObjects)
     {
-        CombinedStoredObject currentCombinedObject;
-        CombinedStoredObject newCombinedObject;
-        do {
-            // gets the file names
-            List<String> stagedObjectNames = Lists.transform(stagedObjects, StoredObject.GET_NAME_FUNCTION);
-
-            // Only update the object if the this node is was the last writer or 5 minutes have passed
-            currentCombinedObject = metadataStore.getCombinedObjectManifest(targetObjectLocation);
-            if (!nodeId.equals(currentCombinedObject.getCreator()) && System.currentTimeMillis() - currentCombinedObject.getCreatedTimestamp() <= TimeUnit.MINUTES.toMillis(5)) {
-                return null;
-            }
-
-            // get list of objects that makeup current targetCombinedObject
-            List<StoredObject> currentCombinedObjectManifest = currentCombinedObject.getSourceParts();
-            List<String> existingCombinedObjectPartNames = Lists.transform(currentCombinedObjectManifest, StoredObject.GET_NAME_FUNCTION);
-
-            // if files already combined, return
-            if (newHashSet(existingCombinedObjectPartNames).equals(newHashSet(stagedObjectNames))) {
-                return null;
-            }
-
-            // GOTO late data handling: if objects in staging does NOT contain ANY objects in the current targetCombinedObject
-            if (!currentCombinedObjectManifest.isEmpty() && Collections.disjoint(existingCombinedObjectPartNames, stagedObjectNames)) {
-                processLateData(targetObjectLocation, stagedObjects);
-                return null;
-            }
-
-            // RETRY later: if objects in staging do NOT contain all objects in the current targetCombinedObject (eventually consistent)
-            if (!stagedObjectNames.containsAll(existingCombinedObjectPartNames)) {
-                // retry later
-                return null;
-            }
-
-            // ERROR: if objects in staging do NOT have the same md5s in the current targetCombinedObject
-            if (!stagedObjects.containsAll(currentCombinedObjectManifest)) {
-                throw new IllegalStateException(String.format("MD5 hashes for combined objects in %s do not match MD5 hashes in staging area",
-                        targetObjectLocation));
-            }
-
-            // newObjectList = current targetCombinedObject list + new objects not contained in this list
-            List<StoredObject> missingObjects = newArrayList(stagedObjects);
-            missingObjects.removeAll(currentCombinedObjectManifest);
-            List<StoredObject> newCombinedObjectParts = ImmutableList.<StoredObject>builder().addAll(currentCombinedObjectManifest).addAll(missingObjects).build();
-
-            newCombinedObject = currentCombinedObject.update(nodeId, newCombinedObjectParts);
-
-            // write new combined object manifest
+        // get all objects that have already been combined
+        Set<StoredObject> alreadyCombinedObjects = newHashSet();
+        for (CombinedStoredObject combinedObject : group.getCombinedObjects()) {
+            alreadyCombinedObjects.addAll(combinedObject.getSourceParts());
         }
-        while (!metadataStore.replaceCombinedObjectManifest(currentCombinedObject, newCombinedObject));
 
-        // perform combination
-        storageSystem.createCombinedObject(newCombinedObject.getLocation(), newCombinedObject.getSourceParts());
-        return newCombinedObject;
+        // get new objects that still need to be assigned to a combined object
+        List<StoredObject> newObjects = getNewObjects(stagedObjects, alreadyCombinedObjects);
+
+        // add each new object to a combined object
+        for (StoredObject newObject : newObjects) {
+            boolean added = false;
+
+            // try to find an open combined object
+            for (CombinedStoredObject combinedObject : group.getCombinedObjects()) {
+                // skip if combined object is at target size
+                if (combinedObject.getSize() >= targetFileSize) {
+                    continue;
+                }
+
+                // skip if any parts are no longer available
+                if (!allPartsAvailable(stagedObjects, combinedObject.getSourceParts())) {
+                    continue;
+                }
+
+                // error if objects in staging do not have same MD5s as current combined object
+                if (!stagedObjects.containsAll(combinedObject.getSourceParts())) {
+                    throw new IllegalStateException(format("MD5 hashes for combined object [%s] do not match MD5 hashes in staging area", combinedObject.getLocation()));
+                }
+
+                // add object to combined object
+                group = group.updateCombinedObject(nodeId, combinedObject.addPart(newObject));
+                added = true;
+                break;
+            }
+
+            // create new combined object if necessary
+            if (!added) {
+                group = group.addNewCombinedObject(nodeId, baseURI, ImmutableList.of(newObject));
+            }
+        }
+
+        return group;
     }
 
-    private void processLateData(URI targetArea, List<StoredObject> stagedObjects)
+    private static List<StoredObject> getNewObjects(List<StoredObject> stagedObjects, Set<StoredObject> alreadyCombinedObjects)
     {
-        // todo do something :)
+        Set<URI> combined = newHashSet(Iterables.transform(alreadyCombinedObjects, StoredObject.GET_LOCATION_FUNCTION));
+        List<StoredObject> newObjects = Lists.newArrayList();
+        for (StoredObject stagedObject : stagedObjects) {
+            if (!combined.contains(stagedObject.getLocation())) {
+                newObjects.add(stagedObject);
+            }
+        }
+        return newObjects;
+    }
+
+    private static boolean allPartsAvailable(Collection<StoredObject> stagedObjects, Collection<StoredObject> sourceParts)
+    {
+        Collection<String> stagedNames = Collections2.transform(stagedObjects, StoredObject.GET_NAME_FUNCTION);
+        Collection<String> sourceNames = Collections2.transform(sourceParts, StoredObject.GET_NAME_FUNCTION);
+        return stagedNames.containsAll(sourceNames);
+    }
+
+    private static boolean groupIsMinutesOld(CombinedGroup group, int minutes)
+    {
+        return (currentTimeMillis() - group.getUpdatedTimestamp()) <= TimeUnit.MINUTES.toMillis(minutes);
     }
 }

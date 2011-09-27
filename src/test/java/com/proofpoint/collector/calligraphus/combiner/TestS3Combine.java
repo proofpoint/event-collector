@@ -9,11 +9,13 @@ import com.google.common.io.Closeables;
 import com.google.common.io.CountingOutputStream;
 import com.google.common.io.Files;
 import com.google.common.io.InputSupplier;
+import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.json.JsonCodec;
 import org.jets3t.service.S3ServiceException;
 import org.jets3t.service.security.AWSCredentials;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
+import org.testng.annotations.Parameters;
 import org.testng.annotations.Test;
 
 import java.io.File;
@@ -46,11 +48,12 @@ public class TestS3Combine
     private S3StorageSystem storageSystem;
     private TestingCombineObjectMetadataStore metadataStore;
 
-    @BeforeClass(enabled = false)
-    public void setUp()
+    @BeforeClass(groups = "aws")
+    @Parameters("aws-credentials-file")
+    public void setUp(String awsCredentialsFile)
             throws Exception
     {
-        String credentialsJson = Files.toString(new File("/Users/dain/bin/emr/credentials.json"), Charsets.UTF_8);
+        String credentialsJson = Files.toString(new File(awsCredentialsFile), Charsets.UTF_8);
         Map<String, String> map = JsonCodec.mapJsonCodec(String.class, String.class).fromJson(credentialsJson);
         String awsAccessKey = map.get("access-id");
         String awsSecretKey = map.get("private-key");
@@ -71,14 +74,16 @@ public class TestS3Combine
                 storageSystem,
                 stagingBaseUri,
                 targetBaseUri,
+                new DataSize(512, DataSize.Unit.MEGABYTE),
                 true);
     }
 
-    @Test(enabled = false)
+    @Test(groups = "aws")
     public void testLargeCombine()
             throws Exception
     {
-        URI target = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, HOUR + ".large.json.snappy");
+        URI groupPrefix = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, HOUR + ".large");
+        URI target = S3StorageHelper.appendSuffix(groupPrefix, "00000.json.snappy");
 
         // upload two 5 MB files
         String base = UUID.randomUUID().toString().replace("-", "");
@@ -95,7 +100,7 @@ public class TestS3Combine
         // verify the contents
         InputSupplier<? extends InputStream> s3InputSupplier = storageSystem.getInputSupplier(target);
 
-        InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(files, target);
+        InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(files, groupPrefix, target);
         if (!ByteStreams.equal(combinedInputs, s3InputSupplier)) {
             Assert.fail("broken");
         }
@@ -113,24 +118,25 @@ public class TestS3Combine
         // verify the contents
         s3InputSupplier = storageSystem.getInputSupplier(target);
 
-        combinedInputs = getCombinedInputsSupplier(files, target);
+        combinedInputs = getCombinedInputsSupplier(files, groupPrefix, target);
         if (!ByteStreams.equal(combinedInputs, s3InputSupplier)) {
             Assert.fail("broken");
         }
 
         // verify version combiner doesn't recombine unchanged files
-        CombinedStoredObject combinedObjectManifest = metadataStore.getCombinedObjectManifest(target);
+        CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(target);
         long currentVersion = combinedObjectManifest.getVersion();
         objectCombiner.combineObjects();
-        CombinedStoredObject newCombinedStoredObjectManifest = metadataStore.getCombinedObjectManifest(target);
+        CombinedGroup newCombinedStoredObjectManifest = metadataStore.getCombinedGroupManifest(target);
         Assert.assertEquals(newCombinedStoredObjectManifest.getVersion(), currentVersion);
     }
 
-    @Test(enabled = false)
+    @Test(groups = "aws")
     public void testSmallCombine()
             throws Exception
     {
-        URI target = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, HOUR + ".small.json.snappy");
+        URI groupPrefix = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, HOUR + ".small");
+        URI target = S3StorageHelper.appendSuffix(groupPrefix, "00000.json.snappy");
 
         // upload two 10 KB file for to each name
         String base = UUID.randomUUID().toString().replace("-", "");
@@ -147,7 +153,7 @@ public class TestS3Combine
         // verify the contents
         StoredObject combinedObject = storageSystem.getObjectDetails(target);
 
-        InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(files, target);
+        InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(files, groupPrefix, target);
         String sourceMD5 = encodeHex(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
         if (!sourceMD5.equals(combinedObject.getETag())) {
             Assert.fail("broken");
@@ -166,27 +172,31 @@ public class TestS3Combine
         // verify the contents
         combinedObject = storageSystem.getObjectDetails(target);
 
-        combinedInputs = getCombinedInputsSupplier(files, target);
+        combinedInputs = getCombinedInputsSupplier(files, groupPrefix, target);
         sourceMD5 = encodeHex(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
         if (!sourceMD5.equals(combinedObject.getETag())) {
             Assert.fail("broken");
         }
 
         // verify version combiner doesn't recombine unchanged files
-        CombinedStoredObject combinedObjectManifest = metadataStore.getCombinedObjectManifest(target);
+        CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(target);
         long currentVersion = combinedObjectManifest.getVersion();
         objectCombiner.combineObjects();
-        CombinedStoredObject newCombinedStoredObjectManifest = metadataStore.getCombinedObjectManifest(target);
+        CombinedGroup newCombinedStoredObjectManifest = metadataStore.getCombinedGroupManifest(target);
         Assert.assertEquals(newCombinedStoredObjectManifest.getVersion(), currentVersion);
     }
 
-    private InputSupplier<InputStream> getCombinedInputsSupplier(Map<URI, InputSupplier<? extends InputStream>> files, URI target)
+    private InputSupplier<InputStream> getCombinedInputsSupplier(Map<URI, InputSupplier<? extends InputStream>> files, URI groupPrefix, URI target)
     {
-        // get the manifest for the target
-        CombinedStoredObject combinedObjectManifest = metadataStore.getCombinedObjectManifest(target);
+        // get the manifest for the group prefix
+        CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(groupPrefix);
+
+        // get the combined stored object for the target
+        CombinedStoredObject combinedObject = combinedObjectManifest.getCombinedObject(target);
+        Assert.assertNotNull(combinedObject);
 
         // get the locations of each part (in order)
-        List<URI> sourcePartsLocation = Lists.transform(combinedObjectManifest.getSourceParts(), GET_LOCATION_FUNCTION);
+        List<URI> sourcePartsLocation = Lists.transform(combinedObject.getSourceParts(), GET_LOCATION_FUNCTION);
 
         // sort the supplied files map based on this explicit order
         Map<URI, InputSupplier<? extends InputStream>> parts = newTreeMap(Ordering.explicit(sourcePartsLocation));

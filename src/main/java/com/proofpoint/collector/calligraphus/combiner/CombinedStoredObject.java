@@ -1,6 +1,5 @@
 package com.proofpoint.collector.calligraphus.combiner;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import org.codehaus.jackson.annotate.JsonCreator;
 import org.codehaus.jackson.annotate.JsonProperty;
@@ -8,38 +7,23 @@ import org.codehaus.jackson.annotate.JsonProperty;
 import java.net.URI;
 import java.util.List;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static java.lang.System.currentTimeMillis;
+
 public class CombinedStoredObject
 {
-    public static CombinedStoredObject createInitialCombinedStoredObject(URI location, String creator)
-    {
-        Preconditions.checkNotNull(location, "location is null");
-        Preconditions.checkNotNull(creator, "creator is null");
-        return new CombinedStoredObject(location,
-                0,
-                creator,
-                System.currentTimeMillis(),
-                ImmutableList.<StoredObject>of());
-    }
-
     private final URI location;
-    private final long version;
-    private final String creator;
-    private final long createdTimestamp;
-
+    private final long updatedTimestamp;
     private final List<StoredObject> sourceParts;
 
     @JsonCreator
     public CombinedStoredObject(
             @JsonProperty("location") URI location,
-            @JsonProperty("version") long version,
-            @JsonProperty("creator") String creator,
-            @JsonProperty("createdTimestamp") long createdTimestamp,
+            @JsonProperty("updatedTimestamp") long updatedTimestamp,
             @JsonProperty("sourceParts") List<StoredObject> sourceParts)
     {
         this.location = location;
-        this.version = version;
-        this.creator = creator;
-        this.createdTimestamp = createdTimestamp;
+        this.updatedTimestamp = updatedTimestamp;
         this.sourceParts = ImmutableList.copyOf(sourceParts);
     }
 
@@ -50,21 +34,9 @@ public class CombinedStoredObject
     }
 
     @JsonProperty
-    public long getVersion()
+    public long getUpdatedTimestamp()
     {
-        return version;
-    }
-
-    @JsonProperty
-    public String getCreator()
-    {
-        return creator;
-    }
-
-    @JsonProperty
-    public long getCreatedTimestamp()
-    {
-        return createdTimestamp;
+        return updatedTimestamp;
     }
 
     @JsonProperty
@@ -73,13 +45,28 @@ public class CombinedStoredObject
         return sourceParts;
     }
 
-    public CombinedStoredObject update(String creator, List<StoredObject> sourceParts)
+    public long getSize()
     {
-        Preconditions.checkNotNull(sourceParts, "sourceParts is null");
-        return new CombinedStoredObject(location,
-                version + 1,
-                creator,
-                System.currentTimeMillis(),
-                sourceParts);
+        long size = 0;
+        for (StoredObject part : sourceParts) {
+            size += part.getSize();
+        }
+        return size;
+    }
+
+    public CombinedStoredObject update(List<StoredObject> sourceParts)
+    {
+        checkNotNull(sourceParts, "sourceParts is null");
+        return new CombinedStoredObject(location, currentTimeMillis(), sourceParts);
+    }
+
+    public CombinedStoredObject addPart(StoredObject sourcePart)
+    {
+        return update(concat(sourceParts, sourcePart));
+    }
+
+    private static <T> ImmutableList<T> concat(Iterable<T> base, T item)
+    {
+        return ImmutableList.<T>builder().addAll(base).add(item).build();
     }
 }

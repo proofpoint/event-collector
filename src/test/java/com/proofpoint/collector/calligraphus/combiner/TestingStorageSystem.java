@@ -7,31 +7,29 @@ import com.google.common.collect.MapMaker;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.net.URI;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
-import static com.google.common.collect.Lists.newArrayList;
+import static com.google.common.collect.Sets.newHashSet;
 
-public class TestingStorageSystem implements StorageSystem
+public class TestingStorageSystem
+        implements StorageSystem
 {
-    private final Map<URI, List<StoredObject>> objects = new MapMaker().makeComputingMap(new Function<URI, List<StoredObject>>()
+    private final Map<URI, Set<StoredObject>> objects = new MapMaker().makeComputingMap(new Function<URI, Set<StoredObject>>()
     {
         @Override
-        public List<StoredObject> apply(@Nullable URI input)
+        public Set<StoredObject> apply(@Nullable URI input)
         {
-            return newArrayList();
+            return newHashSet();
         }
     });
 
-    public void addObject(URI storageArea, StoredObject storedObject)
+    public void addObjects(URI storageArea, Collection<StoredObject> storedObjects)
     {
-        objects.get(storageArea).add(storedObject);
-    }
-
-    public void removeObject(URI storageArea, StoredObject storedObject)
-    {
-        objects.get(storageArea).remove(storedObject);
+        objects.get(storageArea).addAll(storedObjects);
     }
 
     @Override
@@ -43,8 +41,7 @@ public class TestingStorageSystem implements StorageSystem
     @Override
     public List<StoredObject> listObjects(URI storageArea)
     {
-        List<StoredObject> storedObjects = objects.get(storageArea);
-        return ImmutableList.copyOf(storedObjects);
+        return ImmutableList.copyOf(objects.get(storageArea));
     }
 
     @Override

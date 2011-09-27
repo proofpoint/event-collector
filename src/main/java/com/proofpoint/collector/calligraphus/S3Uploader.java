@@ -52,7 +52,12 @@ public class S3Uploader
             @Override
             public void run()
             {
-                upload(partition, file);
+                try {
+                    upload(partition, file);
+                }
+                catch (Exception e) {
+                    log.error(e, "upload failed");
+                }
             }
         });
     }
@@ -74,9 +79,7 @@ public class S3Uploader
                 file.getName());
         StoredObject target = new StoredObject(location);
 
-        log.info("starting upload: %s", target.getLocation());
         storageSystem.putObject(target.getLocation(), file);
-        log.info("completed upload: %s", target.getLocation());
 
         if (!file.delete()) {
             log.warn("failed to delete local staging file: %s", file.getAbsolutePath());

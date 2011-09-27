@@ -39,7 +39,7 @@ public class StoredObjectCombiner
     private static final Duration CHECK_DELAY = new Duration(10, TimeUnit.SECONDS);
 
     private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(1,
-            new ThreadFactoryBuilder().setNameFormat("S3ObjectCombiner-%s").build());
+            new ThreadFactoryBuilder().setNameFormat("StoredObjectCombiner-%s").build());
 
     private final Set<URI> badManifests = new ConcurrentSkipListSet<URI>();
 

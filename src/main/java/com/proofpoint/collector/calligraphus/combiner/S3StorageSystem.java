@@ -7,6 +7,7 @@ import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
 import com.google.common.io.InputSupplier;
+import com.proofpoint.log.Logger;
 import org.jets3t.service.S3ServiceException;
 import org.jets3t.service.ServiceException;
 import org.jets3t.service.StorageObjectsChunk;
@@ -30,6 +31,7 @@ import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.upd
 public class S3StorageSystem
         implements StorageSystem
 {
+    private static final Logger log = Logger.get(S3StorageSystem.class);
     private final ExtendedRestS3Service s3Service;
 
     @Inject
@@ -104,6 +106,7 @@ public class S3StorageSystem
         URI location = combinedObject.getLocation();
         MultipartUpload upload;
         try {
+            log.info("starting multipart upload: %s", location);
             upload = s3Service.multipartStartUpload(getS3Bucket(location), new S3Object(getS3ObjectKey(location)));
         }
         catch (S3ServiceException e) {
@@ -131,6 +134,7 @@ public class S3StorageSystem
 
             MultipartCompleted completed = s3Service.multipartCompleteUpload(upload);
             S3Object newObject = (S3Object) s3Service.getObjectDetails(getS3Bucket(location), getS3ObjectKey(location));
+            log.info("completed multipart upload: %s", location);
 
             // jets3t doesn't strip the quotes from the etag in the multipart api
             if (!completed.getEtag().equals('\"' + newObject.getETag() + '\"')) {
@@ -182,7 +186,9 @@ public class S3StorageSystem
         try {
             S3Object object = new S3Object(source);
             object.setKey(S3StorageHelper.getS3ObjectKey(location));
+            log.info("starting upload: %s", location);
             S3Object result = s3Service.putObject(getS3Bucket(location), object);
+            log.info("completed upload: %s", location);
             return updateStoredObject(location, result);
         }
         catch (Exception e) {

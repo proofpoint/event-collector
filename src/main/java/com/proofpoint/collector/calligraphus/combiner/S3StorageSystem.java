@@ -83,30 +83,25 @@ public class S3StorageSystem
     }
 
     @Override
-    public StoredObject createCombinedObject(URI location, List<StoredObject> newCombinedObjectParts)
+    public StoredObject createCombinedObject(CombinedStoredObject combinedObject)
     {
-        Preconditions.checkNotNull(location, "location is null");
-        Preconditions.checkNotNull(newCombinedObjectParts, "newCombinedObjectParts is null");
-        Preconditions.checkArgument(!newCombinedObjectParts.isEmpty(), "newCombinedObjectParts is empty");
+        Preconditions.checkNotNull(combinedObject, "combinedObject is null");
+        Preconditions.checkArgument(!combinedObject.getSourceParts().isEmpty(), "combinedObject sourceParts is empty");
 
-        boolean setIsSmall = newCombinedObjectParts.get(0).getSize() < 5 * 1024 * 1024;
+        boolean setIsSmall = combinedObject.getSourceParts().get(0).getSize() < 5 * 1024 * 1024;
 
         // verify size
-        for (StoredObject newCombinedObjectPart : newCombinedObjectParts) {
+        for (StoredObject newCombinedObjectPart : combinedObject.getSourceParts()) {
             boolean fileIsSmall = newCombinedObjectPart.getSize() < 5 * 1024 * 1024;
-            Preconditions.checkArgument(fileIsSmall == setIsSmall, "newCombinedObjectParts contains mixes large and small files");
+            Preconditions.checkArgument(fileIsSmall == setIsSmall, "combinedObject sourceParts contains mixed large and small files");
         }
 
-        if (setIsSmall) {
-            return createCombinedObjectSmall(location, newCombinedObjectParts);
-        }
-        else {
-            return createCombinedObjectLarge(location, newCombinedObjectParts);
-        }
+        return setIsSmall ? createCombinedObjectSmall(combinedObject) : createCombinedObjectLarge(combinedObject);
     }
 
-    private StoredObject createCombinedObjectLarge(URI location, List<StoredObject> newCombinedObjectParts)
+    private StoredObject createCombinedObjectLarge(CombinedStoredObject combinedObject)
     {
+        URI location = combinedObject.getLocation();
         MultipartUpload upload;
         try {
             upload = s3Service.multipartStartUpload(getS3Bucket(location), new S3Object(getS3ObjectKey(location)));
@@ -117,7 +112,7 @@ public class S3StorageSystem
 
         try {
             int partNumber = 1;
-            for (StoredObject newCombinedObjectPart : newCombinedObjectParts) {
+            for (StoredObject newCombinedObjectPart : combinedObject.getSourceParts()) {
 
                 s3Service.multipartUploadPartCopy(
                         upload,
@@ -135,15 +130,15 @@ public class S3StorageSystem
             }
 
             MultipartCompleted completed = s3Service.multipartCompleteUpload(upload);
-            S3Object combinedObject = (S3Object) s3Service.getObjectDetails(getS3Bucket(location), getS3ObjectKey(location));
+            S3Object newObject = (S3Object) s3Service.getObjectDetails(getS3Bucket(location), getS3ObjectKey(location));
 
             // jets3t doesn't strip the quotes from the etag in the multipart api
-            if (!completed.getEtag().equals('\"' + combinedObject.getETag() + '\"')) {
+            if (!completed.getEtag().equals('\"' + newObject.getETag() + '\"')) {
                 // this might happen in rare cases due to S3's eventual consistency
                 throw new IllegalStateException("completed etag is different from combined object etag");
             }
 
-            return updateStoredObject(location, combinedObject);
+            return updateStoredObject(location, newObject);
         }
         catch (ServiceException e) {
             try {
@@ -155,10 +150,11 @@ public class S3StorageSystem
         }
     }
 
-    private StoredObject createCombinedObjectSmall(URI location, List<StoredObject> newCombinedObjectParts)
+    private StoredObject createCombinedObjectSmall(CombinedStoredObject combinedObject)
     {
+        URI location = combinedObject.getLocation();
         ImmutableList.Builder<InputSupplier<InputStream>> builder = ImmutableList.builder();
-        List<URI> sourceParts = Lists.transform(newCombinedObjectParts, StoredObject.GET_LOCATION_FUNCTION);
+        List<URI> sourceParts = Lists.transform(combinedObject.getSourceParts(), StoredObject.GET_LOCATION_FUNCTION);
         for (URI sourcePart : sourceParts) {
             builder.add(getInputSupplier(sourcePart));
         }
@@ -166,9 +162,9 @@ public class S3StorageSystem
 
         File tempFile = null;
         try {
-            tempFile = File.createTempFile(S3StorageHelper.getS3FileName(location), ".small.s3.data");
+            tempFile = File.createTempFile(S3StorageHelper.getS3FileName(combinedObject.getLocation()), ".small.s3.data");
             Files.copy(source, tempFile);
-            StoredObject result = putObject(location, tempFile);
+            StoredObject result = putObject(combinedObject.getLocation(), tempFile);
             return result;
         }
         catch (IOException e) {

@@ -45,13 +45,9 @@ public class TestingStorageSystem
     }
 
     @Override
-    public StoredObject createCombinedObject(URI location, List<StoredObject> newCombinedObjectParts)
+    public StoredObject createCombinedObject(CombinedStoredObject object)
     {
-        long size = 0;
-        for (StoredObject newCombinedObjectPart : newCombinedObjectParts) {
-            size += newCombinedObjectPart.getSize();
-        }
-        return new StoredObject(location, UUID.randomUUID().toString(), size, System.currentTimeMillis());
+        return new StoredObject(object.getLocation(), UUID.randomUUID().toString(), object.getSize(), System.currentTimeMillis());
     }
 
     @Override

@@ -179,7 +179,7 @@ public class StoredObjectCombiner
         // execute combines
         for (CombinedStoredObject object : newGroup.getCombinedObjects()) {
             if (currentGroup.isCombinedObjectNewOrChanged(object)) {
-                storageSystem.createCombinedObject(object.getLocation(), object.getSourceParts());
+                storageSystem.createCombinedObject(object);
             }
         }
     }

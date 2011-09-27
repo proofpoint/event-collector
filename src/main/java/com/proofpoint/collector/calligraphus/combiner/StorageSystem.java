@@ -10,7 +10,7 @@ public interface StorageSystem
 
     List<StoredObject> listObjects(URI storageArea);
 
-    StoredObject createCombinedObject(URI location, List<StoredObject> newCombinedObjectParts);
+    StoredObject createCombinedObject(CombinedStoredObject combinedObject);
 
     StoredObject putObject(URI location, File source);
 }

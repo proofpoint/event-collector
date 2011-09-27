@@ -169,7 +169,7 @@ public class StoredObjectCombiner
         }
 
         // create new manifest from existing manifest with new staged objects
-        CombinedGroup newGroup = buildCombinedGroup(currentGroup, baseURI, stagedObjects);
+        CombinedGroup newGroup = buildCombinedGroup(currentGroup, stagedObjects);
 
         // attempt to write new manifest
         if (!metadataStore.replaceCombinedGroupManifest(currentGroup, newGroup)) {
@@ -184,7 +184,7 @@ public class StoredObjectCombiner
         }
     }
 
-    private CombinedGroup buildCombinedGroup(CombinedGroup group, URI baseURI, List<StoredObject> stagedObjects)
+    private CombinedGroup buildCombinedGroup(CombinedGroup group, List<StoredObject> stagedObjects)
     {
         // get all objects that have already been combined
         Set<StoredObject> alreadyCombinedObjects = newHashSet();
@@ -224,7 +224,7 @@ public class StoredObjectCombiner
 
             // create new combined object if necessary
             if (!added) {
-                group = group.addNewCombinedObject(nodeId, baseURI, ImmutableList.of(newObject));
+                group = group.addNewCombinedObject(nodeId, ImmutableList.of(newObject));
             }
         }
 

@@ -45,7 +45,7 @@ public class TestFileSystemCombineObjectMetadataStore
                     new StoredObject(S3StorageHelper.buildS3Location("s3://bucket/stage/event/time/b.json")),
                     new StoredObject(S3StorageHelper.buildS3Location("s3://bucket/stage/event/time/c.json"))
             );
-            CombinedGroup newCombinedStoredObject = initialCombinedGroup.addNewCombinedObject("node2", location, storedObjects);
+            CombinedGroup newCombinedStoredObject = initialCombinedGroup.addNewCombinedObject("node2", storedObjects);
             assertTrue(metadataStore.replaceCombinedGroupManifest(initialCombinedGroup, newCombinedStoredObject));
 
             CombinedGroup persistentCombinedGroup = metadataStore.getCombinedGroupManifest(location);

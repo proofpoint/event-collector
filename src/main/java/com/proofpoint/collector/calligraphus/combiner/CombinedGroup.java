@@ -114,12 +114,11 @@ public class CombinedGroup
         return update(creator, newList);
     }
 
-    public CombinedGroup addNewCombinedObject(String creator, URI baseURI, List<StoredObject> parts)
+    public CombinedGroup addNewCombinedObject(String creator, List<StoredObject> parts)
     {
         checkNotNull(creator, "creator is null");
-        checkNotNull(baseURI, "baseURI is null");
         checkNotNull(parts, "parts is null");
-        URI location = appendSuffix(baseURI, format("%05d.json.snappy", combinedObjects.size()));
+        URI location = appendSuffix(locationPrefix, format("%05d.json.snappy", combinedObjects.size()));
         CombinedStoredObject newObject = new CombinedStoredObject(location, currentTimeMillis(), parts);
         return update(creator, concat(combinedObjects, newObject));
     }

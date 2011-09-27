@@ -29,8 +29,15 @@ public class TestStoredObjectCombiner
         StoredObject b = new StoredObject(buildS3Location(hourLocation, "b"), UUID.randomUUID().toString(), 1000, 0);
 
         ImmutableList<StoredObject> smallGroup = ImmutableList.of(a, b);
+        for (StoredObject object : smallGroup) {
+            storageSystem.addObject(stagingArea, object);
+        }
 
-        TestingCombineObjectMetadataStore metadataStore = combineObjects(storageSystem, hourLocation, smallGroup);
+        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore("nodeId");
+        DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea, targetFileSize, true);
+
+        combiner.combineObjects(hourLocation, smallGroup);
 
         URI groupPrefix = appendSuffix(hourLocation, "small");
         CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(groupPrefix);
@@ -61,8 +68,15 @@ public class TestStoredObjectCombiner
         List<StoredObject> group3 = ImmutableList.of(objectF);
 
         List<StoredObject> storedObjects = ImmutableList.of(objectA, objectB, objectC, objectD, objectE, objectF);
+        for (StoredObject object : storedObjects) {
+            storageSystem.addObject(stagingArea, object);
+        }
 
-        TestingCombineObjectMetadataStore metadataStore = combineObjects(storageSystem, hourLocation, storedObjects);
+        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore("nodeId");
+        DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea, targetFileSize, true);
+
+        combiner.combineObjects(hourLocation, storedObjects);
 
         URI groupPrefix = appendSuffix(hourLocation, "large");
         CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(groupPrefix);
@@ -73,21 +87,6 @@ public class TestStoredObjectCombiner
         assertEquals(combinedObjects.get(0).getSourceParts(), group1);
         assertEquals(combinedObjects.get(1).getSourceParts(), group2);
         assertEquals(combinedObjects.get(2).getSourceParts(), group3);
-    }
-
-    private static TestingCombineObjectMetadataStore combineObjects(TestingStorageSystem storageSystem, URI baseURI, List<StoredObject> objects)
-    {
-        for (StoredObject object : objects) {
-            storageSystem.addObject(stagingArea, object);
-        }
-
-        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore("nodeId");
-        DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea, targetFileSize, true);
-
-        combiner.combineObjects(baseURI, objects);
-
-        return metadataStore;
     }
 
     private static String randomUUID()

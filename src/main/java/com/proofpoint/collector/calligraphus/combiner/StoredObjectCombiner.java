@@ -20,6 +20,7 @@ import java.net.URI;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -28,7 +29,6 @@ import static com.google.common.collect.Sets.newHashSet;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.appendSuffix;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3FileName;
-import static java.lang.String.format;
 import static java.lang.System.currentTimeMillis;
 
 public class StoredObjectCombiner
@@ -39,6 +39,8 @@ public class StoredObjectCombiner
 
     private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(1,
             new ThreadFactoryBuilder().setNameFormat("S3ObjectCombiner-%s").build());
+
+    private final Set<URI> badManifests = new ConcurrentSkipListSet<URI>();
 
     private final String nodeId;
     private final CombineObjectMetadataStore metadataStore;
@@ -211,9 +213,12 @@ public class StoredObjectCombiner
                     continue;
                 }
 
-                // error if objects in staging do not have same MD5s as current combined object
+                // skip if objects in staging do not match the current combined object
                 if (!stagedObjects.containsAll(combinedObject.getSourceParts())) {
-                    throw new IllegalStateException(format("MD5 hashes for combined object [%s] do not match MD5 hashes in staging area", combinedObject.getLocation()));
+                    if (badManifests.add(group.getLocationPrefix())) {
+                        log.error("manifest source objects do not match objects in staging area: %s", group.getLocationPrefix());
+                    }
+                    continue;
                 }
 
                 // add object to combined object

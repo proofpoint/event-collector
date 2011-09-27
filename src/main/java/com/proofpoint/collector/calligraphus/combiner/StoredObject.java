@@ -76,6 +76,9 @@ public class StoredObject
 
         StoredObject that = (StoredObject) o;
 
+        if (size != that.size) {
+            return false;
+        }
         if (etag != null ? !etag.equals(that.etag) : that.etag != null) {
             return false;
         }
@@ -91,6 +94,7 @@ public class StoredObject
     {
         int result = location.hashCode();
         result = 31 * result + (etag != null ? etag.hashCode() : 0);
+        result = 31 * result + (int) (size ^ (size >>> 32));
         return result;
     }
 

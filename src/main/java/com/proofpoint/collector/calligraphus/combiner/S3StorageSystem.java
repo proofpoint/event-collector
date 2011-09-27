@@ -152,7 +152,6 @@ public class S3StorageSystem
 
     private StoredObject createCombinedObjectSmall(CombinedStoredObject combinedObject)
     {
-        URI location = combinedObject.getLocation();
         ImmutableList.Builder<InputSupplier<InputStream>> builder = ImmutableList.builder();
         List<URI> sourceParts = Lists.transform(combinedObject.getSourceParts(), StoredObject.GET_LOCATION_FUNCTION);
         for (URI sourcePart : sourceParts) {

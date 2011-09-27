@@ -2,9 +2,11 @@ package com.proofpoint.collector.calligraphus.combiner;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import org.jets3t.service.model.S3Object;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 
 public final class S3StorageHelper
 {
@@ -42,6 +44,21 @@ public final class S3StorageHelper
             return null;
         }
         return name;
+    }
+
+    public static URI getS3Directory(URI location)
+    {
+        checkValidS3Uri(location);
+        String path = location.getPath();
+        if (path.contains("/")) {
+            path = path.substring(0, path.lastIndexOf('/') + 1);
+        }
+        try {
+            return new URI(location.getScheme(), location.getHost(), path, null);
+        }
+        catch (URISyntaxException e) {
+            throw Throwables.propagate(e);
+        }
     }
 
     public static void checkValidS3Uri(URI location)

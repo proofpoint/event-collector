@@ -20,15 +20,18 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import static com.google.common.collect.Maps.newHashMap;
 import static com.google.common.collect.Sets.newHashSet;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.appendSuffix;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Directory;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3FileName;
 import static java.lang.System.currentTimeMillis;
 
@@ -185,10 +188,17 @@ public class StoredObjectCombiner
             return;
         }
 
-        // execute combines
-        for (CombinedStoredObject object : newGroup.getCombinedObjects()) {
-            if (currentGroup.isCombinedObjectNewOrChanged(object)) {
-                storageSystem.createCombinedObject(object);
+        // get list of existing combined files on target
+        Map<URI, StoredObject> existingObjects = newHashMap();
+        for (StoredObject object : storageSystem.listObjects(getS3Directory(baseURI))) {
+            existingObjects.put(object.getLocation(), object);
+        }
+
+        // execute combines for any objects that don't exist or match manifest size
+        for (CombinedStoredObject newobject : newGroup.getCombinedObjects()) {
+            StoredObject existingObject = existingObjects.get(newobject.getLocation());
+            if ((existingObject == null) || (existingObject.getSize() != newobject.getSize())) {
+                storageSystem.createCombinedObject(newobject);
             }
         }
     }

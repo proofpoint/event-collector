@@ -82,12 +82,6 @@ public class CombinedGroup
         return null;
     }
 
-    public boolean isCombinedObjectNewOrChanged(CombinedStoredObject newObject)
-    {
-        CombinedStoredObject object = getCombinedObject(newObject.getLocation());
-        return (object == null) || !object.getSourceParts().equals(newObject.getSourceParts());
-    }
-
     public CombinedGroup update(String creator, List<CombinedStoredObject> combinedObjects)
     {
         checkNotNull(creator, "creator is null");

@@ -11,6 +11,7 @@ import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.log.Logger;
 import com.proofpoint.node.NodeInfo;
 import com.proofpoint.units.Duration;
+import org.weakref.jmx.Managed;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -118,6 +119,12 @@ public class StoredObjectCombiner
             throws IOException
     {
         executor.shutdown();
+    }
+
+    @Managed
+    public Set<URI> getBadManifests()
+    {
+        return badManifests;
     }
 
     public void combineObjects()

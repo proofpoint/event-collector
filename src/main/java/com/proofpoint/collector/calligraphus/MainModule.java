@@ -54,6 +54,8 @@ public class MainModule
         binder.bind(EventResource.class).in(Scopes.SINGLETON);
 
         binder.bind(StoredObjectCombiner.class).in(Scopes.SINGLETON);
+        MBeanModule.newExporter(binder).export(StoredObjectCombiner.class).withGeneratedName();
+
         binder.bind(StorageSystem.class).to(S3StorageSystem.class).in(Scopes.SINGLETON);
         binder.bind(CombineObjectMetadataStore.class).to(FileSystemCombineObjectMetadataStore.class).in(Scopes.SINGLETON);
 

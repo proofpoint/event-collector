@@ -62,7 +62,6 @@ public class S3Uploader
         });
     }
 
-    @SuppressWarnings("UnusedDeclaration")
     @PreDestroy
     public void destroy()
             throws IOException

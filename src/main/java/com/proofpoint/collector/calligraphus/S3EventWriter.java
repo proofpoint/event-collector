@@ -85,7 +85,6 @@ public class S3EventWriter
         executor.scheduleAtFixedRate(closer, 0, (long) CHECK_DELAY.toMillis(), TimeUnit.MILLISECONDS);
     }
 
-    @SuppressWarnings("UnusedDeclaration")
     @PreDestroy
     public void destroy()
             throws IOException

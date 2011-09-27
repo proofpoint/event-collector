@@ -7,8 +7,6 @@ import org.codehaus.jackson.annotate.JsonProperty;
 
 import java.net.URI;
 
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3FileName;
-
 public class StoredObject
 {
     private final URI location;
@@ -109,15 +107,6 @@ public class StoredObject
         return sb.toString();
     }
 
-    // todo move me
-    public static Function<StoredObject, String> GET_NAME_FUNCTION = new Function<StoredObject, String>()
-    {
-        @Override
-        public String apply(StoredObject storedObject)
-        {
-            return getS3FileName(storedObject.getLocation());
-        }
-    };
     public static Function<StoredObject, URI> GET_LOCATION_FUNCTION = new Function<StoredObject, URI>()
     {
         @Override

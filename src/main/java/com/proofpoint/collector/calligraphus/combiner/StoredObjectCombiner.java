@@ -245,8 +245,8 @@ public class StoredObjectCombiner
 
     private static boolean allPartsAvailable(Collection<StoredObject> stagedObjects, Collection<StoredObject> sourceParts)
     {
-        Collection<String> stagedNames = Collections2.transform(stagedObjects, StoredObject.GET_NAME_FUNCTION);
-        Collection<String> sourceNames = Collections2.transform(sourceParts, StoredObject.GET_NAME_FUNCTION);
+        Collection<URI> stagedNames = Collections2.transform(stagedObjects, StoredObject.GET_LOCATION_FUNCTION);
+        Collection<URI> sourceNames = Collections2.transform(sourceParts, StoredObject.GET_LOCATION_FUNCTION);
         return stagedNames.containsAll(sourceNames);
     }
 

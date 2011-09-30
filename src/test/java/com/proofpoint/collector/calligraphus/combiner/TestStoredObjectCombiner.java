@@ -13,6 +13,7 @@ import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.bui
 import static com.proofpoint.testing.Assertions.assertGreaterThan;
 import static java.util.Arrays.asList;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
 
 public class TestStoredObjectCombiner
 {
@@ -34,7 +35,7 @@ public class TestStoredObjectCombiner
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), UUID.randomUUID().toString(), 1000, 0);
         StoredObject objectB = new StoredObject(buildS3Location(hourLocation, "b"), UUID.randomUUID().toString(), 1000, 0);
         List<StoredObject> smallGroup = newArrayList(objectA, objectB);
-        storageSystem.addObjects(stagingArea, smallGroup);
+        storageSystem.addObjects(smallGroup);
 
         // combine initial set
         combiner.combineObjects(hourLocation, smallGroup);
@@ -53,7 +54,7 @@ public class TestStoredObjectCombiner
         StoredObject objectC = new StoredObject(buildS3Location(hourLocation, "c"), UUID.randomUUID().toString(), 1000, 0);
         StoredObject objectD = new StoredObject(buildS3Location(hourLocation, "d"), UUID.randomUUID().toString(), 1000, 0);
         smallGroup.addAll(asList(objectC, objectD));
-        storageSystem.addObjects(stagingArea, smallGroup);
+        storageSystem.addObjects(smallGroup);
 
         // combine updated set
         combiner.combineObjects(hourLocation, smallGroup);
@@ -94,7 +95,7 @@ public class TestStoredObjectCombiner
         List<StoredObject> group3 = newArrayList(objectF);
 
         List<StoredObject> storedObjects = newArrayList(objectA, objectB, objectC, objectD, objectE, objectF);
-        storageSystem.addObjects(stagingArea, storedObjects);
+        storageSystem.addObjects(storedObjects);
 
         // combine initial set
         combiner.combineObjects(hourLocation, storedObjects);
@@ -120,7 +121,7 @@ public class TestStoredObjectCombiner
         List<StoredObject> group4 = newArrayList(objectH);
 
         storedObjects.addAll(asList(objectG, objectH));
-        storageSystem.addObjects(stagingArea, storedObjects);
+        storageSystem.addObjects(storedObjects);
 
         // combine updated set
         combiner.combineObjects(hourLocation, storedObjects);
@@ -136,6 +137,42 @@ public class TestStoredObjectCombiner
         assertEquals(combinedObjects.get(1).getSourceParts(), group2);
         assertEquals(combinedObjects.get(2).getSourceParts(), group3);
         assertEquals(combinedObjects.get(3).getSourceParts(), group4);
+    }
+
+    @Test
+    public void testMissingSourceFiles()
+    {
+        TestingStorageSystem storageSystem = new TestingStorageSystem();
+        URI hourLocation = buildS3Location(stagingArea, "event", "day", "hour");
+        URI targetLocation = buildS3Location(targetArea, "event", "day", "hour");
+
+        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore("nodeId");
+        DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea, targetFileSize, true);
+
+        // create initial set of objects
+        StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), UUID.randomUUID().toString(), 1000, 0);
+        StoredObject objectB = new StoredObject(buildS3Location(hourLocation, "b"), UUID.randomUUID().toString(), 1000, 0);
+        List<StoredObject> smallGroup = newArrayList(objectA, objectB);
+        storageSystem.addObjects(smallGroup);
+
+        // combine initial set
+        combiner.combineObjects(targetLocation, smallGroup);
+
+        // validate manifest
+        URI groupPrefix = appendSuffix(targetLocation, "small");
+        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(groupPrefix);
+        assertGreaterThan(combinedGroup.getVersion(), 0L);
+
+        // remove one of the source files
+        assertTrue(storageSystem.removeObject(objectA.getLocation()));
+
+        // remove target combined object to force recombine
+        StoredObject combinedObject = new StoredObject(combinedGroup.getCombinedObjects().get(0).getLocation());
+        assertTrue(storageSystem.removeObject(combinedObject.getLocation()));
+
+        // combine again
+        combiner.combineObjects(targetLocation, storageSystem.listObjects(targetLocation));
     }
 
     private static String randomUUID()

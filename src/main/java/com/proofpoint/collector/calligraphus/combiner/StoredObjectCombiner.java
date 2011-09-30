@@ -195,10 +195,13 @@ public class StoredObjectCombiner
         }
 
         // execute combines for any objects that don't exist or match manifest size
-        for (CombinedStoredObject newobject : newGroup.getCombinedObjects()) {
-            StoredObject existingObject = existingObjects.get(newobject.getLocation());
-            if ((existingObject == null) || (existingObject.getSize() != newobject.getSize())) {
-                storageSystem.createCombinedObject(newobject);
+        for (CombinedStoredObject newObject : newGroup.getCombinedObjects()) {
+            // only combine if all source parts are available
+            if (allPartsAvailable(stagedObjects, newObject.getSourceParts())) {
+                StoredObject existingObject = existingObjects.get(newObject.getLocation());
+                if ((existingObject == null) || (existingObject.getSize() != newObject.getSize())) {
+                    createCombinedObject(newObject);
+                }
             }
         }
     }
@@ -251,6 +254,16 @@ public class StoredObjectCombiner
         }
 
         return group;
+    }
+
+    private void createCombinedObject(CombinedStoredObject object)
+    {
+        try {
+            storageSystem.createCombinedObject(object);
+        }
+        catch (Exception e) {
+            log.error(e, "create combined object failed");
+        }
     }
 
     private static List<StoredObject> getNewObjects(List<StoredObject> stagedObjects, Set<StoredObject> alreadyCombinedObjects)

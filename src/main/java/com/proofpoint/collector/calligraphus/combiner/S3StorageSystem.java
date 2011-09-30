@@ -232,7 +232,7 @@ public class S3StorageSystem
                 return object.getDataInputStream();
             }
             catch (ServiceException e) {
-                throw Throwables.propagate(e);
+                throw new IOException(e);
             }
         }
     }

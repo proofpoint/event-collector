@@ -33,6 +33,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>com.proofpoint.platform</groupId>
+            <artifactId>jmx-http-rpc-experimental</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>net.java.dev.jets3t</groupId>
             <artifactId>jets3t</artifactId>
             <version>0.8.1</version>

@@ -1,10 +1,10 @@
 package com.proofpoint.collector.calligraphus.combiner;
 
-import java.net.URI;
+import com.proofpoint.collector.calligraphus.EventPartition;
 
 public interface CombineObjectMetadataStore
 {
-    CombinedGroup getCombinedGroupManifest(URI combinedGroupPrefix);
+    CombinedGroup getCombinedGroupManifest(EventPartition eventPartition, String sizeName);
 
-    boolean replaceCombinedGroupManifest(CombinedGroup currentGroup, CombinedGroup newGroup);
+    boolean replaceCombinedGroupManifest(EventPartition eventPartition, String sizeName, CombinedGroup currentGroup, CombinedGroup newGroup);
 }

@@ -6,6 +6,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.proofpoint.collector.calligraphus.EventPartition;
 import com.proofpoint.collector.calligraphus.ServerConfig;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.log.Logger;
@@ -29,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 
 import static com.google.common.collect.Maps.newHashMap;
 import static com.google.common.collect.Sets.newHashSet;
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.appendSuffix;
+import static com.proofpoint.collector.calligraphus.combiner.CombinedGroup.createInitialCombinedGroup;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Directory;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3FileName;
@@ -133,21 +134,24 @@ public class StoredObjectCombiner
     public void combineObjects()
     {
         for (URI eventBaseUri : storageSystem.listDirectories(stagingBaseUri)) {
+            String eventType = getS3FileName(eventBaseUri);
             for (URI timeSliceBaseUri : storageSystem.listDirectories(eventBaseUri)) {
+                String dateBucket = getS3FileName(timeSliceBaseUri);
                 for (URI hourBaseUri : storageSystem.listDirectories(timeSliceBaseUri)) {
                     String hour = getS3FileName(hourBaseUri);
                     URI stagingArea = buildS3Location(timeSliceBaseUri, hour + "/");
                     List<StoredObject> stagedObjects = storageSystem.listObjects(stagingArea);
                     if (!stagedObjects.isEmpty()) {
-                        URI targetObjectLocation = buildS3Location(targetBaseUri, getS3FileName(eventBaseUri), getS3FileName(timeSliceBaseUri), hour);
-                        combineObjects(targetObjectLocation, stagedObjects);
+                        EventPartition eventPartition = new EventPartition(eventType, dateBucket, hour);
+                        URI targetObjectLocation = buildS3Location(targetBaseUri, eventType, dateBucket, hour);
+                        combineObjects(eventPartition, targetObjectLocation, stagedObjects);
                     }
                 }
             }
         }
     }
 
-    public void combineObjects(URI baseURI, List<StoredObject> stagedObjects)
+    public void combineObjects(EventPartition eventPartition, URI baseURI, List<StoredObject> stagedObjects)
     {
         // split files into small and large groups based on size
         List<StoredObject> smallFiles = Lists.newArrayListWithCapacity(stagedObjects.size());
@@ -163,17 +167,20 @@ public class StoredObjectCombiner
                 largeFiles.add(stagedObject);
             }
         }
-        combineObjectGroup(appendSuffix(baseURI, "small"), smallFiles);
-        combineObjectGroup(appendSuffix(baseURI, "large"), largeFiles);
+        combineObjectGroup(eventPartition, "small", baseURI, smallFiles);
+        combineObjectGroup(eventPartition, "large", baseURI, largeFiles);
     }
 
-    private void combineObjectGroup(URI baseURI, List<StoredObject> stagedObjects)
+    private void combineObjectGroup(EventPartition eventPartition, String sizeName, URI baseURI, List<StoredObject> stagedObjects)
     {
         if (stagedObjects.isEmpty()) {
             return;
         }
 
-        CombinedGroup currentGroup = metadataStore.getCombinedGroupManifest(baseURI);
+        CombinedGroup currentGroup = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
+        if (currentGroup == null) {
+            currentGroup = createInitialCombinedGroup(baseURI, nodeId);
+        }
 
         // only update the object if this node was the last writer or some time has passed
         if ((!nodeId.equals(currentGroup.getCreator())) && !groupIsMinutesOld(currentGroup, 5)) {
@@ -184,7 +191,7 @@ public class StoredObjectCombiner
         CombinedGroup newGroup = buildCombinedGroup(currentGroup, stagedObjects);
 
         // attempt to write new manifest
-        if (!metadataStore.replaceCombinedGroupManifest(currentGroup, newGroup)) {
+        if (!metadataStore.replaceCombinedGroupManifest(eventPartition, sizeName, currentGroup, newGroup)) {
             return;
         }
 

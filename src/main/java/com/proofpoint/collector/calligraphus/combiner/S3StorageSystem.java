@@ -212,28 +212,4 @@ public class S3StorageSystem
     }
 
 
-    private static class S3InputSupplier implements InputSupplier<InputStream>
-    {
-        private final ExtendedRestS3Service service;
-        private final URI target;
-
-        private S3InputSupplier(ExtendedRestS3Service service, URI target)
-        {
-            this.service = service;
-            this.target = target;
-        }
-
-        @Override
-        public InputStream getInput()
-                throws IOException
-        {
-            try {
-                S3Object object = service.getObject(getS3Bucket(target), getS3ObjectKey(target));
-                return object.getDataInputStream();
-            }
-            catch (ServiceException e) {
-                throw new IOException(e);
-            }
-        }
-    }
 }

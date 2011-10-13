@@ -39,6 +39,7 @@ public class ServerConfig
     private String awsSecretKey;
     private String s3StagingLocation;
     private String s3DataLocation;
+    private String s3MetadataLocation;
     private boolean combinerEnabled = false;
 
     @Config("collector.max-buffer-time")
@@ -173,6 +174,19 @@ public class ServerConfig
     public String getS3DataLocation()
     {
         return s3DataLocation;
+    }
+
+    public String getS3MetadataLocation()
+    {
+        return s3MetadataLocation;
+    }
+
+    @Config("collector.s3-metadata-location")
+    @ConfigDescription("base S3 URI to metadata location")
+    public ServerConfig setS3MetadataLocation(String s3MetadataLocation)
+    {
+        this.s3MetadataLocation = s3MetadataLocation;
+        return this;
     }
 
     @Config("collector.combiner.enabled")

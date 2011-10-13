@@ -44,6 +44,7 @@ public class TestServerConfig
                 .setAwsSecretKey(null)
                 .setS3StagingLocation(null)
                 .setS3DataLocation(null)
+                .setS3MetadataLocation(null)
                 .setCombinerEnabled(false)
         );
     }
@@ -61,6 +62,7 @@ public class TestServerConfig
                 .put("collector.aws-secret-key", "my-secret-key")
                 .put("collector.s3-staging-location", "s3://example-staging/")
                 .put("collector.s3-data-location", "s3://example-data/")
+                .put("collector.s3-metadata-location", "s3://example-metadata/")
                 .put("collector.combiner.enabled", "true")
                 .build();
 
@@ -74,6 +76,7 @@ public class TestServerConfig
                 .setAwsSecretKey("my-secret-key")
                 .setS3StagingLocation("s3://example-staging/")
                 .setS3DataLocation("s3://example-data/")
+                .setS3MetadataLocation("s3://example-metadata/")
                 .setCombinerEnabled(true);
 
         ConfigAssertions.assertFullMapping(properties, expected);

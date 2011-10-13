@@ -9,6 +9,7 @@ import com.google.common.io.Closeables;
 import com.google.common.io.CountingOutputStream;
 import com.google.common.io.Files;
 import com.google.common.io.InputSupplier;
+import com.proofpoint.collector.calligraphus.EventPartition;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.json.JsonCodec;
 import org.jets3t.service.S3ServiceException;
@@ -68,7 +69,7 @@ public class TestS3Combine
         targetBaseUri = S3StorageHelper.buildS3Location("s3://", BUCKET_NAME, randomPart, "target/");
 
         storageSystem = new S3StorageSystem(service);
-        metadataStore = new TestingCombineObjectMetadataStore("test");
+        metadataStore = new TestingCombineObjectMetadataStore();
         objectCombiner = new StoredObjectCombiner("test",
                 metadataStore,
                 storageSystem,
@@ -82,6 +83,8 @@ public class TestS3Combine
     public void testLargeCombine()
             throws Exception
     {
+        EventPartition eventPartition = new EventPartition(EVENT_TYPE, TIME_SLICE, HOUR);
+        String sizeName = "small";
         URI groupPrefix = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, HOUR + ".large");
         URI target = S3StorageHelper.appendSuffix(groupPrefix, "00000.json.snappy");
 
@@ -100,7 +103,7 @@ public class TestS3Combine
         // verify the contents
         InputSupplier<? extends InputStream> s3InputSupplier = storageSystem.getInputSupplier(target);
 
-        InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(files, groupPrefix, target);
+        InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
         if (!ByteStreams.equal(combinedInputs, s3InputSupplier)) {
             Assert.fail("broken");
         }
@@ -118,16 +121,16 @@ public class TestS3Combine
         // verify the contents
         s3InputSupplier = storageSystem.getInputSupplier(target);
 
-        combinedInputs = getCombinedInputsSupplier(files, groupPrefix, target);
+        combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
         if (!ByteStreams.equal(combinedInputs, s3InputSupplier)) {
             Assert.fail("broken");
         }
 
         // verify version combiner doesn't recombine unchanged files
-        CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(target);
+        CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         long currentVersion = combinedObjectManifest.getVersion();
         objectCombiner.combineObjects();
-        CombinedGroup newCombinedStoredObjectManifest = metadataStore.getCombinedGroupManifest(target);
+        CombinedGroup newCombinedStoredObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         Assert.assertEquals(newCombinedStoredObjectManifest.getVersion(), currentVersion);
     }
 
@@ -135,6 +138,8 @@ public class TestS3Combine
     public void testSmallCombine()
             throws Exception
     {
+        EventPartition eventPartition = new EventPartition(EVENT_TYPE, TIME_SLICE, HOUR);
+        String sizeName = "small";
         URI groupPrefix = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, HOUR + ".small");
         URI target = S3StorageHelper.appendSuffix(groupPrefix, "00000.json.snappy");
 
@@ -153,7 +158,7 @@ public class TestS3Combine
         // verify the contents
         StoredObject combinedObject = storageSystem.getObjectDetails(target);
 
-        InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(files, groupPrefix, target);
+        InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
         String sourceMD5 = encodeHex(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
         if (!sourceMD5.equals(combinedObject.getETag())) {
             Assert.fail("broken");
@@ -172,24 +177,24 @@ public class TestS3Combine
         // verify the contents
         combinedObject = storageSystem.getObjectDetails(target);
 
-        combinedInputs = getCombinedInputsSupplier(files, groupPrefix, target);
+        combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
         sourceMD5 = encodeHex(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
         if (!sourceMD5.equals(combinedObject.getETag())) {
             Assert.fail("broken");
         }
 
         // verify version combiner doesn't recombine unchanged files
-        CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(target);
+        CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         long currentVersion = combinedObjectManifest.getVersion();
         objectCombiner.combineObjects();
-        CombinedGroup newCombinedStoredObjectManifest = metadataStore.getCombinedGroupManifest(target);
+        CombinedGroup newCombinedStoredObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         Assert.assertEquals(newCombinedStoredObjectManifest.getVersion(), currentVersion);
     }
 
-    private InputSupplier<InputStream> getCombinedInputsSupplier(Map<URI, InputSupplier<? extends InputStream>> files, URI groupPrefix, URI target)
+    private InputSupplier<InputStream> getCombinedInputsSupplier(EventPartition eventPartition, String sizeName, Map<URI, InputSupplier<? extends InputStream>> files, URI groupPrefix, URI target)
     {
         // get the manifest for the group prefix
-        CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(groupPrefix);
+        CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
 
         // get the combined stored object for the target
         CombinedStoredObject combinedObject = combinedObjectManifest.getCombinedObject(target);

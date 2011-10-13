@@ -2,60 +2,47 @@ package com.proofpoint.collector.calligraphus.combiner;
 
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
+import com.proofpoint.collector.calligraphus.EventPartition;
 import com.proofpoint.collector.calligraphus.ServerConfig;
 import com.proofpoint.json.JsonCodec;
-import com.proofpoint.node.NodeInfo;
 
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
-import java.net.URI;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.proofpoint.collector.calligraphus.combiner.CombinedGroup.createInitialCombinedGroup;
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Bucket;
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3ObjectKey;
 
 public class FileSystemCombineObjectMetadataStore
         implements CombineObjectMetadataStore
 {
     private final JsonCodec<CombinedGroup> jsonCodec = JsonCodec.jsonCodec(CombinedGroup.class);
-    private final String nodeId;
     private final File metadataDirectory;
 
     @Inject
-    public FileSystemCombineObjectMetadataStore(NodeInfo nodeInfo, ServerConfig config)
+    public FileSystemCombineObjectMetadataStore(ServerConfig config)
     {
-        this.nodeId = nodeInfo.getNodeId();
         this.metadataDirectory = config.getCombinerMetadataDirectory();
     }
 
-    public FileSystemCombineObjectMetadataStore(String nodeId, File metadataDirectory)
+    public FileSystemCombineObjectMetadataStore(File metadataDirectory)
     {
-        this.nodeId = nodeId;
         this.metadataDirectory = metadataDirectory;
     }
 
     @Override
-    public CombinedGroup getCombinedGroupManifest(URI combinedGroupPrefix)
+    public CombinedGroup getCombinedGroupManifest(EventPartition eventPartition, String sizeName)
     {
-        CombinedGroup combinedGroup = readMetadataFile(combinedGroupPrefix);
-        if (combinedGroup != null) {
-            return combinedGroup;
-        }
-
-        return createInitialCombinedGroup(combinedGroupPrefix, nodeId);
+        return readMetadataFile(eventPartition, sizeName);
     }
 
     @Override
-    public boolean replaceCombinedGroupManifest(CombinedGroup currentGroup, CombinedGroup newGroup)
-    {
+    public boolean replaceCombinedGroupManifest(EventPartition eventPartition, String sizeName, CombinedGroup currentGroup, CombinedGroup newGroup) {
         checkNotNull(currentGroup, "currentGroup is null");
         checkNotNull(newGroup, "newGroup is null");
         checkArgument(currentGroup.getLocationPrefix().equals(newGroup.getLocationPrefix()), "newGroup location is different from currentGroup location");
 
-        CombinedGroup persistentGroup = readMetadataFile(newGroup.getLocationPrefix());
+        CombinedGroup persistentGroup = readMetadataFile(eventPartition, sizeName);
         if (persistentGroup != null) {
             if (persistentGroup.getVersion() != currentGroup.getVersion()) {
                 return false;
@@ -65,14 +52,14 @@ public class FileSystemCombineObjectMetadataStore
             return false;
         }
 
-        return writeMetadataFile(newGroup);
+        return writeMetadataFile(eventPartition, sizeName, newGroup);
     }
 
-    private boolean writeMetadataFile(CombinedGroup combinedGroup)
+    private boolean writeMetadataFile(EventPartition eventPartition, String sizeName, CombinedGroup combinedGroup)
     {
         String json = jsonCodec.toJson(combinedGroup);
         try {
-            File metadataFile = toMetadataFile(combinedGroup.getLocationPrefix());
+            File metadataFile = toMetadataFile(eventPartition, sizeName);
             metadataFile.getParentFile().mkdirs();
             Files.write(json, metadataFile, Charsets.UTF_8);
             return true;
@@ -82,14 +69,17 @@ public class FileSystemCombineObjectMetadataStore
         }
     }
 
-    private File toMetadataFile(URI location)
+    private File toMetadataFile(EventPartition eventPartition, String sizeName)
     {
-        return new File(metadataDirectory, getS3Bucket(location) + "/" + getS3ObjectKey(location) + ".metadata");
+        return new File(metadataDirectory, eventPartition.getEventType() + "/" +
+                eventPartition.getMajorTimeBucket() + "/" +
+                eventPartition.getMinorTimeBucket() +"."+ sizeName + ".metadata");
     }
 
-    private CombinedGroup readMetadataFile(URI location)
+
+    private CombinedGroup readMetadataFile(EventPartition eventPartition, String sizeName)
     {
-        File metadataFile = toMetadataFile(location);
+        File metadataFile = toMetadataFile(eventPartition, sizeName);
         if (!metadataFile.exists()) {
             return null;
         }
@@ -98,7 +88,7 @@ public class FileSystemCombineObjectMetadataStore
             return jsonCodec.fromJson(json);
         }
         catch (IOException e) {
-            throw new RuntimeException("Metadata file for " + location + " is corrupt");
+            throw new RuntimeException("Metadata at " + metadataFile + " file for " + eventPartition + " " + sizeName + " is corrupt");
         }
     }
 }

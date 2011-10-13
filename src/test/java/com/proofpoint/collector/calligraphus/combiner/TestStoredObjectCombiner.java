@@ -1,5 +1,6 @@
 package com.proofpoint.collector.calligraphus.combiner;
 
+import com.proofpoint.collector.calligraphus.EventPartition;
 import com.proofpoint.experimental.units.DataSize;
 import org.testng.annotations.Test;
 
@@ -8,7 +9,6 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.google.common.collect.Lists.newArrayList;
-import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.appendSuffix;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.testing.Assertions.assertGreaterThan;
 import static java.util.Arrays.asList;
@@ -24,10 +24,13 @@ public class TestStoredObjectCombiner
     public void testSmall()
             throws Exception
     {
+        EventPartition eventPartition = new EventPartition("event", "day", "hour");
+        String sizeName = "small";
+
         TestingStorageSystem storageSystem = new TestingStorageSystem();
         URI hourLocation = buildS3Location(stagingArea, "event", "day", "hour");
 
-        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore("nodeId");
+        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
         StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea, targetFileSize, true);
 
@@ -38,11 +41,10 @@ public class TestStoredObjectCombiner
         storageSystem.addObjects(smallGroup);
 
         // combine initial set
-        combiner.combineObjects(hourLocation, smallGroup);
+        combiner.combineObjects(eventPartition, hourLocation, smallGroup);
 
         // validate manifest
-        URI groupPrefix = appendSuffix(hourLocation, "small");
-        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(groupPrefix);
+        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         assertGreaterThan(combinedGroup.getVersion(), 0L);
 
         // validate objects
@@ -57,10 +59,10 @@ public class TestStoredObjectCombiner
         storageSystem.addObjects(smallGroup);
 
         // combine updated set
-        combiner.combineObjects(hourLocation, smallGroup);
+        combiner.combineObjects(eventPartition, hourLocation, smallGroup);
 
         // validate manifest
-        CombinedGroup updatedCombinedGroup = metadataStore.getCombinedGroupManifest(groupPrefix);
+        CombinedGroup updatedCombinedGroup = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         assertGreaterThan(updatedCombinedGroup.getVersion(), combinedGroup.getVersion());
 
         // validate objects
@@ -73,11 +75,12 @@ public class TestStoredObjectCombiner
     public void testSmallLarge()
             throws Exception
     {
+        EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
         URI dayLocation = buildS3Location(stagingArea, "event", "day");
         URI hourLocation = buildS3Location(dayLocation, "hour");
 
-        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore("nodeId");
+        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
         StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea, targetFileSize, true);
 
@@ -98,11 +101,10 @@ public class TestStoredObjectCombiner
         storageSystem.addObjects(storedObjects);
 
         // combine initial set
-        combiner.combineObjects(hourLocation, storedObjects);
+        combiner.combineObjects(eventPartition, hourLocation, storedObjects);
 
         // validate manifest
-        URI groupPrefix = appendSuffix(hourLocation, "large");
-        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(groupPrefix);
+        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(eventPartition, "large");
         assertGreaterThan(combinedGroup.getVersion(), 0L);
 
         // validate groups
@@ -124,10 +126,10 @@ public class TestStoredObjectCombiner
         storageSystem.addObjects(storedObjects);
 
         // combine updated set
-        combiner.combineObjects(hourLocation, storedObjects);
+        combiner.combineObjects(eventPartition, hourLocation, storedObjects);
 
         // validate manifest
-        CombinedGroup updatedCombinedGroup = metadataStore.getCombinedGroupManifest(groupPrefix);
+        CombinedGroup updatedCombinedGroup = metadataStore.getCombinedGroupManifest(eventPartition, "large");
         assertGreaterThan(updatedCombinedGroup.getVersion(), combinedGroup.getVersion());
 
         // validate groups
@@ -142,11 +144,12 @@ public class TestStoredObjectCombiner
     @Test
     public void testMissingSourceFiles()
     {
+        EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
         URI hourLocation = buildS3Location(stagingArea, "event", "day", "hour");
         URI targetLocation = buildS3Location(targetArea, "event", "day", "hour");
 
-        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore("nodeId");
+        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
         StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea, targetFileSize, true);
 
@@ -157,11 +160,10 @@ public class TestStoredObjectCombiner
         storageSystem.addObjects(smallGroup);
 
         // combine initial set
-        combiner.combineObjects(targetLocation, smallGroup);
+        combiner.combineObjects(eventPartition, targetLocation, smallGroup);
 
         // validate manifest
-        URI groupPrefix = appendSuffix(targetLocation, "small");
-        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(groupPrefix);
+        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(eventPartition, "small");
         assertGreaterThan(combinedGroup.getVersion(), 0L);
 
         // remove one of the source files
@@ -172,7 +174,7 @@ public class TestStoredObjectCombiner
         assertTrue(storageSystem.removeObject(combinedObject.getLocation()));
 
         // combine again
-        combiner.combineObjects(targetLocation, storageSystem.listObjects(targetLocation));
+        combiner.combineObjects(eventPartition, targetLocation, storageSystem.listObjects(targetLocation));
     }
 
     private static String randomUUID()

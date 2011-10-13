@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 
 public class S3Uploader
+        implements Uploader
 {
     private static final Logger log = Logger.get(S3Uploader.class);
     private final StorageSystem storageSystem;
@@ -39,12 +40,14 @@ public class S3Uploader
         Preconditions.checkArgument(localStagingDirectory.isDirectory(), "localStagingDirectory is not a directory (%s)", localStagingDirectory);
     }
 
+    @Override
     public File generateNextFilename()
     {
         String uuid = UUID.randomUUID().toString().replace("-", "");
         return new File(localStagingDirectory, uuid + ".json.snappy");
     }
 
+    @Override
     public void enqueueUpload(final EventPartition partition, final File file)
     {
         executor.submit(new Runnable()

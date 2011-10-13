@@ -26,16 +26,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class S3EventWriter
+public class SpoolingEventWriter
         implements EventWriter
 {
     private static final Duration CHECK_DELAY = new Duration(5, TimeUnit.SECONDS);
-    private static final Logger log = Logger.get(S3EventWriter.class);
+    private static final Logger log = Logger.get(SpoolingEventWriter.class);
 
     private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(1,
-            new ThreadFactoryBuilder().setNameFormat("S3EventWriter-%s").build());
+            new ThreadFactoryBuilder().setNameFormat("SpoolingEventWriter-%s").build());
 
-    private final S3Uploader uploader;
+    private final Uploader uploader;
     private final EventPartitioner partitioner;
     private final ObjectMapper objectMapper;
     private final Duration maxBufferTime;
@@ -52,7 +52,7 @@ public class S3EventWriter
             });
 
     @Inject
-    public S3EventWriter(S3Uploader uploader, EventPartitioner partitioner, ObjectMapper objectMapper, ServerConfig config)
+    public SpoolingEventWriter(Uploader uploader, EventPartitioner partitioner, ObjectMapper objectMapper, ServerConfig config)
     {
         this.uploader = uploader;
         this.partitioner = partitioner;
@@ -107,7 +107,7 @@ public class S3EventWriter
     private static class OutputPartition
     {
         private final EventPartition eventPartition;
-        private final S3Uploader uploader;
+        private final Uploader uploader;
         private final ObjectMapper objectMapper;
         private final DataSize targetFileSize;
         private final Duration maxBufferTime;
@@ -118,7 +118,7 @@ public class S3EventWriter
         private long createdTime;
 
         public OutputPartition(EventPartition eventPartition,
-                S3Uploader uploader,
+                Uploader uploader,
                 ObjectMapper objectMapper,
                 DataSize targetFileSize,
                 Duration maxBufferTime)

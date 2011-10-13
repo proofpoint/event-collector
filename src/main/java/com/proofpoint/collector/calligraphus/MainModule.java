@@ -44,11 +44,11 @@ public class MainModule
         binder.disableCircularProxies();
 
         binder.bind(EventPartitioner.class).in(Scopes.SINGLETON);
-        binder.bind(S3Uploader.class).in(Scopes.SINGLETON);
+        binder.bind(Uploader.class).to(S3Uploader.class).in(Scopes.SINGLETON);
 
         binder.bind(StorageSystem.class).to(S3StorageSystem.class).in(Scopes.SINGLETON);
 
-        binder.bind(EventWriter.class).to(S3EventWriter.class).in(Scopes.SINGLETON);
+        binder.bind(EventWriter.class).to(SpoolingEventWriter.class).in(Scopes.SINGLETON);
         MBeanModule.newExporter(binder).export(EventWriter.class).withGeneratedName();
 
         binder.bind(EventResource.class).in(Scopes.SINGLETON);

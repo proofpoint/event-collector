@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import static com.google.common.collect.Maps.newHashMap;
 import static com.google.common.collect.Sets.newHashSet;
 import static com.proofpoint.collector.calligraphus.combiner.CombinedGroup.createInitialCombinedGroup;
+import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.appendSuffix;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3Directory;
 import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.getS3FileName;
@@ -176,6 +177,7 @@ public class StoredObjectCombiner
         if (stagedObjects.isEmpty()) {
             return;
         }
+        baseURI = appendSuffix(baseURI, sizeName);
 
         CombinedGroup currentGroup = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         if (currentGroup == null) {

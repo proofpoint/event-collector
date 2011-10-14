@@ -296,6 +296,6 @@ public class StoredObjectCombiner
 
     private static boolean groupIsMinutesOld(CombinedGroup group, int minutes)
     {
-        return (currentTimeMillis() - group.getUpdatedTimestamp()) <= TimeUnit.MINUTES.toMillis(minutes);
+        return (currentTimeMillis() - group.getUpdatedTimestamp()) >= TimeUnit.MINUTES.toMillis(minutes);
     }
 }

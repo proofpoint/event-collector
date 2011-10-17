@@ -1,6 +1,7 @@
 package com.proofpoint.collector.calligraphus.combiner;
 
 import com.google.common.base.Charsets;
+import com.google.common.io.ByteStreams;
 import com.google.common.io.CharStreams;
 import com.proofpoint.collector.calligraphus.EventPartition;
 import com.proofpoint.collector.calligraphus.ServerConfig;
@@ -13,6 +14,7 @@ import javax.ws.rs.core.MediaType;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
+import java.security.MessageDigest;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -65,12 +67,14 @@ public class S3CombineObjectMetadataStore
 
     private boolean writeMetadataFile(EventPartition eventPartition, CombinedGroup combinedGroup, String sizeName)
     {
-        String json = jsonCodec.toJson(combinedGroup);
+        byte[] json = jsonCodec.toJson(combinedGroup).getBytes(Charsets.UTF_8);
         try {
             URI metadataFile = toMetadataLocation(eventPartition, sizeName);
             S3Object object = new S3Object();
             object.setKey(S3StorageHelper.getS3ObjectKey(metadataFile));
-            object.setDataInputStream(new ByteArrayInputStream(json.getBytes(Charsets.UTF_8)));
+            object.setDataInputStream(new ByteArrayInputStream(json));
+            object.setContentLength(json.length);
+            object.setMd5Hash(computeMd5(json));
             object.setContentType(MediaType.APPLICATION_JSON);
 
             s3Service.putObject(getS3Bucket(metadataFile), object);
@@ -79,6 +83,17 @@ public class S3CombineObjectMetadataStore
         }
         catch (S3ServiceException e) {
             return false;
+        }
+    }
+
+    private static byte[] computeMd5(byte[] data)
+    {
+        try {
+            MessageDigest md5 = MessageDigest.getInstance("MD5");
+            return ByteStreams.getDigest(ByteStreams.newInputStreamSupplier(data), md5);
+        }
+        catch (Exception e) {
+            throw new RuntimeException("failed computing md5 of byte array", e);
         }
     }
 

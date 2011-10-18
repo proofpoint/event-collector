@@ -156,7 +156,7 @@ public class SpoolingEventWriter
             generator.writeObject(event);
 
             // roll file if it is over the target size or max age
-            if ((output.getCount() >= targetFileSize.toBytes()) || (isAtMaxAge())) {
+            if ((output.getCount() >= targetFileSize.toBytes()) || isAtMaxAge()) {
                 close();
             }
         }

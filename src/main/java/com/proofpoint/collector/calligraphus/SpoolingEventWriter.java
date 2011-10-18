@@ -143,10 +143,7 @@ public class SpoolingEventWriter
 
             generator = objectMapper.getJsonFactory().createJsonGenerator(snappyOut, JsonEncoding.UTF8);
             generator.disable(JsonGenerator.Feature.FLUSH_PASSED_TO_STREAM);
-
-            MinimalPrettyPrinter prettyPrinter = new MinimalPrettyPrinter();
-            prettyPrinter.setRootValueSeparator("\n");
-            generator.setPrettyPrinter(prettyPrinter);
+            generator.setPrettyPrinter(new MinimalPrettyPrinter("\n"));
 
             createdTime = System.nanoTime();
         }

@@ -172,7 +172,6 @@ public class SpoolingEventWriter
             }
 
             generator.close();
-            output.close();
 
             uploader.enqueueUpload(eventPartition, file);
 

@@ -6,6 +6,7 @@ import com.google.common.io.CharStreams;
 import com.proofpoint.collector.calligraphus.EventPartition;
 import com.proofpoint.collector.calligraphus.ServerConfig;
 import com.proofpoint.json.JsonCodec;
+import com.proofpoint.log.Logger;
 import org.jets3t.service.S3ServiceException;
 import org.jets3t.service.model.S3Object;
 
@@ -23,6 +24,7 @@ import static com.proofpoint.collector.calligraphus.combiner.S3StorageHelper.get
 public class S3CombineObjectMetadataStore
         implements CombineObjectMetadataStore
 {
+    private static final Logger log = Logger.get(S3CombineObjectMetadataStore.class);
     private final JsonCodec<CombinedGroup> jsonCodec = JsonCodec.jsonCodec(CombinedGroup.class);
     private final ExtendedRestS3Service s3Service;
     private final URI storageArea;
@@ -68,8 +70,8 @@ public class S3CombineObjectMetadataStore
     private boolean writeMetadataFile(EventPartition eventPartition, CombinedGroup combinedGroup, String sizeName)
     {
         byte[] json = jsonCodec.toJson(combinedGroup).getBytes(Charsets.UTF_8);
+        URI metadataFile = toMetadataLocation(eventPartition, sizeName);
         try {
-            URI metadataFile = toMetadataLocation(eventPartition, sizeName);
             S3Object object = new S3Object();
             object.setKey(S3StorageHelper.getS3ObjectKey(metadataFile));
             object.setDataInputStream(new ByteArrayInputStream(json));
@@ -82,6 +84,7 @@ public class S3CombineObjectMetadataStore
             return true;
         }
         catch (S3ServiceException e) {
+            log.warn(e, "error writing metadata file: %s", metadataFile);
             return false;
         }
     }

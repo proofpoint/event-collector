@@ -55,13 +55,14 @@ public class TestServer
         tempStageDir = Files.createTempDir();
 
         // TODO: wrap all this stuff in a TestBootstrap class
-        ImmutableMap<String, String> config = ImmutableMap.of(
-                "collector.local-staging-directory", tempStageDir.getAbsolutePath(),
-                "collector.aws-access-key", "fake-aws-access-key",
-                "collector.aws-secret-key", "fake-aws-secret-key",
-                "collector.s3-staging-location", "s3://test-staging/",
-                "collector.s3-data-location", "s3://test-data/"
-        );
+        ImmutableMap<String, String> config = ImmutableMap.<String, String>builder()
+                .put("collector.local-staging-directory", tempStageDir.getAbsolutePath())
+                .put("collector.aws-access-key", "fake-aws-access-key")
+                .put("collector.aws-secret-key", "fake-aws-secret-key")
+                .put("collector.s3-staging-location", "s3://test-staging/")
+                .put("collector.s3-data-location", "s3://test-data/")
+                .put("collector.s3-metadata-location", "s3://test-metadata/")
+                .build();
         Injector injector = Guice.createInjector(
                 new TestingNodeModule(),
                 new TestingHttpServerModule(),

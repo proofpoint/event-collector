@@ -176,6 +176,8 @@ public class ServerConfig
         return s3DataLocation;
     }
 
+    @NotNull
+    @Pattern(regexp = "s3://[A-Za-z0-9-]+/([A-Za-z0-9-]+/)*", message = "is malformed")
     public String getS3MetadataLocation()
     {
         return s3MetadataLocation;

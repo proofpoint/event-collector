@@ -5,10 +5,14 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.collector.calligraphus.combiner.StorageSystem;
 import com.proofpoint.collector.calligraphus.combiner.StoredObject;
 import com.proofpoint.log.Logger;
+import org.codehaus.jackson.JsonParser;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.iq80.snappy.SnappyInputStream;
 
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.util.UUID;
@@ -59,7 +63,7 @@ public class S3Uploader
                     upload(partition, file);
                 }
                 catch (Exception e) {
-                    log.error(e, "upload failed");
+                    log.error(e, "upload failed: %s: %s", partition, file);
                 }
             }
         });
@@ -73,7 +77,10 @@ public class S3Uploader
     }
 
     private void upload(EventPartition partition, File file)
+            throws IOException
     {
+        verifyFile(file);
+
         URI location = buildS3Location(s3StagingLocation,
                 partition.getEventType(),
                 partition.getMajorTimeBucket(),
@@ -85,6 +92,21 @@ public class S3Uploader
 
         if (!file.delete()) {
             log.warn("failed to delete local staging file: %s", file.getAbsolutePath());
+        }
+    }
+
+    private void verifyFile(File file)
+            throws IOException
+    {
+        SnappyInputStream input = new SnappyInputStream(new FileInputStream(file));
+        JsonParser parser = new ObjectMapper().getJsonFactory().createJsonParser(input);
+        try {
+            while (parser.readValueAsTree() != null) {
+                // ignore contents
+            }
+        }
+        finally {
+            parser.close();
         }
     }
 }

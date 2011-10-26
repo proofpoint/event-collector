@@ -1,12 +1,12 @@
 package com.proofpoint.collector.calligraphus.combiner;
 
 import com.google.common.base.Charsets;
-import com.google.common.io.ByteStreams;
 import com.google.common.io.CharStreams;
 import com.proofpoint.collector.calligraphus.EventPartition;
 import com.proofpoint.collector.calligraphus.ServerConfig;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.jets3t.service.S3ServiceException;
 import org.jets3t.service.model.S3Object;
 
@@ -15,7 +15,6 @@ import javax.ws.rs.core.MediaType;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
-import java.security.MessageDigest;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -76,7 +75,7 @@ public class S3CombineObjectMetadataStore
             object.setKey(S3StorageHelper.getS3ObjectKey(metadataFile));
             object.setDataInputStream(new ByteArrayInputStream(json));
             object.setContentLength(json.length);
-            object.setMd5Hash(computeMd5(json));
+            object.setMd5Hash(DigestUtils.md5(json));
             object.setContentType(MediaType.APPLICATION_JSON);
 
             s3Service.putObject(getS3Bucket(metadataFile), object);
@@ -86,17 +85,6 @@ public class S3CombineObjectMetadataStore
         catch (S3ServiceException e) {
             log.warn(e, "error writing metadata file: %s", metadataFile);
             return false;
-        }
-    }
-
-    private static byte[] computeMd5(byte[] data)
-    {
-        try {
-            MessageDigest md5 = MessageDigest.getInstance("MD5");
-            return ByteStreams.getDigest(ByteStreams.newInputStreamSupplier(data), md5);
-        }
-        catch (Exception e) {
-            throw new RuntimeException("failed computing md5 of byte array", e);
         }
     }
 

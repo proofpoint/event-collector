@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <groupId>com.proofpoint.collector</groupId>
-    <artifactId>calligraphus-collector</artifactId>
+    <groupId>com.proofpoint.event</groupId>
+    <artifactId>event-collector</artifactId>
     <version>1.5-SNAPSHOT</version>
-    <name>calligraphus-collector</name>
+
+    <name>event-collector</name>
+    <description>Event collector</description>
 
     <parent>
         <groupId>com.proofpoint.platform</groupId>
@@ -13,7 +15,7 @@
     </parent>
 
     <properties>
-        <main-class>com.proofpoint.collector.calligraphus.Main</main-class>
+        <main-class>com.proofpoint.event.collector.Main</main-class>
     </properties>
 
     <distributionManagement>

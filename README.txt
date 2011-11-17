@@ -1,1 +1,1 @@
-Event collector based on Calligraphus
+Event collector

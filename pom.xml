@@ -169,6 +169,53 @@
                     <excludedGroups>aws</excludedGroups>
                 </configuration>
             </plugin>
+
+            <!--
+              Do a license check by running: mvn license:check
+              Update the license by running: mvn license:format
+            -->
+            <plugin>
+                <groupId>com.mycila.maven-license-plugin</groupId>
+                <artifactId>maven-license-plugin</artifactId>
+                <configuration>
+                    <header>license-header.txt</header>
+                    <strictCheck>true</strictCheck>
+                    <mapping>
+                        <java>SLASHSTAR_STYLE</java>
+                    </mapping>
+                    <useDefaultExcludes>true</useDefaultExcludes>
+                    <excludes>
+                        <exclude>**/README.txt</exclude>
+                        <exclude>**/config.properties</exclude>
+                        <exclude>**/log.properties</exclude>
+                        <exclude>**/logback-test.xml</exclude>
+                        <exclude>**/.gitignore</exclude>
+                        <exclude>var/**</exclude>
+                    </excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- TODO: remove when this is added to rest-server-base pom -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

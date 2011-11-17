@@ -33,6 +33,7 @@ import java.util.UUID;
 import static com.google.common.collect.Maps.newHashMap;
 import static com.google.common.collect.Maps.newTreeMap;
 import static com.proofpoint.event.collector.combiner.StoredObject.GET_LOCATION_FUNCTION;
+import static org.apache.commons.codec.binary.Hex.encodeHexString;
 
 public class TestS3Combine
 {
@@ -159,7 +160,7 @@ public class TestS3Combine
         StoredObject combinedObject = storageSystem.getObjectDetails(target);
 
         InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
-        String sourceMD5 = encodeHex(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
+        String sourceMD5 = encodeHexString(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
         if (!sourceMD5.equals(combinedObject.getETag())) {
             Assert.fail("broken");
         }
@@ -178,7 +179,7 @@ public class TestS3Combine
         combinedObject = storageSystem.getObjectDetails(target);
 
         combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
-        sourceMD5 = encodeHex(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
+        sourceMD5 = encodeHexString(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
         if (!sourceMD5.equals(combinedObject.getETag())) {
             Assert.fail("broken");
         }
@@ -209,18 +210,6 @@ public class TestS3Combine
 
         // join the parts
         return ByteStreams.join(parts.values());
-    }
-
-    private static final char[] DIGITS = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-
-    public static String encodeHex(byte[] data)
-    {
-        char[] out = new char[data.length * 2];
-        for (int i = 0, j = 0; i < data.length; i++) {
-            out[j++] = DIGITS[(0xF0 & data[i]) >>> 4];
-            out[j++] = DIGITS[0x0F & data[i]];
-        }
-        return new String(out);
     }
 
     private URI createStagingFileName(String base, int i)

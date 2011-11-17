@@ -84,7 +84,7 @@ public class TestS3Combine
             throws Exception
     {
         EventPartition eventPartition = new EventPartition(EVENT_TYPE, TIME_SLICE, HOUR);
-        String sizeName = "small";
+        String sizeName = "large";
         URI groupPrefix = S3StorageHelper.buildS3Location(targetBaseUri, EVENT_TYPE, TIME_SLICE, HOUR + ".large");
         URI target = S3StorageHelper.appendSuffix(groupPrefix, "00000.json.snappy");
 

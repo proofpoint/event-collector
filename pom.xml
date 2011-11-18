@@ -8,6 +8,7 @@
 
     <name>event-collector</name>
     <description>Event collector</description>
+    <url>https://github.com/proofpoint/event-collector</url>
 
     <parent>
         <groupId>com.proofpoint.platform</groupId>
@@ -15,23 +16,36 @@
         <version>0.50</version>
     </parent>
 
+    <licenses>
+        <license>
+            <name>Apache License 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <properties>
         <main-class>com.proofpoint.event.collector.Main</main-class>
     </properties>
 
+    <scm>
+        <connection>scm:git:git://github.com/proofpoint/event-collector.git</connection>
+        <developerConnection>scm:git:git@github.com:proofpoint/event-collector.git</developerConnection>
+        <url>https://github.com/proofpoint/event-collector</url>
+    </scm>
+
     <distributionManagement>
         <snapshotRepository>
-            <id>proofpoint-snapshots</id>
-            <name>Proofpoint Snapshots Repository</name>
-            <url>http://maven.us.proofpoint.com/nexus/content/repositories/proofpoint-eng-snapshots</url>
+            <id>sonatype-nexus-snapshots</id>
+            <name>Sonatype Nexus Snapshots</name>
+            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
         </snapshotRepository>
         <repository>
-            <id>proofpoint-releases</id>
-            <name>Proofpoint Releases Repository</name>
-            <url>http://maven.us.proofpoint.com/nexus/content/repositories/proofpoint-eng</url>
+            <id>sonatype-nexus-staging</id>
+            <name>Nexus Release Repository</name>
+            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
         </repository>
     </distributionManagement>
-
 
     <dependencies>
         <dependency>

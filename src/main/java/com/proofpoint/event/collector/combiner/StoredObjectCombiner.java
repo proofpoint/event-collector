@@ -70,6 +70,7 @@ public class StoredObjectCombiner
     private final URI targetBaseUri;
     private final long targetFileSize;
     private final boolean enabled;
+    private final boolean ignoreErrors;
 
     @Inject
     public StoredObjectCombiner(NodeInfo nodeInfo, CombineObjectMetadataStore metadataStore, StorageSystem storageSystem, ServerConfig config)
@@ -86,6 +87,7 @@ public class StoredObjectCombiner
         this.targetBaseUri = URI.create(config.getS3DataLocation());
         this.targetFileSize = config.getTargetFileSize().toBytes();
         this.enabled = config.isCombinerEnabled();
+        this.ignoreErrors = true;
     }
 
     public StoredObjectCombiner(String nodeId,
@@ -110,6 +112,7 @@ public class StoredObjectCombiner
         this.targetBaseUri = targetBaseUri;
         this.targetFileSize = targetFileSize.toBytes();
         this.enabled = enabled;
+        this.ignoreErrors = false;
     }
 
     @PostConstruct
@@ -281,6 +284,16 @@ public class StoredObjectCombiner
     }
 
     private void createCombinedObject(CombinedStoredObject object)
+    {
+        if (ignoreErrors) {
+            createCombinedObjectIgnoringErrors(object);
+        }
+        else {
+            storageSystem.createCombinedObject(object);
+        }
+    }
+
+    private void createCombinedObjectIgnoringErrors(CombinedStoredObject object)
     {
         try {
             storageSystem.createCombinedObject(object);

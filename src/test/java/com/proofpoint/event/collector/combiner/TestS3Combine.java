@@ -15,6 +15,10 @@
  */
 package com.proofpoint.event.collector.combiner;
 
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
 import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
@@ -27,8 +31,6 @@ import com.google.common.io.InputSupplier;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.json.JsonCodec;
-import org.jets3t.service.S3ServiceException;
-import org.jets3t.service.security.AWSCredentials;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Parameters;
@@ -40,7 +42,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -75,10 +76,12 @@ public class TestS3Combine
         String awsAccessKey = map.get("access-id");
         String awsSecretKey = map.get("private-key");
 
-        AWSCredentials awsCredentials = new AWSCredentials(awsAccessKey, awsSecretKey);
-        ExtendedRestS3Service service = new ExtendedRestS3Service(awsCredentials);
+        AWSCredentials awsCredentials = new BasicAWSCredentials(awsAccessKey, awsSecretKey);
+        AmazonS3 service = new AmazonS3Client(awsCredentials);
 
-        service.getOrCreateBucket(BUCKET_NAME);
+        if (!service.doesBucketExist(BUCKET_NAME)) {
+            service.createBucket(BUCKET_NAME);
+        }
 
         String randomPart = "CombineTest-" + UUID.randomUUID().toString().replace("-", "");
         stagingBaseUri = S3StorageHelper.buildS3Location("s3://", BUCKET_NAME, randomPart, "staging/");
@@ -233,7 +236,7 @@ public class TestS3Combine
     }
 
     private File uploadFile(URI location, int minFileLength)
-            throws NoSuchAlgorithmException, IOException, S3ServiceException
+            throws IOException
     {
 
         File tempFile = File.createTempFile(S3StorageHelper.getS3FileName(location), ".s3.data");

@@ -15,6 +15,18 @@
  */
 package com.proofpoint.event.collector.combiner;
 
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
+import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
+import com.amazonaws.services.s3.model.CopyPartRequest;
+import com.amazonaws.services.s3.model.CopyPartResult;
+import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
+import com.amazonaws.services.s3.model.ListObjectsRequest;
+import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.amazonaws.services.s3.model.PartETag;
+import com.amazonaws.services.s3.model.PutObjectResult;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
@@ -23,21 +35,16 @@ import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
 import com.google.common.io.InputSupplier;
 import com.proofpoint.log.Logger;
-import org.jets3t.service.S3ServiceException;
-import org.jets3t.service.ServiceException;
-import org.jets3t.service.StorageObjectsChunk;
-import org.jets3t.service.model.MultipartCompleted;
-import org.jets3t.service.model.MultipartUpload;
-import org.jets3t.service.model.S3Object;
-import org.jets3t.service.model.StorageObject;
 
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.util.Iterator;
 import java.util.List;
 
+import static com.google.common.collect.Lists.newArrayList;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3Bucket;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3ObjectKey;
@@ -47,10 +54,10 @@ public class S3StorageSystem
         implements StorageSystem
 {
     private static final Logger log = Logger.get(S3StorageSystem.class);
-    private final ExtendedRestS3Service s3Service;
+    private final AmazonS3 s3Service;
 
     @Inject
-    public S3StorageSystem(ExtendedRestS3Service s3Service)
+    public S3StorageSystem(AmazonS3 s3Service)
     {
         Preconditions.checkNotNull(s3Service, "s3Service is null");
         this.s3Service = s3Service;
@@ -61,19 +68,16 @@ public class S3StorageSystem
     {
         S3StorageHelper.checkValidS3Uri(storageArea);
 
-        try {
-            String s3Path = getS3ObjectKey(storageArea);
-            String s3Bucket = getS3Bucket(storageArea);
-            StorageObjectsChunk storageObjectsChunk = s3Service.listObjectsChunked(s3Bucket, s3Path, "/", 0, null, true);
-            ImmutableList.Builder<URI> builder = ImmutableList.builder();
-            for (String prefix : storageObjectsChunk.getCommonPrefixes()) {
-                builder.add(buildS3Location("s3://", s3Bucket, prefix));
-            }
-            return builder.build();
+        String bucket = getS3Bucket(storageArea);
+        String key = getS3ObjectKey(storageArea);
+        Iterator<String> iter = new S3PrefixListing(s3Service,
+                new ListObjectsRequest(bucket, key, null, "/", null)).iterator();
+
+        ImmutableList.Builder<URI> builder = ImmutableList.builder();
+        while (iter.hasNext()) {
+            builder.add(buildS3Location("s3://", bucket, iter.next()));
         }
-        catch (ServiceException e) {
-            throw Throwables.propagate(e);
-        }
+        return builder.build();
     }
 
     @Override
@@ -81,22 +85,20 @@ public class S3StorageSystem
     {
         S3StorageHelper.checkValidS3Uri(storageArea);
 
-        try {
-            String s3Path = getS3ObjectKey(storageArea);
-            StorageObjectsChunk storageObjectsChunk = s3Service.listObjectsChunked(getS3Bucket(storageArea), s3Path, "/", 0, null, true);
-            ImmutableList.Builder<StoredObject> builder = ImmutableList.builder();
-            for (StorageObject s3Object : storageObjectsChunk.getObjects()) {
-                builder.add(new StoredObject(
-                        buildS3Location(storageArea, s3Object.getName().substring(s3Path.length())),
-                        s3Object.getETag(),
-                        s3Object.getContentLength(),
-                        s3Object.getLastModifiedDate().getTime()));
-            }
-            return builder.build();
+        String s3Path = getS3ObjectKey(storageArea);
+        Iterator<S3ObjectSummary> iter = new S3ObjectListing(s3Service,
+                new ListObjectsRequest(getS3Bucket(storageArea), s3Path, null, "/", null)).iterator();
+
+        ImmutableList.Builder<StoredObject> builder = ImmutableList.builder();
+        while (iter.hasNext()) {
+            S3ObjectSummary summary = iter.next();
+            builder.add(new StoredObject(
+                    buildS3Location(storageArea, summary.getKey().substring(s3Path.length())),
+                    summary.getETag(),
+                    summary.getSize(),
+                    summary.getLastModified().getTime()));
         }
-        catch (ServiceException e) {
-            throw Throwables.propagate(e);
-        }
+        return builder.build();
     }
 
     @Override
@@ -119,51 +121,48 @@ public class S3StorageSystem
     private StoredObject createCombinedObjectLarge(CombinedStoredObject combinedObject)
     {
         URI location = combinedObject.getLocation();
-        MultipartUpload upload;
-        try {
-            log.info("starting multipart upload: %s", location);
-            upload = s3Service.multipartStartUpload(getS3Bucket(location), new S3Object(getS3ObjectKey(location)));
-        }
-        catch (S3ServiceException e) {
-            throw Throwables.propagate(e);
-        }
+        log.info("starting multipart upload: %s", location);
+
+        String bucket = getS3Bucket(location);
+        String key = getS3ObjectKey(location);
+
+        String uploadId = s3Service.initiateMultipartUpload(
+                new InitiateMultipartUploadRequest(bucket, key)).getUploadId();
 
         try {
+            List<PartETag> parts = newArrayList();
             int partNumber = 1;
             for (StoredObject newCombinedObjectPart : combinedObject.getSourceParts()) {
-
-                s3Service.multipartUploadPartCopy(
-                        upload,
-                        partNumber,
-                        getS3Bucket(newCombinedObjectPart.getLocation()),
-                        getS3ObjectKey(newCombinedObjectPart.getLocation()),
-                        null, // ifModifiedSince
-                        null, // ifUnmodifiedSince
-                        null, // ifMatchTags
-                        null, // ifNoneMatchTags
-                        null, // byteRangeStart
-                        null, // byteRangeEnd
-                        null); // versionId
+                CopyPartResult part = s3Service.copyPart(new CopyPartRequest()
+                        .withUploadId(uploadId)
+                        .withPartNumber(partNumber)
+                        .withDestinationBucketName(bucket)
+                        .withDestinationKey(key)
+                        .withSourceBucketName(getS3Bucket(newCombinedObjectPart.getLocation()))
+                        .withSourceKey(getS3ObjectKey(newCombinedObjectPart.getLocation()))
+                );
+                parts.add(new PartETag(partNumber, part.getETag()));
                 partNumber++;
             }
 
-            MultipartCompleted completed = s3Service.multipartCompleteUpload(upload);
-            S3Object newObject = (S3Object) s3Service.getObjectDetails(getS3Bucket(location), getS3ObjectKey(location));
+            String etag = s3Service.completeMultipartUpload(
+                    new CompleteMultipartUploadRequest(bucket, key, uploadId, parts)).getETag();
+
+            ObjectMetadata newObject = s3Service.getObjectMetadata(bucket, key);
             log.info("completed multipart upload: %s", location);
 
-            // jets3t doesn't strip the quotes from the etag in the multipart api
-            if (!completed.getEtag().equals('\"' + newObject.getETag() + '\"')) {
+            if (!etag.equals(newObject.getETag())) {
                 // this might happen in rare cases due to S3's eventual consistency
                 throw new IllegalStateException("completed etag is different from combined object etag");
             }
 
             return updateStoredObject(location, newObject);
         }
-        catch (ServiceException e) {
+        catch (AmazonClientException e) {
             try {
-                s3Service.multipartAbortUpload(upload);
+                s3Service.abortMultipartUpload(new AbortMultipartUploadRequest(bucket, key, uploadId));
             }
-            catch (S3ServiceException ignored) {
+            catch (AmazonClientException ignored) {
             }
             throw Throwables.propagate(e);
         }
@@ -199,12 +198,15 @@ public class S3StorageSystem
     public StoredObject putObject(URI location, File source)
     {
         try {
-            S3Object object = new S3Object(source);
-            object.setKey(S3StorageHelper.getS3ObjectKey(location));
             log.info("starting upload: %s", location);
-            S3Object result = s3Service.putObject(getS3Bucket(location), object);
+            PutObjectResult result = s3Service.putObject(getS3Bucket(location), getS3ObjectKey(location), source);
+            ObjectMetadata metadata = s3Service.getObjectMetadata(getS3Bucket(location), getS3ObjectKey(location));
+            if (!result.getETag().equals(metadata.getETag())) {
+                // this might happen in rare cases due to S3's eventual consistency
+                throw new IllegalStateException("uploaded etag is different from retrieved object etag");
+            }
             log.info("completed upload: %s", location);
-            return updateStoredObject(location, result);
+            return updateStoredObject(location, metadata);
         }
         catch (Exception e) {
             throw Throwables.propagate(e);
@@ -213,18 +215,13 @@ public class S3StorageSystem
 
     public StoredObject getObjectDetails(URI target)
     {
-        try {
-            final StoredObject storedObject = new StoredObject(target);
-            return updateStoredObject(storedObject.getLocation(), (S3Object) s3Service.getObjectDetails(getS3Bucket(target), getS3ObjectKey(target)));
-        }
-        catch (ServiceException e) {
-            throw Throwables.propagate(e);
-        }
+        StoredObject storedObject = new StoredObject(target);
+        ObjectMetadata metadata = s3Service.getObjectMetadata(getS3Bucket(target), getS3ObjectKey(target));
+        return updateStoredObject(storedObject.getLocation(), metadata);
     }
 
-    public InputSupplier<InputStream> getInputSupplier(URI target) {
+    public InputSupplier<InputStream> getInputSupplier(URI target)
+    {
         return new S3InputSupplier(s3Service, target);
     }
-
-
 }

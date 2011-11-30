@@ -15,9 +15,9 @@
  */
 package com.proofpoint.event.collector.combiner;
 
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.services.s3.AmazonS3;
 import com.google.common.io.InputSupplier;
-import org.jets3t.service.ServiceException;
-import org.jets3t.service.model.S3Object;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,10 +28,10 @@ import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3Objec
 
 class S3InputSupplier implements InputSupplier<InputStream>
 {
-    private final ExtendedRestS3Service service;
+    private final AmazonS3 service;
     private final URI target;
 
-    S3InputSupplier(ExtendedRestS3Service service, URI target)
+    S3InputSupplier(AmazonS3 service, URI target)
     {
         this.service = service;
         this.target = target;
@@ -42,10 +42,9 @@ class S3InputSupplier implements InputSupplier<InputStream>
             throws IOException
     {
         try {
-            S3Object object = service.getObject(getS3Bucket(target), getS3ObjectKey(target));
-            return object.getDataInputStream();
+            return service.getObject(getS3Bucket(target), getS3ObjectKey(target)).getObjectContent();
         }
-        catch (ServiceException e) {
+        catch (AmazonClientException e) {
             throw new IOException(e);
         }
     }

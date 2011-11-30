@@ -15,10 +15,10 @@
  */
 package com.proofpoint.event.collector.combiner;
 
+import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
-import org.jets3t.service.model.S3Object;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -92,21 +92,16 @@ public final class S3StorageHelper
                 location);
     }
 
-    public static StoredObject updateStoredObject(URI location, S3Object s3Object)
+    public static StoredObject updateStoredObject(URI location, ObjectMetadata metadata)
     {
         Preconditions.checkNotNull(location, "location is null");
-        Preconditions.checkNotNull(s3Object, "s3Object is null");
-        Preconditions.checkArgument(S3StorageHelper.getS3ObjectKey(location).equals(s3Object.getKey()));
-        // jets3t doesn't set the bucket name in responses
-        if (s3Object.getBucketName() != null) {
-            Preconditions.checkArgument(S3StorageHelper.getS3Bucket(location).equals(s3Object.getBucketName()));
-        }
+        Preconditions.checkNotNull(metadata, "metadata is null");
 
         return new StoredObject(
                 location,
-                s3Object.getETag(),
-                s3Object.getContentLength(),
-                s3Object.getLastModifiedDate().getTime());
+                metadata.getETag(),
+                metadata.getContentLength(),
+                metadata.getLastModified().getTime());
     }
 
     public static URI buildS3Location(URI base, String... parts)

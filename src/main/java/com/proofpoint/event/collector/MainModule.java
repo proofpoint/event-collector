@@ -15,19 +15,19 @@
  */
 package com.proofpoint.event.collector;
 
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
 import com.google.inject.Binder;
 import com.google.inject.Module;
 import com.google.inject.Provides;
 import com.google.inject.Scopes;
 import com.proofpoint.event.collector.combiner.CombineObjectMetadataStore;
-import com.proofpoint.event.collector.combiner.ExtendedRestS3Service;
 import com.proofpoint.event.collector.combiner.S3CombineObjectMetadataStore;
 import com.proofpoint.event.collector.combiner.S3StorageSystem;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObjectCombiner;
-import org.jets3t.service.S3ServiceException;
-import org.jets3t.service.security.AWSCredentials;
-import org.jets3t.service.security.ProviderCredentials;
 import org.weakref.jmx.guice.MBeanModule;
 
 import javax.inject.Singleton;
@@ -66,16 +66,15 @@ public class MainModule
 
     @Provides
     @Singleton
-    private ExtendedRestS3Service provideExtendedRestS3Service(ProviderCredentials credentials)
-            throws S3ServiceException
+    private AmazonS3 provideAmazonS3(AWSCredentials credentials)
     {
-        return new ExtendedRestS3Service(credentials);
+        return new AmazonS3Client(credentials);
     }
 
     @Provides
     @Singleton
-    private ProviderCredentials provideProviderCredentials(ServerConfig config)
+    private AWSCredentials provideProviderCredentials(ServerConfig config)
     {
-        return new AWSCredentials(config.getAwsAccessKey(), config.getAwsSecretKey());
+        return new BasicAWSCredentials(config.getAwsAccessKey(), config.getAwsSecretKey());
     }
 }

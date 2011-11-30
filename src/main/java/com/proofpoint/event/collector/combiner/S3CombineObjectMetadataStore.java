@@ -15,41 +15,46 @@
  */
 package com.proofpoint.event.collector.combiner;
 
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
+import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.google.common.base.Charsets;
 import com.google.common.io.CharStreams;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.event.collector.ServerConfig;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
+import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.digest.DigestUtils;
-import org.jets3t.service.S3ServiceException;
-import org.jets3t.service.model.S3Object;
 
 import javax.inject.Inject;
 import javax.ws.rs.core.MediaType;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3Bucket;
+import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3ObjectKey;
 
 public class S3CombineObjectMetadataStore
         implements CombineObjectMetadataStore
 {
     private static final Logger log = Logger.get(S3CombineObjectMetadataStore.class);
     private final JsonCodec<CombinedGroup> jsonCodec = JsonCodec.jsonCodec(CombinedGroup.class);
-    private final ExtendedRestS3Service s3Service;
+    private final AmazonS3 s3Service;
     private final URI storageArea;
 
     @Inject
-    public S3CombineObjectMetadataStore(ServerConfig config, ExtendedRestS3Service s3Service)
+    public S3CombineObjectMetadataStore(ServerConfig config, AmazonS3 s3Service)
     {
         this(URI.create(checkNotNull(config, "config is null").getS3MetadataLocation()), s3Service);
     }
 
-    public S3CombineObjectMetadataStore(URI storageArea, ExtendedRestS3Service s3Service)
+    public S3CombineObjectMetadataStore(URI storageArea, AmazonS3 s3Service)
     {
         this.storageArea = checkNotNull(storageArea, "storageArea is null");
         this.s3Service = checkNotNull(s3Service, "s3Service is null");
@@ -58,7 +63,7 @@ public class S3CombineObjectMetadataStore
     @Override
     public CombinedGroup getCombinedGroupManifest(EventPartition eventPartition, String sizeName)
     {
-        return  readMetadataFile(eventPartition, sizeName);
+        return readMetadataFile(eventPartition, sizeName);
     }
 
     @Override
@@ -86,18 +91,15 @@ public class S3CombineObjectMetadataStore
         byte[] json = jsonCodec.toJson(combinedGroup).getBytes(Charsets.UTF_8);
         URI metadataFile = toMetadataLocation(eventPartition, sizeName);
         try {
-            S3Object object = new S3Object();
-            object.setKey(S3StorageHelper.getS3ObjectKey(metadataFile));
-            object.setDataInputStream(new ByteArrayInputStream(json));
-            object.setContentLength(json.length);
-            object.setMd5Hash(DigestUtils.md5(json));
-            object.setContentType(MediaType.APPLICATION_JSON);
-
-            s3Service.putObject(getS3Bucket(metadataFile), object);
-
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentLength(json.length);
+            metadata.setContentMD5(Base64.encodeBase64String(DigestUtils.md5(json)));
+            metadata.setContentType(MediaType.APPLICATION_JSON);
+            InputStream input = new ByteArrayInputStream(json);
+            s3Service.putObject(getS3Bucket(metadataFile), getS3ObjectKey(metadataFile), input, metadata);
             return true;
         }
-        catch (S3ServiceException e) {
+        catch (AmazonClientException e) {
             log.warn(e, "error writing metadata file: %s", metadataFile);
             return false;
         }
@@ -107,7 +109,7 @@ public class S3CombineObjectMetadataStore
     {
         return storageArea.resolve(eventPartition.getEventType() + "/" +
                 eventPartition.getMajorTimeBucket() + "/" +
-                eventPartition.getMinorTimeBucket() +"."+ sizeName + ".metadata");
+                eventPartition.getMinorTimeBucket() + "." + sizeName + ".metadata");
     }
 
     private CombinedGroup readMetadataFile(EventPartition eventPartition, String sizeName)
@@ -118,9 +120,8 @@ public class S3CombineObjectMetadataStore
             json = CharStreams.toString(CharStreams.newReaderSupplier(new S3InputSupplier(s3Service, metadataFile), Charsets.UTF_8));
         }
         catch (IOException e) {
-            if (e.getCause() instanceof S3ServiceException) {
-                S3ServiceException serviceException = (S3ServiceException) e.getCause();
-                if ("NoSuchKey".equals(serviceException.getS3ErrorCode())) {
+            if (e.getCause() instanceof AmazonS3Exception) {
+                if ("NoSuchKey".equals(((AmazonS3Exception) e.getCause()).getErrorCode())) {
                     return null;
                 }
             }

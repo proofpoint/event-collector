@@ -251,6 +251,7 @@
                         <exclude>**/.gitignore</exclude>
                         <exclude>.idea/**</exclude>
                         <exclude>var/**</exclude>
+                        <exclude>staging/**</exclude>
                     </excludes>
                 </configuration>
                 <executions>

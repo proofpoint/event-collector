@@ -111,6 +111,14 @@ public class SpoolingEventWriter
     }
 
     @Override
+    public void write(Iterable<Event> events)
+            throws IOException
+    {
+        for (Event event : events) {
+            write(event);
+        }
+    }
+
     public void write(Event event)
             throws IOException
     {

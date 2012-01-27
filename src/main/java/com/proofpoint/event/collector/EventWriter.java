@@ -19,6 +19,6 @@ import java.io.IOException;
 
 public interface EventWriter
 {
-    void write(Event event)
+    void write(Iterable<Event> events)
             throws IOException;
 }

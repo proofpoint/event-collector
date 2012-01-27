@@ -15,11 +15,10 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
-import javax.validation.constraints.NotNull;
 import java.util.List;
 
 public class InMemoryEventWriter implements EventWriter
@@ -27,11 +26,9 @@ public class InMemoryEventWriter implements EventWriter
     List<Event> events = Lists.newArrayList();
 
     @Override
-    public void write(@NotNull Event event)
+    public void write(Iterable<Event> events)
     {
-        Preconditions.checkNotNull(event, "event must not be null");
-
-        events.add(event);
+        Iterables.addAll(this.events, events);
     }
 
     public List<Event> getEvents()

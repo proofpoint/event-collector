@@ -25,17 +25,18 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 @Path("/v2/event")
 public class EventResource
 {
-    private final EventWriter writer;
+    private final Set<EventWriter> writers;
 
     @Inject
-    public EventResource(EventWriter writer)
+    public EventResource(Set<EventWriter> writers)
     {
-        Preconditions.checkNotNull(writer, "writer must not be null");
-        this.writer = writer;
+        Preconditions.checkNotNull(writers, "writer must not be null");
+        this.writers = writers;
     }
 
     @POST
@@ -43,8 +44,8 @@ public class EventResource
     public Response post(List<Event> events)
             throws IOException
     {
-        for (Event event : events) {
-            writer.write(event);
+        for (EventWriter writer : writers) {
+            writer.write(events);
         }
         return Response.status(Response.Status.ACCEPTED).build();
     }

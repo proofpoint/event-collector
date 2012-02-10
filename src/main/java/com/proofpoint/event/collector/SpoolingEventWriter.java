@@ -131,6 +131,7 @@ public class SpoolingEventWriter
         private CountingOutputStream output;
         private JsonGenerator generator;
         private long createdTime;
+        private boolean hasContent;
 
         public OutputPartition(EventPartition eventPartition,
                 Uploader uploader,
@@ -161,6 +162,7 @@ public class SpoolingEventWriter
             generator.setPrettyPrinter(new MinimalPrettyPrinter("\n"));
 
             createdTime = System.nanoTime();
+            hasContent = false;
         }
 
         public synchronized void write(Event event)
@@ -169,6 +171,8 @@ public class SpoolingEventWriter
             open();
 
             generator.writeObject(event);
+
+            hasContent = true;
 
             // roll file if it is over the target size or max age
             if ((output.getCount() >= targetFileSize.toBytes()) || isAtMaxAge()) {
@@ -181,6 +185,11 @@ public class SpoolingEventWriter
         {
             if (generator == null) {
                 return;
+            }
+
+            // add final newline
+            if (hasContent) {
+                generator.writeRaw('\n');
             }
 
             generator.close();

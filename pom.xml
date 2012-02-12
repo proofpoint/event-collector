@@ -243,7 +243,9 @@
                         <exclude>**/config.properties</exclude>
                         <exclude>**/log.properties</exclude>
                         <exclude>**/logback-test.xml</exclude>
+                        <exclude>**/*.json</exclude>
                         <exclude>**/.gitignore</exclude>
+                        <exclude>.idea/**</exclude>
                         <exclude>var/**</exclude>
                     </excludes>
                 </configuration>

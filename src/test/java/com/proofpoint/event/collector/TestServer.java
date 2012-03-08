@@ -30,6 +30,7 @@ import com.proofpoint.http.server.testing.TestingHttpServerModule;
 import com.proofpoint.jaxrs.JaxrsModule;
 import com.proofpoint.json.JsonModule;
 import com.proofpoint.node.testing.TestingNodeModule;
+import com.proofpoint.testing.FileUtils;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -89,13 +90,7 @@ public class TestServer
             client.close();
         }
 
-        try {
-            // TODO: this is broken on Mac OS X
-            Files.deleteRecursively(tempStageDir);
-        }
-        catch (IOException e) {
-            // ignore
-        }
+        FileUtils.deleteRecursively(tempStageDir);
     }
 
     @Test

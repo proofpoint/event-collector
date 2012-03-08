@@ -13,7 +13,7 @@
     <parent>
         <groupId>com.proofpoint.platform</groupId>
         <artifactId>rest-server-base</artifactId>
-        <version>0.50</version>
+        <version>0.53</version>
     </parent>
 
     <licenses>

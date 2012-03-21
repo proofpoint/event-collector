@@ -16,9 +16,9 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
+import java.io.IOException;
 import java.util.List;
 
 public class InMemoryEventWriter implements EventWriter
@@ -26,9 +26,10 @@ public class InMemoryEventWriter implements EventWriter
     List<Event> events = Lists.newArrayList();
 
     @Override
-    public void write(Iterable<Event> events)
+    public void write(Event event)
+            throws IOException
     {
-        Iterables.addAll(this.events, events);
+        this.events.add(event);
     }
 
     public List<Event> getEvents()

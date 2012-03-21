@@ -15,17 +15,16 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.Multimaps;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
+import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.JsonBodyGenerator;
 import com.proofpoint.http.client.Request;
@@ -37,11 +36,9 @@ import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 import org.weakref.jmx.Managed;
 
-import javax.annotation.Nullable;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
-import java.io.IOException;
 import java.net.URI;
 import java.security.SecureRandom;
 import java.util.Collection;
@@ -53,7 +50,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class EventTapWriter implements EventWriter
+public class EventTapWriter implements EventWriter, BatchHandler<Event>
 {
     private static final Logger log = Logger.get(EventTapWriter.class);
     private static final Random RANDOM = new SecureRandom();
@@ -66,6 +63,7 @@ public class EventTapWriter implements EventWriter
     private final AtomicReference<Multimap<String, EventFlow>> eventFlows = new AtomicReference<Multimap<String, EventFlow>>(ImmutableMultimap.<String, EventFlow>of());
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
+    private final BatchProcessor<Event> batchProcessor;
 
     @Inject
     public EventTapWriter(@ServiceType("eventTap") ServiceSelector selector,
@@ -86,6 +84,8 @@ public class EventTapWriter implements EventWriter
         this.executorService = executorService;
         this.flowRefreshDuration = config.getEventTapRefreshDuration();
         refreshFlows();
+
+        batchProcessor = new BatchProcessor<Event>(this);
     }
 
     @PostConstruct
@@ -150,26 +150,28 @@ public class EventTapWriter implements EventWriter
     }
 
     @Override
-    public void write(Iterable<Event> events)
-            throws IOException
+    public void write(Event event)
+    {
+        batchProcessor.put(event);
+    }
+
+    @Override
+    public void processBatch(Collection<Event> events)
     {
         if (eventFlows.get().isEmpty()) {
             return;
         }
 
-        ImmutableListMultimap<String, Event> eventsByType = Multimaps.index(events, new Function<Event, String>()
-        {
-            @Override
-            public String apply(@Nullable Event event)
-            {
-                return event.getType();
+        String currentEventType = "";
+        Collection<EventFlow> currentFlows = null;
+        for (Event event : events) {
+            if (!currentEventType.equals(event.getType())) {
+                currentEventType = event.getType();
+                currentFlows = eventFlows.get().get(event.getType());
             }
-        });
-
-        for (Entry<String, Collection<Event>> entry : eventsByType.asMap().entrySet()) {
-            for (EventFlow flow : eventFlows.get().get(entry.getKey())) {
+            for (EventFlow flow : currentFlows) {
                 try {
-                    flow.sendEvents(ImmutableList.copyOf(entry.getValue()));
+                    flow.sendEvents(ImmutableList.of(event));
                 }
                 catch (Exception ignored) {
                     // already logged

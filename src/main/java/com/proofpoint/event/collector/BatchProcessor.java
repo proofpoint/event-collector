@@ -15,10 +15,24 @@
  */
 package com.proofpoint.event.collector;
 
-import java.io.IOException;
+import java.util.Collection;
+import java.util.Collections;
 
-public interface EventWriter
+public class BatchProcessor<T>
 {
-    void write(Event event)
-            throws IOException;
+    private final BatchHandler<T> batchHandler;
+
+    public BatchProcessor(BatchHandler<T> batchHandler)
+    {
+        this.batchHandler = batchHandler;
+    }
+
+    public void put(T entry) {
+        batchHandler.processBatch(Collections.singleton(entry));
+    }
+
+    public static interface BatchHandler<T>
+    {
+        void processBatch(Collection<T> entries);
+    }
 }

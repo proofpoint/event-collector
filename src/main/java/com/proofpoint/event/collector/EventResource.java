@@ -44,8 +44,10 @@ public class EventResource
     public Response post(List<Event> events)
             throws IOException
     {
-        for (EventWriter writer : writers) {
-            writer.write(events);
+        for (Event event : events) {
+            for (EventWriter writer : writers) {
+                writer.write(event);
+            }
         }
         return Response.status(Response.Status.ACCEPTED).build();
     }

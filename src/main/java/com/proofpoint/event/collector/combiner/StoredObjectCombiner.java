@@ -18,6 +18,7 @@ package com.proofpoint.event.collector.combiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -261,7 +262,7 @@ public class StoredObjectCombiner
                 }
 
                 // skip if objects in staging do not match the current combined object
-                if (!stagedObjects.containsAll(combinedObject.getSourceParts())) {
+                if (!containsAll(stagedObjects, combinedObject.getSourceParts())) {
                     if (badManifests.add(group.getLocationPrefix())) {
                         log.error("manifest source objects do not match objects in staging area: %s", group.getLocationPrefix());
                     }
@@ -319,7 +320,12 @@ public class StoredObjectCombiner
     {
         Collection<URI> stagedNames = Collections2.transform(stagedObjects, StoredObject.GET_LOCATION_FUNCTION);
         Collection<URI> sourceNames = Collections2.transform(sourceParts, StoredObject.GET_LOCATION_FUNCTION);
-        return stagedNames.containsAll(sourceNames);
+        return containsAll(stagedNames, sourceNames);
+    }
+
+    private static boolean containsAll(Iterable<?> source, Iterable<?> target)
+    {
+        return ImmutableSet.copyOf(source).containsAll(ImmutableSet.copyOf(target));
     }
 
     private static boolean groupIsMinutesOld(CombinedGroup group, int minutes)

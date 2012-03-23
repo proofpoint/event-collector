@@ -33,6 +33,7 @@ import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.json.JsonCodec;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Parameters;
 import org.testng.annotations.Test;
 
@@ -51,24 +52,26 @@ import static com.google.common.collect.Maps.newTreeMap;
 import static com.proofpoint.event.collector.combiner.StoredObject.GET_LOCATION_FUNCTION;
 import static org.apache.commons.codec.binary.Hex.encodeHexString;
 
+@Test(groups = "aws")
 public class TestS3Combine
 {
-    public static final String BUCKET_NAME = "proofpoint-test-jets3t";
-    public static final String EVENT_TYPE = "test-event";
-    public static final String TIME_SLICE = "2011-08-01";
+    private static final String EVENT_TYPE = "TestEvent";
+    private static final String TIME_SLICE = "2011-08-01";
     private static final int MIN_LARGE_FILE_LENGTH = 5 * 1024 * 1024;
     private static final int MIN_SMALL_FILE_LENGTH = 10 * 1024;
     private static final String HOUR = "08";
 
+    private String testBucket;
+    private AmazonS3 service;
     private StoredObjectCombiner objectCombiner;
     private URI stagingBaseUri;
     private URI targetBaseUri;
     private S3StorageSystem storageSystem;
     private TestingCombineObjectMetadataStore metadataStore;
 
-    @BeforeClass(groups = "aws")
-    @Parameters("aws-credentials-file")
-    public void setUp(String awsCredentialsFile)
+    @BeforeClass
+    @Parameters({"aws-credentials-file", "aws-test-bucket"})
+    public void setUpClass(String awsCredentialsFile, String awsTestBucket)
             throws Exception
     {
         String credentialsJson = Files.toString(new File(awsCredentialsFile), Charsets.UTF_8);
@@ -77,15 +80,20 @@ public class TestS3Combine
         String awsSecretKey = map.get("private-key");
 
         AWSCredentials awsCredentials = new BasicAWSCredentials(awsAccessKey, awsSecretKey);
-        AmazonS3 service = new AmazonS3Client(awsCredentials);
+        service = new AmazonS3Client(awsCredentials);
 
-        if (!service.doesBucketExist(BUCKET_NAME)) {
-            service.createBucket(BUCKET_NAME);
+        testBucket = awsTestBucket;
+        if (!service.doesBucketExist(testBucket)) {
+            service.createBucket(testBucket);
         }
+    }
 
+    @BeforeMethod
+    public void setUpMethod()
+    {
         String randomPart = "CombineTest-" + UUID.randomUUID().toString().replace("-", "");
-        stagingBaseUri = S3StorageHelper.buildS3Location("s3://", BUCKET_NAME, randomPart, "staging/");
-        targetBaseUri = S3StorageHelper.buildS3Location("s3://", BUCKET_NAME, randomPart, "target/");
+        stagingBaseUri = S3StorageHelper.buildS3Location("s3://", testBucket, randomPart, "staging/");
+        targetBaseUri = S3StorageHelper.buildS3Location("s3://", testBucket, randomPart, "target/");
 
         storageSystem = new S3StorageSystem(service);
         metadataStore = new TestingCombineObjectMetadataStore();
@@ -98,7 +106,7 @@ public class TestS3Combine
                 true);
     }
 
-    @Test(groups = "aws")
+    @Test
     public void testLargeCombine()
             throws Exception
     {
@@ -153,7 +161,7 @@ public class TestS3Combine
         Assert.assertEquals(newCombinedStoredObjectManifest.getVersion(), currentVersion);
     }
 
-    @Test(groups = "aws")
+    @Test
     public void testSmallCombine()
             throws Exception
     {
@@ -238,7 +246,6 @@ public class TestS3Combine
     private File uploadFile(URI location, int minFileLength)
             throws IOException
     {
-
         File tempFile = File.createTempFile(S3StorageHelper.getS3FileName(location), ".s3.data");
         CountingOutputStream countingOutputStream = null;
         try {

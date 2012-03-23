@@ -88,6 +88,12 @@ public class CombinedGroup
         return combinedObjects;
     }
 
+    @Override
+    public String toString()
+    {
+        return locationPrefix.toString();
+    }
+
     public CombinedStoredObject getCombinedObject(URI location) {
         for (CombinedStoredObject combinedObject : combinedObjects) {
             if (location.equals(combinedObject.getLocation())) {

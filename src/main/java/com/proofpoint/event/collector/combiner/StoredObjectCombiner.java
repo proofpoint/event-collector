@@ -153,11 +153,13 @@ public class StoredObjectCombiner
 
     public void combineObjects()
     {
+        log.info("starting combining objects");
         for (URI eventBaseUri : storageSystem.listDirectories(stagingBaseUri)) {
             String eventType = getS3FileName(eventBaseUri);
             for (URI timeSliceBaseUri : storageSystem.listDirectories(eventBaseUri)) {
                 String dateBucket = getS3FileName(timeSliceBaseUri);
                 for (URI hourBaseUri : storageSystem.listDirectories(timeSliceBaseUri)) {
+                    log.info("combining staging bucket: %s", hourBaseUri);
                     String hour = getS3FileName(hourBaseUri);
                     URI stagingArea = buildS3Location(timeSliceBaseUri, hour + "/");
                     List<StoredObject> stagedObjects = storageSystem.listObjects(stagingArea);
@@ -169,6 +171,7 @@ public class StoredObjectCombiner
                 }
             }
         }
+        log.info("finished combining objects");
     }
 
     public void combineObjects(EventPartition eventPartition, URI baseURI, List<StoredObject> stagedObjects)
@@ -201,10 +204,12 @@ public class StoredObjectCombiner
         CombinedGroup currentGroup = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         if (currentGroup == null) {
             currentGroup = createInitialCombinedGroup(baseURI, nodeId);
+            log.info("creating new combined group: %s", currentGroup);
         }
 
         // only update the object if this node was the last writer or some time has passed
         if ((!nodeId.equals(currentGroup.getCreator())) && !groupIsMinutesOld(currentGroup, 5)) {
+            log.warn("this node cannot update this group: %s", currentGroup);
             return;
         }
 
@@ -213,6 +218,7 @@ public class StoredObjectCombiner
 
         // attempt to write new manifest
         if (!metadataStore.replaceCombinedGroupManifest(eventPartition, sizeName, currentGroup, newGroup)) {
+            log.warn("failed to write manifest: %s.%s", eventPartition, sizeName);
             return;
         }
 
@@ -228,6 +234,7 @@ public class StoredObjectCombiner
             if (allPartsAvailable(stagedObjects, newObject.getSourceParts())) {
                 StoredObject existingObject = existingObjects.get(newObject.getLocation());
                 if ((existingObject == null) || (existingObject.getSize() != newObject.getSize())) {
+                    log.info("creating combined object: %s", newObject);
                     createCombinedObject(newObject);
                 }
             }

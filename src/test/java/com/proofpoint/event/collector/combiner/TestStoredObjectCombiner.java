@@ -40,8 +40,6 @@ public class TestStoredObjectCombiner
             throws Exception
     {
         EventPartition eventPartition = new EventPartition("event", "day", "hour");
-        String sizeName = "small";
-
         TestingStorageSystem storageSystem = new TestingStorageSystem();
         URI hourLocation = buildS3Location(stagingArea, "event", "day", "hour");
 
@@ -52,6 +50,8 @@ public class TestStoredObjectCombiner
         // create initial set of objects
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), UUID.randomUUID().toString(), 1000, 0);
         StoredObject objectB = new StoredObject(buildS3Location(hourLocation, "b"), UUID.randomUUID().toString(), 1000, 0);
+
+        // create single test group
         List<StoredObject> smallGroup = newArrayList(objectA, objectB);
         storageSystem.addObjects(smallGroup);
 
@@ -59,7 +59,7 @@ public class TestStoredObjectCombiner
         combiner.combineObjects(eventPartition, hourLocation, smallGroup);
 
         // validate manifest
-        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
+        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(eventPartition, "small");
         assertGreaterThan(combinedGroup.getVersion(), 0L);
 
         // validate objects
@@ -77,7 +77,7 @@ public class TestStoredObjectCombiner
         combiner.combineObjects(eventPartition, hourLocation, smallGroup);
 
         // validate manifest
-        CombinedGroup updatedCombinedGroup = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
+        CombinedGroup updatedCombinedGroup = metadataStore.getCombinedGroupManifest(eventPartition, "small");
         assertGreaterThan(updatedCombinedGroup.getVersion(), combinedGroup.getVersion());
 
         // validate objects
@@ -92,8 +92,7 @@ public class TestStoredObjectCombiner
     {
         EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
-        URI dayLocation = buildS3Location(stagingArea, "event", "day");
-        URI hourLocation = buildS3Location(dayLocation, "hour");
+        URI hourLocation = buildS3Location(stagingArea, "event", "day", "hour");
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);

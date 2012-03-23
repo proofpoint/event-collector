@@ -25,6 +25,7 @@ import com.ning.http.client.AsyncHttpClient;
 import com.ning.http.client.Response;
 import com.proofpoint.configuration.ConfigurationFactory;
 import com.proofpoint.configuration.ConfigurationModule;
+import com.proofpoint.discovery.client.DiscoveryModule;
 import com.proofpoint.http.server.testing.TestingHttpServer;
 import com.proofpoint.http.server.testing.TestingHttpServerModule;
 import com.proofpoint.jaxrs.JaxrsModule;
@@ -67,6 +68,7 @@ public class TestServer
         Injector injector = Guice.createInjector(
                 new TestingNodeModule(),
                 new TestingHttpServerModule(),
+                new DiscoveryModule(),
                 new JsonModule(),
                 new JaxrsModule(),
                 new MainModule(),

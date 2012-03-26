@@ -85,7 +85,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
         this.flowRefreshDuration = config.getEventTapRefreshDuration();
         refreshFlows();
 
-        batchProcessor = new BatchProcessor<Event>(this);
+        batchProcessor = new BatchProcessor<Event>("event-tap", this, config.getMaxBatchSize(), config.getQueueSize());
     }
 
     @PostConstruct

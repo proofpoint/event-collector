@@ -26,6 +26,9 @@ public class EventTapConfig
 {
     private int eventTapThreads = 20;
     private Duration eventTapRefreshDuration = new Duration(10, TimeUnit.SECONDS);
+    private int maxBatchSize = 1000;
+    private int queueSize = 40000;
+
 
     @Min(1)
     public int getEventTapThreads()
@@ -33,7 +36,7 @@ public class EventTapConfig
         return eventTapThreads;
     }
 
-    @Config("collector.event-tap-threads")
+    @Config("collector.event-tap.threads")
     public void setEventTapThreads(int eventTapThreads)
     {
         this.eventTapThreads = eventTapThreads;
@@ -45,9 +48,33 @@ public class EventTapConfig
         return eventTapRefreshDuration;
     }
 
-    @Config("collector.event-tap-refresh")
+    @Config("collector.event-tap.refresh")
     public void setEventTapRefreshDuration(Duration eventTapRefreshDuration)
     {
         this.eventTapRefreshDuration = eventTapRefreshDuration;
+    }
+
+    @Min(1)
+    public int getMaxBatchSize()
+    {
+        return maxBatchSize;
+    }
+
+    @Config("collector.event-tap.batch-size-max")
+    public void setMaxBatchSize(int maxBatchSize)
+    {
+        this.maxBatchSize = maxBatchSize;
+    }
+
+    @Min(1)
+    public int getQueueSize()
+    {
+        return queueSize;
+    }
+
+    @Config("collector.event-tap.batch-size-max")
+    public void setQueueSize(int queueSize)
+    {
+        this.queueSize = queueSize;
     }
 }

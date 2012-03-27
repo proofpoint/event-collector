@@ -51,7 +51,7 @@ public class Main
                 new HttpEventModule(),
                 new MainModule(),
                 new EventTapModule(),
-                new HttpClientModule(EvenTap.class));
+                new HttpClientModule(EventTap.class));
 
         try {
             Injector injector = app.strictConfig().initialize();

@@ -45,7 +45,7 @@ public class EventTapModule implements Module
         newSetBinder(binder, EventWriter.class).addBinding().to(Key.get(EventTapWriter.class)).in(Scopes.SINGLETON);
     }
 
-    @Provides @EvenTap
+    @Provides @EventTap
     public ScheduledExecutorService createExecutor(EventTapConfig config)
     {
         return newScheduledThreadPool(config.getEventTapThreads(), new ThreadFactoryBuilder().setNameFormat("event-tap-%s").build());

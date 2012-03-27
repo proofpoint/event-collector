@@ -67,9 +67,9 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
 
     @Inject
     public EventTapWriter(@ServiceType("eventTap") ServiceSelector selector,
-            @EvenTap HttpClient httpClient,
+            @EventTap HttpClient httpClient,
             JsonCodec<List<Event>> eventCodec,
-            @EvenTap ScheduledExecutorService executorService,
+            @EventTap ScheduledExecutorService executorService,
             EventTapConfig config)
     {
         Preconditions.checkNotNull(selector, "selector is null");
@@ -158,7 +158,8 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
     @Override
     public void processBatch(Collection<Event> events)
     {
-        if (eventFlows.get().isEmpty()) {
+        Multimap<String, EventFlow> eventFlows = this.eventFlows.get();
+        if (eventFlows.isEmpty()) {
             return;
         }
 
@@ -167,7 +168,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
         for (Event event : events) {
             if (!currentEventType.equals(event.getType())) {
                 currentEventType = event.getType();
-                currentFlows = eventFlows.get().get(event.getType());
+                currentFlows = eventFlows.get(event.getType());
             }
             for (EventFlow flow : currentFlows) {
                 try {

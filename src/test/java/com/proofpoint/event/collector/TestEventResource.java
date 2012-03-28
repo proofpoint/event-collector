@@ -17,6 +17,7 @@ package com.proofpoint.event.collector;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import org.joda.time.DateTime;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -37,7 +38,7 @@ public class TestEventResource
     public void setup()
     {
         writer = new InMemoryEventWriter();
-        resource = new EventResource(writer);
+        resource = new EventResource(ImmutableSet.<EventWriter>of(writer));
     }
 
     @Test

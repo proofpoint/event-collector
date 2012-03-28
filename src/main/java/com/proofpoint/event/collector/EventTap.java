@@ -15,25 +15,20 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import com.google.inject.BindingAnnotation;
 
-import java.io.IOException;
-import java.util.List;
+import javax.inject.Qualifier;
+import java.lang.annotation.Retention;
+import java.lang.annotation.Target;
 
-public class InMemoryEventWriter implements EventWriter
+import static java.lang.annotation.ElementType.FIELD;
+import static java.lang.annotation.ElementType.METHOD;
+import static java.lang.annotation.ElementType.PARAMETER;
+import static java.lang.annotation.RetentionPolicy.RUNTIME;
+
+@Retention(RUNTIME)
+@Target({FIELD, PARAMETER, METHOD})
+@Qualifier
+public @interface EventTap
 {
-    List<Event> events = Lists.newArrayList();
-
-    @Override
-    public void write(Event event)
-            throws IOException
-    {
-        this.events.add(event);
-    }
-
-    public List<Event> getEvents()
-    {
-        return ImmutableList.copyOf(events);
-    }
 }

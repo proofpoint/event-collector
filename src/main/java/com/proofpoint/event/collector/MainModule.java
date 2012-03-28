@@ -20,6 +20,7 @@ import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.google.inject.Binder;
+import com.google.inject.Key;
 import com.google.inject.Module;
 import com.google.inject.Provides;
 import com.google.inject.Scopes;
@@ -33,6 +34,7 @@ import org.weakref.jmx.guice.MBeanModule;
 
 import javax.inject.Singleton;
 
+import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
 import static com.proofpoint.event.client.EventBinder.eventBinder;
@@ -50,8 +52,9 @@ public class MainModule
 
         binder.bind(StorageSystem.class).to(S3StorageSystem.class).in(Scopes.SINGLETON);
 
-        binder.bind(EventWriter.class).to(SpoolingEventWriter.class).in(Scopes.SINGLETON);
-        MBeanModule.newExporter(binder).export(EventWriter.class).withGeneratedName();
+        binder.bind(SpoolingEventWriter.class).in(Scopes.SINGLETON);
+        MBeanModule.newExporter(binder).export(SpoolingEventWriter.class).withGeneratedName();
+        newSetBinder(binder, EventWriter.class).addBinding().to(Key.get(SpoolingEventWriter.class)).in(Scopes.SINGLETON);
 
         binder.bind(EventResource.class).in(Scopes.SINGLETON);
 

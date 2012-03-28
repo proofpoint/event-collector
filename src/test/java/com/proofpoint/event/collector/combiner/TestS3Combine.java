@@ -117,7 +117,7 @@ public class TestS3Combine
         }
 
         // combine the files
-        objectCombiner.combineObjects();
+        objectCombiner.combineAllObjects();
 
         // verify the contents
         InputSupplier<? extends InputStream> s3InputSupplier = storageSystem.getInputSupplier(target);
@@ -135,7 +135,7 @@ public class TestS3Combine
         }
 
         // combine the files
-        objectCombiner.combineObjects();
+        objectCombiner.combineAllObjects();
 
         // verify the contents
         s3InputSupplier = storageSystem.getInputSupplier(target);
@@ -148,7 +148,7 @@ public class TestS3Combine
         // verify version combiner doesn't recombine unchanged files
         CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         long currentVersion = combinedObjectManifest.getVersion();
-        objectCombiner.combineObjects();
+        objectCombiner.combineAllObjects();
         CombinedGroup newCombinedStoredObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         Assert.assertEquals(newCombinedStoredObjectManifest.getVersion(), currentVersion);
     }
@@ -172,7 +172,7 @@ public class TestS3Combine
         }
 
         // combine the files
-        objectCombiner.combineObjects();
+        objectCombiner.combineAllObjects();
 
         // verify the contents
         StoredObject combinedObject = storageSystem.getObjectDetails(target);
@@ -191,7 +191,7 @@ public class TestS3Combine
         }
 
         // combine the files
-        objectCombiner.combineObjects();
+        objectCombiner.combineAllObjects();
 
         // verify the contents
         combinedObject = storageSystem.getObjectDetails(target);
@@ -205,7 +205,7 @@ public class TestS3Combine
         // verify version combiner doesn't recombine unchanged files
         CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         long currentVersion = combinedObjectManifest.getVersion();
-        objectCombiner.combineObjects();
+        objectCombiner.combineAllObjects();
         CombinedGroup newCombinedStoredObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         Assert.assertEquals(newCombinedStoredObjectManifest.getVersion(), currentVersion);
     }

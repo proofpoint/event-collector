@@ -57,6 +57,7 @@ public class StoredObjectCombiner
 {
     private static final Logger log = Logger.get(StoredObjectCombiner.class);
 
+    private static final DataSize S3_MINIMUM_COMBINABLE_SIZE = new DataSize(5, DataSize.Unit.MEGABYTE);
     private static final Duration CHECK_DELAY = new Duration(10, TimeUnit.SECONDS);
 
     private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(1,
@@ -128,7 +129,7 @@ public class StoredObjectCombiner
             public void run()
             {
                 try {
-                    combineObjects();
+                    combineAllObjects();
                 }
                 catch (Exception e) {
                     log.error(e, "combine failed");
@@ -151,7 +152,11 @@ public class StoredObjectCombiner
         return badManifests;
     }
 
-    public void combineObjects()
+    /**
+     * Iterate over all event partitions, find staged objects in each partition,
+     * then call {@link #combineObjects} to combine them.
+     */
+    public void combineAllObjects()
     {
         log.info("starting combining objects");
         for (URI eventBaseUri : storageSystem.listDirectories(stagingBaseUri)) {
@@ -174,16 +179,25 @@ public class StoredObjectCombiner
         log.info("finished combining objects");
     }
 
+    /**
+     * Split staged objects into small and large groups based on size,
+     * then call {@link #combineObjectGroup} to combine the group.
+     * We need two groups because we want to perform server-side combines,
+     * but S3 has a minimum allowable size for that feature.
+     *
+     * @param eventPartition the event partition to combine
+     * @param baseURI base target filename
+     * @param stagedObjects list of all staged objects in partition
+     */
     public void combineObjects(EventPartition eventPartition, URI baseURI, List<StoredObject> stagedObjects)
     {
-        // split files into small and large groups based on size
         List<StoredObject> smallFiles = Lists.newArrayListWithCapacity(stagedObjects.size());
         List<StoredObject> largeFiles = Lists.newArrayListWithCapacity(stagedObjects.size());
         for (StoredObject stagedObject : stagedObjects) {
             if (stagedObject.getSize() == 0) {
                 // ignore empty object
             }
-            else if (stagedObject.getSize() < 5 * 1024 * 1024) {
+            else if (stagedObject.getSize() < S3_MINIMUM_COMBINABLE_SIZE.toBytes()) {
                 smallFiles.add(stagedObject);
             }
             else {
@@ -194,6 +208,16 @@ public class StoredObjectCombiner
         combineObjectGroup(eventPartition, "large", baseURI, largeFiles);
     }
 
+    /**
+     * Add new objects to the manifest using {@link #buildCombinedGroup},
+     * write the updated manifest, determine what targets need updating
+     * and perform the combines using {@link #createCombinedObject}.
+     *
+     * @param eventPartition the event partition to combine
+     * @param sizeName either "small" or "large"
+     * @param baseURI base target filename
+     * @param stagedObjects list of all staged objects in partition for size group
+     */
     private void combineObjectGroup(EventPartition eventPartition, String sizeName, URI baseURI, List<StoredObject> stagedObjects)
     {
         if (stagedObjects.isEmpty()) {
@@ -241,6 +265,15 @@ public class StoredObjectCombiner
         }
     }
 
+    /**
+     * Add new staged objects to the existing manifest and return the new
+     * manifest. Staged objects are added to an existing combined object
+     * if possible, otherwise a new one is created.
+     *
+     * @param group the existing manifest
+     * @param stagedObjects list of staged objects to add to manifest
+     * @return the new manifest
+     */
     private CombinedGroup buildCombinedGroup(CombinedGroup group, List<StoredObject> stagedObjects)
     {
         // get all objects that have already been combined

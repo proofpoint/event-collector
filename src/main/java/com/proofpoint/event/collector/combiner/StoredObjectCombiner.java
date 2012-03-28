@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.proofpoint.event.client.EventClient;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.event.collector.ServerConfig;
 import com.proofpoint.experimental.units.DataSize;
@@ -68,6 +69,7 @@ public class StoredObjectCombiner
     private final String nodeId;
     private final CombineObjectMetadataStore metadataStore;
     private final StorageSystem storageSystem;
+    private final EventClient eventClient;
     private final URI stagingBaseUri;
     private final URI targetBaseUri;
     private final long targetFileSize;
@@ -75,16 +77,23 @@ public class StoredObjectCombiner
     private final boolean ignoreErrors;
 
     @Inject
-    public StoredObjectCombiner(NodeInfo nodeInfo, CombineObjectMetadataStore metadataStore, StorageSystem storageSystem, ServerConfig config)
+    public StoredObjectCombiner(
+            NodeInfo nodeInfo,
+            CombineObjectMetadataStore metadataStore,
+            StorageSystem storageSystem,
+            ServerConfig config,
+            EventClient eventClient)
     {
         Preconditions.checkNotNull(nodeInfo, "nodeInfo is null");
         Preconditions.checkNotNull(metadataStore, "metadataStore is null");
         Preconditions.checkNotNull(storageSystem, "storageSystem is null");
+        Preconditions.checkNotNull(eventClient, "eventClient is null");
         Preconditions.checkNotNull(config, "config is null");
 
         this.nodeId = nodeInfo.getNodeId();
         this.metadataStore = metadataStore;
         this.storageSystem = storageSystem;
+        this.eventClient = eventClient;
         this.stagingBaseUri = URI.create(config.getS3StagingLocation());
         this.targetBaseUri = URI.create(config.getS3DataLocation());
         this.targetFileSize = config.getTargetFileSize().toBytes();
@@ -92,9 +101,11 @@ public class StoredObjectCombiner
         this.ignoreErrors = true;
     }
 
-    public StoredObjectCombiner(String nodeId,
+    public StoredObjectCombiner(
+            String nodeId,
             CombineObjectMetadataStore metadataStore,
             StorageSystem storageSystem,
+            EventClient eventClient,
             URI stagingBaseUri,
             URI targetBaseUri,
             DataSize targetFileSize,
@@ -103,6 +114,7 @@ public class StoredObjectCombiner
         Preconditions.checkNotNull(nodeId, "nodeId is null");
         Preconditions.checkNotNull(metadataStore, "metadataStore is null");
         Preconditions.checkNotNull(storageSystem, "storageSystem is null");
+        Preconditions.checkNotNull(eventClient, "eventClient is null");
         Preconditions.checkNotNull(stagingBaseUri, "stagingBaseUri is null");
         Preconditions.checkNotNull(targetBaseUri, "targetBaseUri is null");
         Preconditions.checkNotNull(targetFileSize, "targetFileSize is null");
@@ -110,6 +122,7 @@ public class StoredObjectCombiner
         this.nodeId = nodeId;
         this.metadataStore = metadataStore;
         this.storageSystem = storageSystem;
+        this.eventClient = eventClient;
         this.stagingBaseUri = stagingBaseUri;
         this.targetBaseUri = targetBaseUri;
         this.targetFileSize = targetFileSize.toBytes();
@@ -177,6 +190,7 @@ public class StoredObjectCombiner
             }
         }
         log.info("finished combining objects");
+        eventClient.post(new CombineCompleted());
     }
 
     /**

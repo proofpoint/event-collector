@@ -24,6 +24,7 @@ import com.google.inject.Module;
 import com.google.inject.Provides;
 import com.google.inject.Scopes;
 import com.proofpoint.event.collector.combiner.CombineObjectMetadataStore;
+import com.proofpoint.event.collector.combiner.CombineCompleted;
 import com.proofpoint.event.collector.combiner.S3CombineObjectMetadataStore;
 import com.proofpoint.event.collector.combiner.S3StorageSystem;
 import com.proofpoint.event.collector.combiner.StorageSystem;
@@ -34,6 +35,7 @@ import javax.inject.Singleton;
 
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
+import static com.proofpoint.event.client.EventBinder.eventBinder;
 
 public class MainModule
         implements Module
@@ -60,6 +62,8 @@ public class MainModule
         binder.bind(CombineObjectMetadataStore.class).to(S3CombineObjectMetadataStore.class).in(Scopes.SINGLETON);
 
         bindConfig(binder).to(ServerConfig.class);
+
+        eventBinder(binder).bindEventClient(CombineCompleted.class);
 
         discoveryBinder(binder).bindHttpAnnouncement("collector");
     }

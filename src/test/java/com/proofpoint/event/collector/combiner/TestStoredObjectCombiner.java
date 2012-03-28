@@ -15,6 +15,7 @@
  */
 package com.proofpoint.event.collector.combiner;
 
+import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.experimental.units.DataSize;
 import org.testng.annotations.Test;
@@ -39,13 +40,14 @@ public class TestStoredObjectCombiner
     public void testSmall()
             throws Exception
     {
+        InMemoryEventClient eventClient = new InMemoryEventClient();
         EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
         URI hourLocation = buildS3Location(stagingArea, "event", "day", "hour");
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea, targetFileSize, true);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, true);
 
         // create initial set of objects
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), UUID.randomUUID().toString(), 1000, 0);
@@ -90,13 +92,14 @@ public class TestStoredObjectCombiner
     public void testSmallLarge()
             throws Exception
     {
+        InMemoryEventClient eventClient = new InMemoryEventClient();
         EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
         URI hourLocation = buildS3Location(stagingArea, "event", "day", "hour");
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea, targetFileSize, true);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, true);
 
         // create initial set of objects
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), randomUUID(), megabytes(400), 0);
@@ -158,6 +161,7 @@ public class TestStoredObjectCombiner
     @Test
     public void testMissingSourceFiles()
     {
+        InMemoryEventClient eventClient = new InMemoryEventClient();
         EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
         URI hourLocation = buildS3Location(stagingArea, "event", "day", "hour");
@@ -165,7 +169,7 @@ public class TestStoredObjectCombiner
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, stagingArea, targetArea, targetFileSize, true);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, true);
 
         // create initial set of objects
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), UUID.randomUUID().toString(), 1000, 0);

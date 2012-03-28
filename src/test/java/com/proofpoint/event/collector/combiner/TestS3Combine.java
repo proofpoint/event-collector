@@ -28,6 +28,7 @@ import com.google.common.io.Closeables;
 import com.google.common.io.CountingOutputStream;
 import com.google.common.io.Files;
 import com.google.common.io.InputSupplier;
+import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.json.JsonCodec;
@@ -68,6 +69,7 @@ public class TestS3Combine
     private URI targetBaseUri;
     private S3StorageSystem storageSystem;
     private TestingCombineObjectMetadataStore metadataStore;
+    private InMemoryEventClient eventClient;
 
     @BeforeClass
     @Parameters({"aws-credentials-file", "aws-test-bucket"})
@@ -95,11 +97,13 @@ public class TestS3Combine
         stagingBaseUri = S3StorageHelper.buildS3Location("s3://", testBucket, randomPart, "staging/");
         targetBaseUri = S3StorageHelper.buildS3Location("s3://", testBucket, randomPart, "target/");
 
+        eventClient = new InMemoryEventClient();
         storageSystem = new S3StorageSystem(service);
         metadataStore = new TestingCombineObjectMetadataStore();
         objectCombiner = new StoredObjectCombiner("test",
                 metadataStore,
                 storageSystem,
+                eventClient,
                 stagingBaseUri,
                 targetBaseUri,
                 new DataSize(512, DataSize.Unit.MEGABYTE),
@@ -159,6 +163,9 @@ public class TestS3Combine
         objectCombiner.combineAllObjects();
         CombinedGroup newCombinedStoredObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         Assert.assertEquals(newCombinedStoredObjectManifest.getVersion(), currentVersion);
+
+        // verify that events were fired
+        Assert.assertEquals(eventClient.getEvents().size(), 3);
     }
 
     @Test
@@ -216,6 +223,9 @@ public class TestS3Combine
         objectCombiner.combineAllObjects();
         CombinedGroup newCombinedStoredObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
         Assert.assertEquals(newCombinedStoredObjectManifest.getVersion(), currentVersion);
+
+        // verify that events were fired
+        Assert.assertEquals(eventClient.getEvents().size(), 3);
     }
 
     private InputSupplier<InputStream> getCombinedInputsSupplier(EventPartition eventPartition, String sizeName, Map<URI, InputSupplier<? extends InputStream>> files, URI groupPrefix, URI target)

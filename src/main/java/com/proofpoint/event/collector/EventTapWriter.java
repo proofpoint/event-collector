@@ -96,6 +96,8 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
             return;
         }
 
+        batchProcessor.start();
+
         refreshJob = executorService.scheduleWithFixedDelay(new Runnable()
         {
             @Override
@@ -110,9 +112,11 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
     public synchronized void stop()
     {
         if (refreshJob != null) {
+            batchProcessor.stop();
+
             refreshJob.cancel(false);
+            refreshJob = null;
         }
-        refreshJob = null;
     }
 
     @Managed

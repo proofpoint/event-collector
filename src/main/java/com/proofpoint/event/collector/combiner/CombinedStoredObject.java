@@ -60,6 +60,12 @@ public class CombinedStoredObject
         return sourceParts;
     }
 
+    @Override
+    public String toString()
+    {
+        return location.toString();
+    }
+
     public long getSize()
     {
         long size = 0;

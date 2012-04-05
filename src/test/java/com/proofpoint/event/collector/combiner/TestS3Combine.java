@@ -106,8 +106,7 @@ public class TestS3Combine
                 eventClient,
                 stagingBaseUri,
                 targetBaseUri,
-                new DataSize(512, DataSize.Unit.MEGABYTE),
-                true);
+                new DataSize(512, DataSize.Unit.MEGABYTE));
     }
 
     @Test

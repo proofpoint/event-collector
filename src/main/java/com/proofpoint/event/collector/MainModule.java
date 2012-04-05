@@ -28,6 +28,7 @@ import com.proofpoint.event.collector.combiner.CombineObjectMetadataStore;
 import com.proofpoint.event.collector.combiner.CombineCompleted;
 import com.proofpoint.event.collector.combiner.S3CombineObjectMetadataStore;
 import com.proofpoint.event.collector.combiner.S3StorageSystem;
+import com.proofpoint.event.collector.combiner.ScheduledCombiner;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObjectCombiner;
 import org.weakref.jmx.guice.MBeanModule;
@@ -60,6 +61,8 @@ public class MainModule
 
         binder.bind(StoredObjectCombiner.class).in(Scopes.SINGLETON);
         MBeanModule.newExporter(binder).export(StoredObjectCombiner.class).withGeneratedName();
+
+        binder.bind(ScheduledCombiner.class).in(Scopes.SINGLETON);
 
         binder.bind(StorageSystem.class).to(S3StorageSystem.class).in(Scopes.SINGLETON);
         binder.bind(CombineObjectMetadataStore.class).to(S3CombineObjectMetadataStore.class).in(Scopes.SINGLETON);

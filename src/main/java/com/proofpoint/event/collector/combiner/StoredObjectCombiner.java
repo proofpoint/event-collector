@@ -21,28 +21,21 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.event.client.EventClient;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.event.collector.ServerConfig;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.log.Logger;
 import com.proofpoint.node.NodeInfo;
-import com.proofpoint.units.Duration;
 import org.weakref.jmx.Managed;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 import javax.inject.Inject;
-import java.io.IOException;
 import java.net.URI;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.collect.Maps.newHashMap;
@@ -59,10 +52,6 @@ public class StoredObjectCombiner
     private static final Logger log = Logger.get(StoredObjectCombiner.class);
 
     private static final DataSize S3_MINIMUM_COMBINABLE_SIZE = new DataSize(5, DataSize.Unit.MEGABYTE);
-    private static final Duration CHECK_DELAY = new Duration(10, TimeUnit.SECONDS);
-
-    private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(1,
-            new ThreadFactoryBuilder().setNameFormat("StoredObjectCombiner-%s").build());
 
     private final Set<URI> badManifests = new ConcurrentSkipListSet<URI>();
 
@@ -73,7 +62,6 @@ public class StoredObjectCombiner
     private final URI stagingBaseUri;
     private final URI targetBaseUri;
     private final long targetFileSize;
-    private final boolean enabled;
     private final boolean ignoreErrors;
 
     @Inject
@@ -97,7 +85,6 @@ public class StoredObjectCombiner
         this.stagingBaseUri = URI.create(config.getS3StagingLocation());
         this.targetBaseUri = URI.create(config.getS3DataLocation());
         this.targetFileSize = config.getTargetFileSize().toBytes();
-        this.enabled = config.isCombinerEnabled();
         this.ignoreErrors = true;
     }
 
@@ -108,8 +95,7 @@ public class StoredObjectCombiner
             EventClient eventClient,
             URI stagingBaseUri,
             URI targetBaseUri,
-            DataSize targetFileSize,
-            boolean enabled)
+            DataSize targetFileSize)
     {
         Preconditions.checkNotNull(nodeId, "nodeId is null");
         Preconditions.checkNotNull(metadataStore, "metadataStore is null");
@@ -126,37 +112,7 @@ public class StoredObjectCombiner
         this.stagingBaseUri = stagingBaseUri;
         this.targetBaseUri = targetBaseUri;
         this.targetFileSize = targetFileSize.toBytes();
-        this.enabled = enabled;
         this.ignoreErrors = false;
-    }
-
-    @PostConstruct
-    public void start()
-    {
-        if (!enabled) {
-            return;
-        }
-        Runnable combiner = new Runnable()
-        {
-            @Override
-            public void run()
-            {
-                try {
-                    combineAllObjects();
-                }
-                catch (Exception e) {
-                    log.error(e, "combine failed");
-                }
-            }
-        };
-        executor.scheduleAtFixedRate(combiner, 0, (long) CHECK_DELAY.toMillis(), TimeUnit.MILLISECONDS);
-    }
-
-    @PreDestroy
-    public void destroy()
-            throws IOException
-    {
-        executor.shutdown();
     }
 
     @Managed

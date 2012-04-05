@@ -178,19 +178,19 @@ public class ServerConfig
         return s3DataLocation;
     }
 
-    @NotNull
-    @Pattern(regexp = S3_PATH_REGEXP, message = "is malformed")
-    public String getS3MetadataLocation()
-    {
-        return s3MetadataLocation;
-    }
-
     @Config("collector.s3-metadata-location")
     @ConfigDescription("base S3 URI to metadata location")
     public ServerConfig setS3MetadataLocation(String s3MetadataLocation)
     {
         this.s3MetadataLocation = s3MetadataLocation;
         return this;
+    }
+
+    @NotNull
+    @Pattern(regexp = S3_PATH_REGEXP, message = "is malformed")
+    public String getS3MetadataLocation()
+    {
+        return s3MetadataLocation;
     }
 
     @Config("collector.combiner.enabled")

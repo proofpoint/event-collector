@@ -30,6 +30,8 @@ import java.util.concurrent.TimeUnit;
 
 public class ServerConfig
 {
+    private static final String S3_PATH_REGEXP = "s3://[A-Za-z0-9-]+/([A-Za-z0-9-]+/)*";
+
     private Duration maxBufferTime = new Duration(1, TimeUnit.MINUTES);
     private DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
     private File localStagingDirectory = new File("staging");
@@ -155,7 +157,7 @@ public class ServerConfig
     }
 
     @NotNull
-    @Pattern(regexp = "s3://[A-Za-z0-9-]+/([A-Za-z0-9-]+/)*", message = "is malformed")
+    @Pattern(regexp = S3_PATH_REGEXP, message = "is malformed")
     public String getS3StagingLocation()
     {
         return s3StagingLocation;
@@ -170,14 +172,14 @@ public class ServerConfig
     }
 
     @NotNull
-    @Pattern(regexp = "s3://[A-Za-z0-9-]+/([A-Za-z0-9-]+/)*", message = "is malformed")
+    @Pattern(regexp = S3_PATH_REGEXP, message = "is malformed")
     public String getS3DataLocation()
     {
         return s3DataLocation;
     }
 
     @NotNull
-    @Pattern(regexp = "s3://[A-Za-z0-9-]+/([A-Za-z0-9-]+/)*", message = "is malformed")
+    @Pattern(regexp = S3_PATH_REGEXP, message = "is malformed")
     public String getS3MetadataLocation()
     {
         return s3MetadataLocation;

@@ -12,7 +12,7 @@
     <parent>
         <groupId>com.proofpoint.platform</groupId>
         <artifactId>rest-server-base</artifactId>
-        <version>0.58</version>
+        <version>0.59-SNAPSHOT</version>
     </parent>
 
     <licenses>
@@ -73,12 +73,6 @@
         <dependency>
             <groupId>javax.validation</groupId>
             <artifactId>validation-api</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.hibernate</groupId>
-            <artifactId>hibernate-validator</artifactId>
-            <scope>runtime</scope>
         </dependency>
 
         <dependency>

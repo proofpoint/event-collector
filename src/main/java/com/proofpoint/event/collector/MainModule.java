@@ -24,6 +24,7 @@ import com.google.inject.Key;
 import com.google.inject.Module;
 import com.google.inject.Provides;
 import com.google.inject.Scopes;
+import com.proofpoint.event.client.EventClient;
 import com.proofpoint.event.collector.combiner.CombineObjectMetadataStore;
 import com.proofpoint.event.collector.combiner.CombineCompleted;
 import com.proofpoint.event.collector.combiner.S3CombineObjectMetadataStore;
@@ -47,6 +48,8 @@ public class MainModule
     {
         binder.requireExplicitBindings();
         binder.disableCircularProxies();
+
+        binder.bind(EventClient.class).to(LocalEventClient.class).in(Scopes.SINGLETON);
 
         binder.bind(EventPartitioner.class).in(Scopes.SINGLETON);
         binder.bind(Uploader.class).to(S3Uploader.class).in(Scopes.SINGLETON);

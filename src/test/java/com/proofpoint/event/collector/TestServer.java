@@ -26,7 +26,7 @@ import com.ning.http.client.Response;
 import com.proofpoint.configuration.ConfigurationFactory;
 import com.proofpoint.configuration.ConfigurationModule;
 import com.proofpoint.discovery.client.DiscoveryModule;
-import com.proofpoint.event.client.HttpEventModule;
+import com.proofpoint.event.client.JsonEventModule;
 import com.proofpoint.http.server.testing.TestingHttpServer;
 import com.proofpoint.http.server.testing.TestingHttpServerModule;
 import com.proofpoint.jaxrs.JaxrsModule;
@@ -72,7 +72,7 @@ public class TestServer
                 new DiscoveryModule(),
                 new JsonModule(),
                 new JaxrsModule(),
-                new HttpEventModule(),
+                new JsonEventModule(),
                 new MainModule(),
                 new ConfigurationModule(new ConfigurationFactory(config)));
 

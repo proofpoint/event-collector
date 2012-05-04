@@ -23,30 +23,69 @@ import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.Response.Status;
 import java.io.IOException;
 import java.util.UUID;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
+import static org.testng.Assert.assertTrue;
 
 public class TestEventResource
 {
-    private EventResource resource;
+
     private InMemoryEventWriter writer;
 
     @BeforeMethod
     public void setup()
     {
         writer = new InMemoryEventWriter();
-        resource = new EventResource(ImmutableSet.<EventWriter>of(writer));
     }
 
     @Test
     public void testPost()
             throws IOException
     {
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"));
+
         ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
-        Event event = new Event("test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+
+        Response response = resource.post(ImmutableList.of(event));
+
+        assertEquals(response.getStatus(), Response.Status.ACCEPTED.getStatusCode());
+        assertNull(response.getEntity());
+        assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
+
+        assertEquals(writer.getEvents(), ImmutableList.of(event));
+    }
+
+    @Test
+    public void testPostInvalidType()
+            throws IOException
+    {
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"));
+        ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
+        Event badEvent1 = new Event("TestBad1", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        Event badEvent2 = new Event("TestBad2", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        Response response = resource.post(ImmutableList.of(badEvent2, badEvent1));
+
+        assertEquals(response.getStatus(), Status.BAD_REQUEST.getStatusCode());
+        assertNotNull(response.getEntity());
+        assertTrue(response.getEntity().toString().startsWith("Invalid event type(s): "));
+        assertTrue(response.getEntity().toString().contains("TestBad1"));
+        assertTrue(response.getEntity().toString().contains("TestBad2"));
+    }
+
+    @Test
+    public void testAcceptAllEvents()
+            throws IOException
+    {
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig());
+
+        ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
+        Event event = new Event(UUID.randomUUID().toString(), UUID.randomUUID().toString(), "test.local", new DateTime(), data);
 
         Response response = resource.post(ImmutableList.of(event));
 

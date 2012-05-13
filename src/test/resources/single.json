@@ -1,6 +1,6 @@
 [
     {
-        "type": "test",
+        "type": "Test",
         "uuid": "DCD36293-3072-4AFD-B6E3-A9EB9CE1F219",
         "host": "test.local",
         "timestamp": "2011-03-30T16:10:16.000Z",

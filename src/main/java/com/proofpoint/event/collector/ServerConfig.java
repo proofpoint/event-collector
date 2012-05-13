@@ -16,6 +16,8 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableSet;
 import com.proofpoint.configuration.Config;
 import com.proofpoint.configuration.ConfigDescription;
 import com.proofpoint.experimental.units.DataSize;
@@ -26,6 +28,7 @@ import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Pattern;
 import java.io.File;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class ServerConfig
@@ -43,6 +46,27 @@ public class ServerConfig
     private String s3DataLocation;
     private String s3MetadataLocation;
     private boolean combinerEnabled = false;
+    private Set<String> acceptedEventTypes = ImmutableSet.of();
+
+    @NotNull
+    public Set<String> getAcceptedEventTypes()
+    {
+        return acceptedEventTypes;
+    }
+
+    @Config("collector.accepted-event-types")
+    @ConfigDescription("Comma separated list of known event types")
+    public ServerConfig setAcceptedEventTypes(String acceptedEventTypes)
+    {
+        this.acceptedEventTypes = ImmutableSet.copyOf(Splitter.on(',').omitEmptyStrings().trimResults().split(acceptedEventTypes));
+        return this;
+    }
+
+    public ServerConfig setAcceptedEventTypes(Iterable<String> acceptedEventTypes)
+    {
+        this.acceptedEventTypes = ImmutableSet.copyOf(acceptedEventTypes);
+        return this;
+    }
 
     @Config("collector.max-buffer-time")
     @ConfigDescription("maximum length of time to buffer events locally before persisting them")

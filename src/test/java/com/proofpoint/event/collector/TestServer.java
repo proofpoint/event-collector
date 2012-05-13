@@ -59,6 +59,7 @@ public class TestServer
 
         // TODO: wrap all this stuff in a TestBootstrap class
         ImmutableMap<String, String> config = ImmutableMap.<String, String>builder()
+                .put("collector.accepted-event-types", "Test")
                 .put("collector.local-staging-directory", tempStageDir.getAbsolutePath())
                 .put("collector.aws-access-key", "fake-aws-access-key")
                 .put("collector.aws-secret-key", "fake-aws-secret-key")

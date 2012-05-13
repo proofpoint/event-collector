@@ -15,7 +15,10 @@
  */
 package com.proofpoint.event.collector;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import com.google.inject.Inject;
 
 import javax.ws.rs.Consumes;
@@ -23,6 +26,7 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.Response.Status;
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
@@ -31,12 +35,14 @@ import java.util.Set;
 public class EventResource
 {
     private final Set<EventWriter> writers;
+    private final Set<String> acceptedEventTypes;
 
     @Inject
-    public EventResource(Set<EventWriter> writers)
+    public EventResource(Set<EventWriter> writers, ServerConfig config)
     {
         Preconditions.checkNotNull(writers, "writer must not be null");
         this.writers = writers;
+        this.acceptedEventTypes = ImmutableSet.copyOf(config.getAcceptedEventTypes());
     }
 
     @POST
@@ -44,11 +50,27 @@ public class EventResource
     public Response post(List<Event> events)
             throws IOException
     {
+        Set<String> badEvents = Sets.newHashSet();
         for (Event event : events) {
-            for (EventWriter writer : writers) {
-                writer.write(event);
+            if (acceptedEventType(event.getType())) {
+                for (EventWriter writer : writers) {
+                    writer.write(event);
+                }
+            }
+            else {
+                badEvents.add(event.getType());
             }
         }
+        if (!badEvents.isEmpty()) {
+            String errorMessage = "Invalid event type(s): " + Joiner.on(", ").join(badEvents);
+            return Response.status(Status.BAD_REQUEST).entity(errorMessage).build();
+
+        }
         return Response.status(Response.Status.ACCEPTED).build();
+    }
+
+    private boolean acceptedEventType(String type)
+    {
+        return acceptedEventTypes.isEmpty() || acceptedEventTypes.contains(type);
     }
 }

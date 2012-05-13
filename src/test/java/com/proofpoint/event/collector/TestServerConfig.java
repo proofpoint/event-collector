@@ -16,6 +16,7 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.proofpoint.configuration.testing.ConfigAssertions;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.units.Duration;
@@ -35,6 +36,7 @@ public class TestServerConfig
     public void testDefaults()
     {
         ConfigAssertions.assertRecordedDefaults(ConfigAssertions.recordDefaults(ServerConfig.class)
+                .setAcceptedEventTypes("")
                 .setMaxBufferTime(new Duration(1, TimeUnit.MINUTES))
                 .setTargetFileSize(new DataSize(512, DataSize.Unit.MEGABYTE))
                 .setLocalStagingDirectory(new File("staging"))
@@ -53,6 +55,7 @@ public class TestServerConfig
     public void testExplicitPropertyMappings()
     {
         Map<String, String> properties = new ImmutableMap.Builder<String, String>()
+                .put("collector.accepted-event-types", "Foo,Bar")
                 .put("collector.max-buffer-time", "2h")
                 .put("collector.target-file-size", "768MB")
                 .put("collector.local-staging-directory", "testdir")
@@ -67,6 +70,7 @@ public class TestServerConfig
                 .build();
 
         ServerConfig expected = new ServerConfig()
+                .setAcceptedEventTypes(ImmutableSet.of("Foo", "Bar"))
                 .setMaxBufferTime(new Duration(2, TimeUnit.HOURS))
                 .setTargetFileSize(new DataSize(768, DataSize.Unit.MEGABYTE))
                 .setLocalStagingDirectory(new File("testdir"))

@@ -18,11 +18,13 @@ package com.proofpoint.event.collector.combiner;
 import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.MapMaker;
+import com.google.common.collect.Ordering;
 
 import javax.annotation.Nullable;
 import java.io.File;
 import java.net.URI;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -84,7 +86,15 @@ public class TestingStorageSystem
     @Override
     public List<StoredObject> listObjects(URI storageArea)
     {
-        return ImmutableList.copyOf(objects.get(storageArea));
+        // S3 always lists objects in sorted order
+        return Ordering.from(new Comparator<StoredObject>()
+        {
+            @Override
+            public int compare(StoredObject o1, StoredObject o2)
+            {
+                return o1.getLocation().compareTo(o2.getLocation());
+            }
+        }).immutableSortedCopy(objects.get(storageArea));
     }
 
     @Override

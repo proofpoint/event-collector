@@ -18,6 +18,10 @@ package com.proofpoint.event.collector.combiner;
 import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.experimental.units.DataSize;
+import org.joda.time.DateTime;
+import org.joda.time.format.ISODateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
+import org.joda.time.DateTimeZone;
 import org.testng.annotations.Test;
 
 import java.net.URI;
@@ -29,12 +33,16 @@ import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Loc
 import static com.proofpoint.testing.Assertions.assertGreaterThan;
 import static java.util.Arrays.asList;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 
 public class TestStoredObjectCombiner
 {
     public static final URI stagingArea = URI.create("s3://bucket/staging/");
     public static final URI targetArea = URI.create("s3://bucket/target/");
+    private static final DateTimeFormatter DATE_FORMAT = ISODateTimeFormat.date().withZone(DateTimeZone.UTC);
+    private static final DateTimeFormatter HOUR_FORMAT = ISODateTimeFormat.hour().withZone(DateTimeZone.UTC);
+    private static final int maxDaysBack = 14;
 
     @Test
     public void testSmall()
@@ -43,11 +51,12 @@ public class TestStoredObjectCombiner
         InMemoryEventClient eventClient = new InMemoryEventClient();
         EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
-        URI hourLocation = buildS3Location(stagingArea, "event", "day", "hour");
+        DateTime date = new DateTime();
+        URI hourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(date), HOUR_FORMAT.print(date));
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack);
 
         // create initial set of objects
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), UUID.randomUUID().toString(), 1000, 0);
@@ -95,11 +104,12 @@ public class TestStoredObjectCombiner
         InMemoryEventClient eventClient = new InMemoryEventClient();
         EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
-        URI hourLocation = buildS3Location(stagingArea, "event", "day", "hour");
+        DateTime date = new DateTime();
+        URI hourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(date), HOUR_FORMAT.print(date));
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack);
 
         // create initial set of objects
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), randomUUID(), megabytes(400), 0);
@@ -164,12 +174,13 @@ public class TestStoredObjectCombiner
         InMemoryEventClient eventClient = new InMemoryEventClient();
         EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
-        URI hourLocation = buildS3Location(stagingArea, "event", "day", "hour");
-        URI targetLocation = buildS3Location(targetArea, "event", "day", "hour");
+        DateTime date = new DateTime();
+        URI hourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(date), HOUR_FORMAT.print(date));
+        URI targetLocation = buildS3Location(targetArea, "event", DATE_FORMAT.print(date), HOUR_FORMAT.print(date));
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack);
 
         // create initial set of objects
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), UUID.randomUUID().toString(), 1000, 0);
@@ -193,6 +204,49 @@ public class TestStoredObjectCombiner
 
         // combine again
         combiner.combineObjects(eventPartition, targetLocation, storageSystem.listObjects(targetLocation));
+    }
+
+    @Test
+    public void testMaxDaysBack()
+            throws Exception
+    {
+        InMemoryEventClient eventClient = new InMemoryEventClient();
+        TestingStorageSystem storageSystem = new TestingStorageSystem();
+
+        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
+        DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
+
+        // create set of objects
+        DateTime allowedDate = new DateTime().minusDays(2);
+        URI allowedHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
+        StoredObject objectA = new StoredObject(buildS3Location(allowedHourLocation, "a"), randomUUID(), 1000, 0);
+        StoredObject objectB = new StoredObject(buildS3Location(allowedHourLocation, "b"), randomUUID(), 1000, 0);
+        EventPartition allowedEventPartition = new EventPartition("event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
+
+        DateTime olderDate = new DateTime().minusDays(maxDaysBack + 2);
+        URI olderHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(olderDate), HOUR_FORMAT.print(olderDate));
+        StoredObject objectC = new StoredObject(buildS3Location(olderHourLocation, "c"), randomUUID(), 1000, 0);
+        StoredObject objectD = new StoredObject(buildS3Location(olderHourLocation, "d"), randomUUID(), 1000, 0);
+        EventPartition olderEventPartition = new EventPartition("event", DATE_FORMAT.print(olderDate), HOUR_FORMAT.print(olderDate));
+
+        // create single test group
+        List<StoredObject> group = newArrayList(objectA, objectB, objectC, objectD);
+        storageSystem.addObjects(group);
+
+        // combine
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack);
+        combiner.combineAllObjects();
+
+        // validate manifest
+        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(allowedEventPartition, "small");
+        assertGreaterThan(combinedGroup.getVersion(), 0L);
+
+        // validate only objects newer than maxDaysBack get processed
+        List<CombinedStoredObject> combinedObjects = combinedGroup.getCombinedObjects();
+        assertEquals(combinedObjects.size(), 1);
+        assertEquals(combinedObjects.get(0).getSourceParts(), newArrayList(objectA, objectB));
+
+        assertNull(metadataStore.getCombinedGroupManifest(olderEventPartition, "small"));
     }
 
     private static String randomUUID()

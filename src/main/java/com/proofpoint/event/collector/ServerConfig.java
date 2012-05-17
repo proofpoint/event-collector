@@ -46,6 +46,7 @@ public class ServerConfig
     private String s3DataLocation;
     private String s3MetadataLocation;
     private boolean combinerEnabled = false;
+    private int combinerMaxDaysBack = 14;
     private Set<String> acceptedEventTypes = ImmutableSet.of();
 
     @NotNull
@@ -227,5 +228,19 @@ public class ServerConfig
     public boolean isCombinerEnabled()
     {
         return combinerEnabled;
+    }
+
+    @Config("collector.combiner.max-days-back")
+    @ConfigDescription("maximum number of days back from today to combine data")
+    public ServerConfig setCombinerMaxDaysBack(int combinerMaxDaysBack)
+    {
+        this.combinerMaxDaysBack = combinerMaxDaysBack;
+        return this;
+    }
+
+    @Min(0)
+    public int getCombinerMaxDaysBack()
+    {
+        return combinerMaxDaysBack;
     }
 }

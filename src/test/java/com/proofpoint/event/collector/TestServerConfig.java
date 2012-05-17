@@ -48,6 +48,7 @@ public class TestServerConfig
                 .setS3DataLocation(null)
                 .setS3MetadataLocation(null)
                 .setCombinerEnabled(false)
+                .setCombinerMaxDaysBack(14)
         );
     }
 
@@ -67,6 +68,7 @@ public class TestServerConfig
                 .put("collector.s3-data-location", "s3://example-data/")
                 .put("collector.s3-metadata-location", "s3://example-metadata/")
                 .put("collector.combiner.enabled", "true")
+                .put("collector.combiner.max-days-back", "10")
                 .build();
 
         ServerConfig expected = new ServerConfig()
@@ -81,7 +83,8 @@ public class TestServerConfig
                 .setS3StagingLocation("s3://example-staging/")
                 .setS3DataLocation("s3://example-data/")
                 .setS3MetadataLocation("s3://example-metadata/")
-                .setCombinerEnabled(true);
+                .setCombinerEnabled(true)
+                .setCombinerMaxDaysBack(10);
 
         ConfigAssertions.assertFullMapping(properties, expected);
     }

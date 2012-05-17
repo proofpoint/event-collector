@@ -78,9 +78,24 @@ public class TestingStorageSystem
     }
 
     @Override
-    public List<URI> listDirectories(URI storageArea)
+    public List<URI> listDirectories(URI storageAreaURI)
     {
-        throw new UnsupportedOperationException();
+        String storageArea = storageAreaURI.toString();
+        if (!storageArea.endsWith("/")) {
+            storageArea += "/";
+        }
+        ImmutableList.Builder<URI> builder = ImmutableList.builder();
+        for (Map.Entry<URI, Set<StoredObject>> entry : objects.entrySet()) {
+            String uri = entry.getKey().toString();
+            if (!uri.endsWith("/")) {
+                uri += "/";
+            }
+            if (uri.startsWith(storageArea)) {
+                String directory = uri.substring(0, storageArea.length() + uri.substring(storageArea.length()).indexOf("/"));
+                builder.add(URI.create(directory));
+            }
+        }
+        return builder.build();
     }
 
     @Override
@@ -119,6 +134,6 @@ public class TestingStorageSystem
     private static URI directory(URI uri)
     {
         String s = uri.toString();
-        return URI.create(s.substring(0, s.lastIndexOf('/')));
+        return URI.create(s.substring(0, s.lastIndexOf('/')) + "/");
     }
 }

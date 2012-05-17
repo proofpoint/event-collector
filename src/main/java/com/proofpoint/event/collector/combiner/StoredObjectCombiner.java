@@ -27,6 +27,10 @@ import com.proofpoint.event.collector.ServerConfig;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.log.Logger;
 import com.proofpoint.node.NodeInfo;
+import org.joda.time.format.ISODateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
+import org.joda.time.DateMidnight;
+import org.joda.time.DateTimeZone;
 import org.weakref.jmx.Managed;
 
 import javax.inject.Inject;
@@ -53,6 +57,8 @@ public class StoredObjectCombiner
 
     private static final DataSize S3_MINIMUM_COMBINABLE_SIZE = new DataSize(5, DataSize.Unit.MEGABYTE);
 
+    private static final DateTimeFormatter DATE_FORMAT = ISODateTimeFormat.date().withZone(DateTimeZone.UTC);
+
     private final Set<URI> badManifests = new ConcurrentSkipListSet<URI>();
 
     private final String nodeId;
@@ -63,6 +69,7 @@ public class StoredObjectCombiner
     private final URI targetBaseUri;
     private final long targetFileSize;
     private final boolean ignoreErrors;
+    private final int maxDaysBack;
 
     @Inject
     public StoredObjectCombiner(
@@ -86,6 +93,7 @@ public class StoredObjectCombiner
         this.targetBaseUri = URI.create(config.getS3DataLocation());
         this.targetFileSize = config.getTargetFileSize().toBytes();
         this.ignoreErrors = true;
+        this.maxDaysBack = config.getCombinerMaxDaysBack();
     }
 
     public StoredObjectCombiner(
@@ -95,7 +103,8 @@ public class StoredObjectCombiner
             EventClient eventClient,
             URI stagingBaseUri,
             URI targetBaseUri,
-            DataSize targetFileSize)
+            DataSize targetFileSize,
+            int maxDaysBack)
     {
         Preconditions.checkNotNull(nodeId, "nodeId is null");
         Preconditions.checkNotNull(metadataStore, "metadataStore is null");
@@ -113,6 +122,7 @@ public class StoredObjectCombiner
         this.targetBaseUri = targetBaseUri;
         this.targetFileSize = targetFileSize.toBytes();
         this.ignoreErrors = false;
+        this.maxDaysBack = maxDaysBack;
     }
 
     @Managed
@@ -127,11 +137,15 @@ public class StoredObjectCombiner
      */
     public void combineAllObjects()
     {
+        String thresholdDate = DATE_FORMAT.print(new DateMidnight().minusDays(maxDaysBack));
         log.info("starting combining objects");
         for (URI eventBaseUri : storageSystem.listDirectories(stagingBaseUri)) {
             String eventType = getS3FileName(eventBaseUri);
             for (URI timeSliceBaseUri : storageSystem.listDirectories(eventBaseUri)) {
                 String dateBucket = getS3FileName(timeSliceBaseUri);
+                if (olderThanThreshold(dateBucket, thresholdDate)) {
+                    continue;
+                }
                 for (URI hourBaseUri : storageSystem.listDirectories(timeSliceBaseUri)) {
                     log.info("combining staging bucket: %s", hourBaseUri);
                     String hour = getS3FileName(hourBaseUri);
@@ -341,5 +355,10 @@ public class StoredObjectCombiner
     private static boolean groupIsMinutesOld(CombinedGroup group, int minutes)
     {
         return (currentTimeMillis() - group.getUpdatedTimestamp()) >= TimeUnit.MINUTES.toMillis(minutes);
+    }
+
+    private static boolean olderThanThreshold(String dateBucket, String thresholdDate)
+    {
+        return dateBucket.compareTo(thresholdDate) < 0;
     }
 }

@@ -32,6 +32,8 @@ import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.json.JsonCodec;
+import org.joda.time.DateTime;
+import org.joda.time.format.ISODateTimeFormat;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
@@ -57,7 +59,7 @@ import static org.apache.commons.codec.binary.Hex.encodeHexString;
 public class TestS3Combine
 {
     private static final String EVENT_TYPE = "TestEvent";
-    private static final String TIME_SLICE = "2011-08-01";
+    private static final String TIME_SLICE = ISODateTimeFormat.yearMonthDay().print(new DateTime());
     private static final int MIN_LARGE_FILE_LENGTH = 5 * 1024 * 1024;
     private static final int MIN_SMALL_FILE_LENGTH = 10 * 1024;
     private static final String HOUR = "08";

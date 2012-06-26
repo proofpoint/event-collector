@@ -7,6 +7,7 @@
     <version>1.13-SNAPSHOT</version>
     <packaging>pom</packaging>
 
+    <name>event-collector</name>
     <description>Event collector</description>
     <url>https://github.com/proofpoint/event-collector</url>
 
@@ -17,6 +18,34 @@
             <distribution>repo</distribution>
         </license>
     </licenses>
+
+    <developers>
+        <developer>
+            <id>dain</id>
+            <name>Dain Sundstrom</name>
+            <email>dain@iq80.com</email>
+        </developer>
+        <developer>
+            <id>mtraverso</id>
+            <name>Martin Traverso</name>
+            <email>mtraverso@gmail.com</email>
+        </developer>
+        <developer>
+            <id>electrum</id>
+            <name>David Phillips</name>
+            <email>david@acz.org</email>
+        </developer>
+        <developer>
+            <id>davidhagar</id>
+            <name>David Hagar</name>
+            <email>david.hagar@yahoo.com</email>
+        </developer>
+        <developer>
+            <id>ssindkar</id>
+            <name>Shalaka Sindkar</name>
+            <email>ssindkar@proofpoint.com</email>
+        </developer>
+    </developers>
 
     <properties>
         <main-class>com.proofpoint.event.collector.Main</main-class>

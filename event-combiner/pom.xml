@@ -4,7 +4,7 @@
 
     <groupId>com.proofpoint.event</groupId>
     <artifactId>event-combiner</artifactId>
-    <version>1.13-SNAPSHOT</version>
+    <version>1.13</version>
 
     <parent>
         <groupId>com.proofpoint.platform</groupId>

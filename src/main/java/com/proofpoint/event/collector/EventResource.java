@@ -18,8 +18,11 @@ package com.proofpoint.event.collector;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.MapMaker;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.inject.Inject;
+import com.proofpoint.event.client.EventClient;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.POST;
@@ -30,19 +33,28 @@ import javax.ws.rs.core.Response.Status;
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ScheduledExecutorService;
 
 @Path("/v2/event")
 public class EventResource
 {
     private final Set<EventWriter> writers;
     private final Set<String> acceptedEventTypes;
+    private final ScheduledExecutorService executor;
+    private final EventClient eventClient;
+    private final MapMaker maker = new MapMaker();
+    private ConcurrentMap<String, ProcessStats> stats = maker.makeMap();
 
     @Inject
-    public EventResource(Set<EventWriter> writers, ServerConfig config)
+    public EventResource(Set<EventWriter> writers, ServerConfig config, ScheduledExecutorService executor, EventClient eventClient)
     {
         Preconditions.checkNotNull(writers, "writer must not be null");
         this.writers = writers;
         this.acceptedEventTypes = ImmutableSet.copyOf(config.getAcceptedEventTypes());
+        this.stats = Maps.newConcurrentMap();
+        this.executor = executor;
+        this.eventClient = eventClient;
     }
 
     @POST
@@ -56,6 +68,7 @@ public class EventResource
                 for (EventWriter writer : writers) {
                     writer.write(event);
                 }
+                increment(event.getType());
             }
             else {
                 badEvents.add(event.getType());
@@ -72,5 +85,16 @@ public class EventResource
     private boolean acceptedEventType(String type)
     {
         return acceptedEventTypes.isEmpty() || acceptedEventTypes.contains(type);
+    }
+
+    private void increment(String eventType)
+    {
+        ProcessStats eventStats = stats.get(eventType);
+        if (eventStats == null) {
+            stats.putIfAbsent(eventType, new ProcessStats(executor, eventClient, eventType));
+            eventStats = stats.get(eventType);
+            eventStats.start();
+        }
+        eventStats.processed(1);
     }
 }

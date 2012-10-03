@@ -34,12 +34,15 @@ import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObjectCombiner;
 import org.weakref.jmx.guice.MBeanModule;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import javax.inject.Singleton;
 
 import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
 import static com.proofpoint.event.client.EventBinder.eventBinder;
+import static com.proofpoint.event.collector.ProcessStats.HourlyEventCount;
 
 public class MainModule
         implements Module
@@ -76,6 +79,8 @@ public class MainModule
 
         binder.bind(EventWriterStatsResource.class).in(Scopes.SINGLETON);
 
+        eventBinder(binder).bindEventClient(HourlyEventCount.class);
+
         discoveryBinder(binder).bindHttpAnnouncement("collector");
     }
 
@@ -91,5 +96,12 @@ public class MainModule
     private AWSCredentials provideProviderCredentials(ServerConfig config)
     {
         return new BasicAWSCredentials(config.getAwsAccessKey(), config.getAwsSecretKey());
+    }
+
+    @Provides
+    @Singleton
+    private ScheduledExecutorService createScheduledExecutor()
+    {
+        return Executors.newSingleThreadScheduledExecutor();
     }
 }

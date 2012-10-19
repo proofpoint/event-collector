@@ -19,6 +19,7 @@ import com.google.common.base.Function;
 import com.google.common.collect.MapMaker;
 import com.google.common.io.CountingOutputStream;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
@@ -36,6 +37,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -55,6 +57,7 @@ public class SpoolingEventWriter
     private final ObjectMapper objectMapper;
     private final Duration maxBufferTime;
     private final DataSize targetFileSize;
+    private final EventCounters<String> counters = new EventCounters<String>();
 
     private final ConcurrentMap<EventPartition, OutputPartition> outputFiles = new MapMaker()
             .makeComputingMap(new Function<EventPartition, OutputPartition>()
@@ -117,6 +120,17 @@ public class SpoolingEventWriter
         EventPartition partition = partitioner.getPartition(event);
 
         outputFiles.get(partition).write(event);
+        counters.recordReceived(event.getType(), 1);
+    }
+
+    public Map<String, CounterState> getCounts()
+    {
+        return counters.getCounts();
+    }
+
+    public void clearCounts()
+    {
+        counters.resetCounts();
     }
 
     private static class OutputPartition

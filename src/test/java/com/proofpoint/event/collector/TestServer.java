@@ -27,9 +27,11 @@ import com.proofpoint.configuration.ConfigurationFactory;
 import com.proofpoint.configuration.ConfigurationModule;
 import com.proofpoint.discovery.client.DiscoveryModule;
 import com.proofpoint.event.client.JsonEventModule;
+import com.proofpoint.http.client.HttpClientModule;
 import com.proofpoint.http.server.testing.TestingHttpServer;
 import com.proofpoint.http.server.testing.TestingHttpServerModule;
 import com.proofpoint.jaxrs.JaxrsModule;
+import com.proofpoint.json.JsonCodec;
 import com.proofpoint.json.JsonModule;
 import com.proofpoint.node.testing.TestingNodeModule;
 import com.proofpoint.testing.FileUtils;
@@ -47,9 +49,11 @@ import static org.testng.Assert.assertEquals;
 
 public class TestServer
 {
+    private JsonCodec<Object> OBJECT_CODEC = JsonCodec.jsonCodec(Object.class);
     private AsyncHttpClient client;
     private TestingHttpServer server;
     private File tempStageDir;
+    private EventTapWriter eventTapWriter;
 
     @BeforeMethod
     public void setup()
@@ -74,12 +78,16 @@ public class TestServer
                 new JsonModule(),
                 new JaxrsModule(),
                 new JsonEventModule(),
+                new EventTapModule(),
                 new MainModule(),
+                new HttpClientModule(EventTap.class),
                 new ConfigurationModule(new ConfigurationFactory(config)));
 
         server = injector.getInstance(TestingHttpServer.class);
+        eventTapWriter = injector.getInstance(EventTapWriter.class);
 
         server.start();
+        eventTapWriter.start();
         client = new AsyncHttpClient();
     }
 
@@ -87,6 +95,10 @@ public class TestServer
     public void teardown()
             throws Exception
     {
+        if (eventTapWriter != null) {
+            eventTapWriter.stop();
+        }
+
         if (server != null) {
             server.stop();
         }
@@ -124,6 +136,51 @@ public class TestServer
                 .get();
 
         assertEquals(response.getStatusCode(), Status.ACCEPTED.getStatusCode());
+    }
+
+    @Test
+    public void testGetTapCounts()
+            throws Exception
+    {
+        Response response = client.prepareGet(urlFor("/v1/tap/stats")).execute().get();
+
+        assertEquals(response.getStatusCode(), Status.OK.getStatusCode());
+
+        Object actual = OBJECT_CODEC.fromJson(response.getResponseBody());
+        Object expected = OBJECT_CODEC.fromJson("{\"queue\":{},\"flows\":{}}");
+        assertEquals(actual, expected);
+    }
+
+    @Test
+    public void testClearTapCounts()
+            throws Exception
+    {
+        Response response = client.prepareDelete(urlFor("/v1/tap/stats")).execute().get();
+
+        assertEquals(response.getStatusCode(), Status.NO_CONTENT.getStatusCode());
+    }
+
+
+    @Test
+    public void testGetSpoolCounts()
+            throws Exception
+    {
+        Response response = client.prepareGet(urlFor("/v1/spool/stats")).execute().get();
+
+        assertEquals(response.getStatusCode(), Status.OK.getStatusCode());
+
+        Object actual = OBJECT_CODEC.fromJson(response.getResponseBody());
+        Object expected = OBJECT_CODEC.fromJson("{}");
+        assertEquals(actual, expected);
+    }
+
+    @Test
+    public void testClearSpoolCounts()
+            throws Exception
+    {
+        Response response = client.prepareDelete(urlFor("/v1/spool/stats")).execute().get();
+
+        assertEquals(response.getStatusCode(), Status.NO_CONTENT.getStatusCode());
     }
 
     private String urlFor(String path)

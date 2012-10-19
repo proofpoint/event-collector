@@ -25,6 +25,7 @@ import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
+import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.JsonBodyGenerator;
 import com.proofpoint.http.client.Request;
@@ -43,6 +44,7 @@ import java.net.URI;
 import java.security.SecureRandom;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
@@ -50,7 +52,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class EventTapWriter implements EventWriter, BatchHandler<Event>
+public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTapStats
 {
     private static final Logger log = Logger.get(EventTapWriter.class);
     private static final Random RANDOM = new SecureRandom();
@@ -64,6 +66,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
     private final BatchProcessor<Event> batchProcessor;
+    private final EventCounters<List<String>> flowCounters = new EventCounters<List<String>>();
 
     @Inject
     public EventTapWriter(@ServiceType("eventTap") ServiceSelector selector,
@@ -176,7 +179,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
             }
             for (EventFlow flow : currentFlows) {
                 try {
-                    flow.sendEvents(ImmutableList.of(event));
+                    flow.sendEvents(ImmutableList.of(event), flowCounters);
                 }
                 catch (Exception ignored) {
                     // already logged
@@ -185,11 +188,36 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
         }
     }
 
+    @Override
+    public Map<String, CounterState> getQueueCounters()
+    {
+        return batchProcessor.getCounters();
+    }
+
+    @Override
+    public void resetQueueCounters()
+    {
+        batchProcessor.resetCounters();
+    }
+
+    @Override
+    public Map<String, CounterState> getFlowCounters()
+    {
+        return flowCounters.getCounts();
+    }
+
+    @Override
+    public void resetFlowCounters()
+    {
+        flowCounters.resetCounts();
+    }
+
     private class EventFlow
     {
         private final String eventType;
         private final String flowId;
         private final List<URI> taps;
+        private final EventCounters<URI> counters = new EventCounters<URI>();
 
         private EventFlow(String eventType, String flowId, List<URI> taps)
         {
@@ -203,7 +231,12 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
             this.taps = taps;
         }
 
-        public void sendEvents(final List<Event> value)
+        public Map<String, CounterState> getCounters()
+        {
+            return counters.getCounts();
+        }
+
+        public void sendEvents(final List<Event> value, final EventCounters<List<String>> counters)
                 throws Exception
         {
             final URI uri = taps.get(RANDOM.nextInt(taps.size()));
@@ -213,12 +246,16 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
                     .setHeader("Content-Type", "application/json")
                     .setBodyGenerator(JsonBodyGenerator.jsonBodyGenerator(eventsCodec, value))
                     .build();
+
+            final List<String> counterKey = ImmutableList.of(eventType, flowId, uri.toString());
+
             httpClient.execute(request, new ResponseHandler<Void, Exception>()
             {
                 @Override
                 public Exception handleException(Request request, Exception exception)
                 {
                     log.warn(exception, "Error posting %s events to flow %s at %s ", eventType, flowId, uri);
+                    counters.recordLost(counterKey, value.size());
                     return exception;
                 }
 
@@ -228,9 +265,11 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>
                 {
                     if (response.getStatusCode() / 100 != 2) {
                         log.warn("Error posting %s events to flow %s at %s: got response %s %s ", eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
+                        counters.recordLost(counterKey, value.size());
                     }
                     else {
                         log.debug("Posted %s events", value.size());
+                        counters.recordReceived(counterKey, value.size());
                     }
                     return null;
                 }

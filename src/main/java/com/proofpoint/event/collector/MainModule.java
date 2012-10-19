@@ -74,6 +74,8 @@ public class MainModule
 
         eventBinder(binder).bindEventClient(CombineCompleted.class);
 
+        binder.bind(EventWriterStatsResource.class).in(Scopes.SINGLETON);
+
         discoveryBinder(binder).bindHttpAnnouncement("collector");
     }
 

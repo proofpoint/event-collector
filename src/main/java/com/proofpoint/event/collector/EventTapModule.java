@@ -41,8 +41,12 @@ public class EventTapModule implements Module
         jsonCodecBinder(binder).bindListJsonCodec(Event.class);
 
         binder.bind(EventTapWriter.class).in(Scopes.SINGLETON);
+        binder.bind(EventTapStats.class).to(EventTapWriter.class);
+
         MBeanModule.newExporter(binder).export(EventTapWriter.class).withGeneratedName();
         newSetBinder(binder, EventWriter.class).addBinding().to(Key.get(EventTapWriter.class)).in(Scopes.SINGLETON);
+
+        binder.bind(EventTapStatsResource.class).in(Scopes.SINGLETON);
     }
 
     @Provides @EventTap

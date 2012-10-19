@@ -17,12 +17,14 @@ package com.proofpoint.event.collector;
 
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.proofpoint.event.collector.EventCounters.CounterState;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -32,13 +34,15 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static java.lang.String.format;
 
-public class BatchProcessor<T>
+public class BatchProcessor<T extends Event>
 {
     private final BatchHandler<T> handler;
     private final int maxBatchSize;
     private final BlockingQueue<T> queue;
     private final ExecutorService executor;
     private final AtomicReference<Future<?>> future = new AtomicReference<Future<?>>();
+
+    private final EventCounters<String> counters = new EventCounters<String>();
 
     public BatchProcessor(String name, BatchHandler<T> handler, int maxBatchSize, int queueSize)
     {
@@ -96,12 +100,26 @@ public class BatchProcessor<T>
 
         while (!queue.offer(entry)) {
             // throw away oldest and try again
-            queue.poll();
+            T oldest = queue.poll();
+            counters.recordLost(oldest.getType(), 1);
         }
+
+        counters.recordReceived(entry.getType(), 1);
+    }
+
+    public Map<String, CounterState> getCounters()
+    {
+        return counters.getCounts();
+    }
+
+    public void resetCounters()
+    {
+        counters.resetCounts();
     }
 
     public static interface BatchHandler<T>
     {
         void processBatch(Collection<T> entries);
     }
+
 }

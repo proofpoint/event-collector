@@ -25,6 +25,8 @@ import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.google.common.base.Objects.firstNonNull;
+
 @Beta
 public class EventCounters<K>
 {
@@ -110,7 +112,7 @@ public class EventCounters<K>
             return counter;
         }
 
-        counters.putIfAbsent(stringKey, new Counter());
-        return counters.get(stringKey);
+        counter = new Counter();
+        return firstNonNull(counters.putIfAbsent(stringKey, counter), counter);
     }
 }

@@ -39,11 +39,12 @@ import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
-import javax.ws.rs.core.MediaType;
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 
+import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
+import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.Response.Status;
 import static org.testng.Assert.assertEquals;
 
@@ -116,7 +117,7 @@ public class TestServer
     {
         String json = Resources.toString(Resources.getResource("single.json"), Charsets.UTF_8);
         Response response = client.preparePost(urlFor("/v2/event"))
-                .setHeader("Content-Type", MediaType.APPLICATION_JSON)
+                .setHeader("Content-Type", APPLICATION_JSON)
                 .setBody(json)
                 .execute()
                 .get();
@@ -130,7 +131,7 @@ public class TestServer
     {
         String json = Resources.toString(Resources.getResource("multiple.json"), Charsets.UTF_8);
         Response response = client.preparePost(urlFor("/v2/event"))
-                .setHeader("Content-Type", MediaType.APPLICATION_JSON)
+                .setHeader("Content-Type", APPLICATION_JSON)
                 .setBody(json)
                 .execute()
                 .get();
@@ -145,6 +146,7 @@ public class TestServer
         Response response = client.prepareGet(urlFor("/v1/tap/stats")).execute().get();
 
         assertEquals(response.getStatusCode(), Status.OK.getStatusCode());
+        assertEquals(response.getHeader(CONTENT_TYPE), APPLICATION_JSON);
 
         Object actual = OBJECT_CODEC.fromJson(response.getResponseBody());
         Object expected = OBJECT_CODEC.fromJson("{\"queue\":{},\"flows\":{}}");
@@ -168,6 +170,7 @@ public class TestServer
         Response response = client.prepareGet(urlFor("/v1/spool/stats")).execute().get();
 
         assertEquals(response.getStatusCode(), Status.OK.getStatusCode());
+        assertEquals(response.getHeader(CONTENT_TYPE), APPLICATION_JSON);
 
         Object actual = OBJECT_CODEC.fromJson(response.getResponseBody());
         Object expected = OBJECT_CODEC.fromJson("{}");

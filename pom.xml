@@ -130,8 +130,6 @@
                 <configuration>
                     <mavenExecutorId>forked-path</mavenExecutorId>
                     <useReleaseProfile>false</useReleaseProfile>
-                    <arguments>-Psonatype-oss-release</arguments>
-                    <pushChanges>false</pushChanges>
                     <localCheckout>true</localCheckout>
                     <autoVersionSubmodules>true</autoVersionSubmodules>
                     <tagNameFormat>@{project.version}</tagNameFormat>

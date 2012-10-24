@@ -48,21 +48,28 @@ public class TestQueueCounts
     public void testFullQueue()
             throws Exception
     {
-        BatchHandler<Event> blockingHandler = blockingHandler();
-        BatchProcessor<Event> processor = new BatchProcessor<Event>("test", blockingHandler, 100, 1);
+        Object monitor = new Object();
+        BatchHandler<Event> blockingHandler = blockingHandler(monitor);
 
-        processor.start();
+        synchronized (monitor) {
+            BatchProcessor<Event> processor = new BatchProcessor<Event>("test", blockingHandler, 100, 1);
 
-        // This will be processed, and its processing will block the handler
-        processor.put(event("foo"));
+            processor.start();
 
-        // This will remain in the queue and be discarded when we post the next event
-        processor.put(event("foo"));
+            // This will be processed, and its processing will block the handler
+            processor.put(event("foo"));
 
-        processor.put(event("bar"));
+            // Wait for the handler to pick up the item from the queue
+            monitor.wait();
 
-        assertCounterValues(processor.getCounters().get("foo"), 2, 1);
-        assertCounterValues(processor.getCounters().get("bar"), 1, 0);
+            // This will remain in the queue and be discarded when we post the next event
+            processor.put(event("foo"));
+
+            processor.put(event("bar"));
+
+            assertCounterValues(processor.getCounters().get("foo"), 2, 1);
+            assertCounterValues(processor.getCounters().get("bar"), 1, 0);
+        }
     }
 
     private void assertCounterValues(CounterState counterState, long transferred, long lost)
@@ -87,17 +94,24 @@ public class TestQueueCounts
         };
     }
 
-    private static BatchHandler<Event> blockingHandler()
+    private static BatchHandler<Event> blockingHandler(final Object monitor)
     {
         return new BatchHandler<Event>()
         {
             @Override
             public void processBatch(Collection<Event> entries)
             {
-                try {
-                    wait();
-                }
-                catch (InterruptedException ignored) {
+                // Wait for the right time to run
+                synchronized (monitor)
+                {
+                    // Signal that we've started running
+                    monitor.notify();
+                    try {
+                        // Block
+                        monitor.wait();
+                    }
+                    catch (InterruptedException ignored) {
+                    }
                 }
             }
         };

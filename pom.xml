@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.proofpoint.event</groupId>
     <artifactId>event-collector</artifactId>
-    <version>1.11-SNAPSHOT</version>
+    <version>1.13-SNAPSHOT</version>
 
     <name>event-collector</name>
     <description>Event collector</description>
@@ -55,7 +55,13 @@
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk</artifactId>
-            <version>1.2.12</version>
+            <version>1.2.15</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.httpcomponents</groupId>
+                    <artifactId>httpclient</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -261,15 +267,15 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-release-plugin</artifactId>
-                <version>2.2.1</version>
+                <version>2.2.2</version>
                 <configuration>
                     <mavenExecutorId>forked-path</mavenExecutorId>
                     <useReleaseProfile>false</useReleaseProfile>
-                    <arguments>-Psonatype-oss-release</arguments>
                     <pushChanges>false</pushChanges>
                     <localCheckout>true</localCheckout>
                     <autoVersionSubmodules>true</autoVersionSubmodules>
                     <tagNameFormat>@{project.version}</tagNameFormat>
+                    <arguments>${arguments}</arguments>
                 </configuration>
             </plugin>
         </plugins>

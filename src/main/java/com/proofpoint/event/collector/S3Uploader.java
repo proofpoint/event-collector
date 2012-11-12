@@ -15,48 +15,78 @@
  */
 package com.proofpoint.event.collector;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.common.io.Closeables;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
+import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
 import org.codehaus.jackson.JsonParser;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.iq80.snappy.SnappyInputStream;
 
 import javax.annotation.PreDestroy;
+import javax.annotation.PostConstruct;
 import javax.inject.Inject;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Location;
+import static com.proofpoint.json.JsonCodec.jsonCodec;
 
 public class S3Uploader
         implements Uploader
 {
     private static final Logger log = Logger.get(S3Uploader.class);
+    private static final JsonCodec<Event> codec = jsonCodec(Event.class);
     private final StorageSystem storageSystem;
     private final File localStagingDirectory;
-    private final ExecutorService executor;
+    private final ExecutorService uploadExecutor;
+    private final ExecutorService pendingFileExecutor;
     private final String s3StagingLocation;
+    private final EventPartitioner partitioner;
+    private final File failedFileDir;
 
     @Inject
-    public S3Uploader(StorageSystem storageSystem, ServerConfig config)
+    public S3Uploader(StorageSystem storageSystem,
+            ServerConfig config,
+            EventPartitioner partitioner,
+            @UploaderExecutorService ExecutorService uploadExecutor,
+            @PendingFileExecutorService ExecutorService pendingFileExecutor)
     {
         this.storageSystem = storageSystem;
         this.localStagingDirectory = config.getLocalStagingDirectory();
-        s3StagingLocation = config.getS3StagingLocation();
-        this.executor = Executors.newFixedThreadPool(config.getMaxUploadThreads(),
-                new ThreadFactoryBuilder().setNameFormat("S3Uploader-%s").build());
+        this.s3StagingLocation = config.getS3StagingLocation();
+        this.partitioner = partitioner;
+        this.uploadExecutor = uploadExecutor;
+        this.pendingFileExecutor = pendingFileExecutor;
+        this.failedFileDir = new File(localStagingDirectory.getPath(), "failed");
 
         //noinspection ResultOfMethodCallIgnored
         localStagingDirectory.mkdirs();
         Preconditions.checkArgument(localStagingDirectory.isDirectory(), "localStagingDirectory is not a directory (%s)", localStagingDirectory);
+        failedFileDir.mkdir();
+        Preconditions.checkArgument(failedFileDir.isDirectory(), "failedFileDir is not a directory (%s)", failedFileDir);
+    }
+
+    @PostConstruct
+    public void start()
+    {
+        File[] pendingFiles = localStagingDirectory.listFiles();
+
+        for (final File file : pendingFiles) {
+            if (file.isFile()) {
+                enqueuePendingFile(file);
+            }
+        }
     }
 
     @Override
@@ -69,7 +99,7 @@ public class S3Uploader
     @Override
     public void enqueueUpload(final EventPartition partition, final File file)
     {
-        executor.submit(new Runnable()
+        uploadExecutor.submit(new Runnable()
         {
             @Override
             public void run()
@@ -79,6 +109,7 @@ public class S3Uploader
                 }
                 catch (Exception e) {
                     log.error(e, "upload failed: %s: %s", partition, file);
+                    enqueuePendingFile(file);
                 }
             }
         });
@@ -88,7 +119,8 @@ public class S3Uploader
     public void destroy()
             throws IOException
     {
-        executor.shutdown();
+        uploadExecutor.shutdown();
+        pendingFileExecutor.shutdown();
     }
 
     private void upload(EventPartition partition, File file)
@@ -123,5 +155,39 @@ public class S3Uploader
         finally {
             parser.close();
         }
+    }
+
+    @VisibleForTesting
+    public void enqueuePendingFile(final File file)
+    {
+        pendingFileExecutor.submit(new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                BufferedReader in = null;
+                FileInputStream filein = null;
+                try {
+                    filein = new FileInputStream(file);
+                    in = new BufferedReader(new InputStreamReader(new SnappyInputStream(filein), Charsets.UTF_8));
+                    Event event = codec.fromJson(in.readLine());
+                    EventPartition partition = partitioner.getPartition(event);
+                    enqueueUpload(partition, file);
+                }
+                catch (Exception e) {
+                    log.error(e, "Error while uploading file %s", file.getName());
+                    file.renameTo(new File(failedFileDir, file.getName()));
+                }
+                finally {
+                    try {
+                        Closeables.close(filein, true);
+                        Closeables.close(in, true);
+                    }
+                    catch (IOException e) {
+                        log.error(e, "Error closing event file");
+                    }
+                }
+            }
+        });
     }
 }

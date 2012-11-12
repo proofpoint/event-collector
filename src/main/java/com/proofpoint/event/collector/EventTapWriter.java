@@ -16,9 +16,13 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.base.Preconditions;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
 import com.proofpoint.discovery.client.ServiceDescriptor;
@@ -41,7 +45,6 @@ import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import java.net.URI;
-import java.security.SecureRandom;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +58,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTapStats
 {
     private static final Logger log = Logger.get(EventTapWriter.class);
-    private static final Random RANDOM = new SecureRandom();
+    private static final Random RANDOM = new Random();
 
     private final ServiceSelector selector;
     private final HttpClient httpClient;
@@ -65,7 +68,21 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     private final AtomicReference<Multimap<String, EventFlow>> eventFlows = new AtomicReference<Multimap<String, EventFlow>>(ImmutableMultimap.<String, EventFlow>of());
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
-    private final BatchProcessor<Event> batchProcessor;
+
+    private final int maxBatchSize;
+    private final int queueSize;
+    private final LoadingCache<String, BatchProcessor<Event>> processors = CacheBuilder.newBuilder().build(new CacheLoader<String, BatchProcessor<Event>>()
+    {
+        @Override
+        public BatchProcessor<Event> load(String key)
+                throws Exception
+        {
+            BatchProcessor<Event> processor = new BatchProcessor<Event>(key, EventTapWriter.this, maxBatchSize, queueSize);
+            processor.start();
+            return processor;
+        }
+    });
+
     private final EventCounters<List<String>> flowCounters = new EventCounters<List<String>>();
 
     @Inject
@@ -81,14 +98,14 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
         Preconditions.checkNotNull(executorService, "executorService is null");
         Preconditions.checkNotNull(config, "config is null");
 
+        this.maxBatchSize = config.getMaxBatchSize();
+        this.queueSize = config.getQueueSize();
         this.selector = selector;
         this.httpClient = httpClient;
         this.eventsCodec = eventCodec;
         this.executorService = executorService;
         this.flowRefreshDuration = config.getEventTapRefreshDuration();
         refreshFlows();
-
-        batchProcessor = new BatchProcessor<Event>("event-tap", this, config.getMaxBatchSize(), config.getQueueSize());
     }
 
     @PostConstruct
@@ -98,8 +115,6 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
         if (refreshJob != null) {
             return;
         }
-
-        batchProcessor.start();
 
         refreshJob = executorService.scheduleWithFixedDelay(new Runnable()
         {
@@ -114,9 +129,11 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @PreDestroy
     public synchronized void stop()
     {
-        if (refreshJob != null) {
-            batchProcessor.stop();
+        for(BatchProcessor<Event> processor : processors.asMap().values()) {
+            processor.stop();
+        }
 
+        if (refreshJob != null) {
             refreshJob.cancel(false);
             refreshJob = null;
         }
@@ -159,7 +176,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @Override
     public void write(Event event)
     {
-        batchProcessor.put(event);
+        processors.getUnchecked(event.getType()).put(event);
     }
 
     @Override
@@ -170,20 +187,13 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
             return;
         }
 
-        String currentEventType = "";
-        Collection<EventFlow> currentFlows = null;
-        for (Event event : events) {
-            if (!currentEventType.equals(event.getType())) {
-                currentEventType = event.getType();
-                currentFlows = eventFlows.get(event.getType());
+        Collection<EventFlow> currentFlows = eventFlows.get(events.iterator().next().getType());
+        for (EventFlow flow : currentFlows) {
+            try {
+                flow.sendEvents(ImmutableList.copyOf(events), flowCounters);
             }
-            for (EventFlow flow : currentFlows) {
-                try {
-                    flow.sendEvents(ImmutableList.of(event), flowCounters);
-                }
-                catch (Exception ignored) {
-                    // already logged
-                }
+            catch (Exception ignored) {
+                // already logged
             }
         }
     }
@@ -191,13 +201,19 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @Override
     public Map<String, CounterState> getQueueCounters()
     {
-        return batchProcessor.getCounters();
+        ImmutableMap.Builder<String, CounterState> counters = ImmutableMap.builder();
+        for(Entry<String, BatchProcessor<Event>> entry : processors.asMap().entrySet()) {
+            counters.put(entry.getKey(), entry.getValue().getCounterState());
+        }
+        return counters.build();
     }
 
     @Override
     public void resetQueueCounters()
     {
-        batchProcessor.resetCounters();
+        for(BatchProcessor<Event> processor : processors.asMap().values()) {
+            processor.resetCounter();
+        }
     }
 
     @Override

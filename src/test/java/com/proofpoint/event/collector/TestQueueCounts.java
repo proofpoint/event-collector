@@ -32,16 +32,15 @@ public class TestQueueCounts
     public void testEnqueue()
             throws Exception
     {
-        BatchProcessor<Event> processor = new BatchProcessor<Event>("test", handler(), 100, 100);
+        BatchProcessor<Event> processor = new BatchProcessor<Event>("foo", handler(), 100, 100);
         processor.start();
 
         processor.put(event("foo"));
-        assertEquals(processor.getCounters().get("foo").getReceived(), 1);
+        assertEquals(processor.getCounterState().getReceived(), 1);
 
-        processor.put(event("bar"));
-        processor.put(event("bar"));
-        assertCounterValues(processor.getCounters().get("foo"), 1, 0);
-        assertCounterValues(processor.getCounters().get("bar"), 2, 0);
+        processor.put(event("foo"));
+        processor.put(event("foo"));
+        assertCounterValues(processor.getCounterState(), 3, 0);
     }
 
     @Test
@@ -52,7 +51,7 @@ public class TestQueueCounts
         BatchHandler<Event> blockingHandler = blockingHandler(monitor);
 
         synchronized (monitor) {
-            BatchProcessor<Event> processor = new BatchProcessor<Event>("test", blockingHandler, 100, 1);
+            BatchProcessor<Event> processor = new BatchProcessor<Event>("foo", blockingHandler, 100, 1);
 
             processor.start();
 
@@ -65,10 +64,9 @@ public class TestQueueCounts
             // This will remain in the queue and be discarded when we post the next event
             processor.put(event("foo"));
 
-            processor.put(event("bar"));
+            processor.put(event("foo"));
 
-            assertCounterValues(processor.getCounters().get("foo"), 2, 1);
-            assertCounterValues(processor.getCounters().get("bar"), 1, 0);
+            assertCounterValues(processor.getCounterState(), 3, 1);
         }
     }
 

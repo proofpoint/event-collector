@@ -19,6 +19,7 @@ import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.Binder;
 import com.google.inject.Key;
 import com.google.inject.Module;
@@ -32,6 +33,7 @@ import com.proofpoint.event.collector.combiner.S3StorageSystem;
 import com.proofpoint.event.collector.combiner.ScheduledCombiner;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObjectCombiner;
+import java.util.concurrent.ExecutorService;
 import org.weakref.jmx.guice.MBeanModule;
 
 import java.util.concurrent.Executors;
@@ -103,5 +105,22 @@ public class MainModule
     private ScheduledExecutorService createScheduledExecutor()
     {
         return Executors.newSingleThreadScheduledExecutor();
+    }
+
+    @Provides
+    @Singleton
+    @UploaderExecutorService
+    private ExecutorService createUploaderExecutor(ServerConfig config)
+    {
+        return Executors.newFixedThreadPool(config.getMaxUploadThreads(),
+                new ThreadFactoryBuilder().setNameFormat("S3Uploader-%s").build());
+    }
+
+    @Provides
+    @Singleton
+    @PendingFileExecutorService
+     private ExecutorService createPendingFileExecutor()
+    {
+        return Executors.newSingleThreadExecutor();
     }
 }

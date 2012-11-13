@@ -17,6 +17,7 @@ package com.proofpoint.event.collector;
 
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.proofpoint.event.collector.EventCounters.Counter;
 import com.proofpoint.event.collector.EventCounters.CounterState;
 
 import javax.annotation.PostConstruct;
@@ -24,7 +25,6 @@ import javax.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -42,7 +42,7 @@ public class BatchProcessor<T extends Event>
     private final ExecutorService executor;
     private final AtomicReference<Future<?>> future = new AtomicReference<Future<?>>();
 
-    private final EventCounters<String> counters = new EventCounters<String>();
+    private final AtomicReference<Counter> counter = new AtomicReference<Counter>(new Counter());
 
     public BatchProcessor(String name, BatchHandler<T> handler, int maxBatchSize, int queueSize)
     {
@@ -61,7 +61,7 @@ public class BatchProcessor<T extends Event>
     @PostConstruct
     public void start()
     {
-        Future<?> future = executor.submit(new Runnable()
+        future.set(executor.submit(new Runnable()
         {
             @Override
             public void run()
@@ -81,9 +81,7 @@ public class BatchProcessor<T extends Event>
                     }
                 }
             }
-        });
-
-        this.future.set(future);
+        }));
     }
 
     @PreDestroy
@@ -95,26 +93,26 @@ public class BatchProcessor<T extends Event>
 
     public void put(T entry)
     {
-        Preconditions.checkState(future.get() != null && !future.get().isCancelled(), "Processor is not running");
+        Preconditions.checkState(future != null && !future.get().isCancelled(), "Processor is not running");
         Preconditions.checkNotNull(entry, "entry is null");
 
         while (!queue.offer(entry)) {
             // throw away oldest and try again
-            T oldest = queue.poll();
-            counters.recordLost(oldest.getType(), 1);
+            queue.poll();
+            counter.get().recordLost(1);
         }
 
-        counters.recordReceived(entry.getType(), 1);
+        counter.get().recordReceived(1);
     }
 
-    public Map<String, CounterState> getCounters()
+    public CounterState getCounterState()
     {
-        return counters.getCounts();
+        return counter.get().getState();
     }
 
-    public void resetCounters()
+    public void resetCounter()
     {
-        counters.resetCounts();
+        counter.set(new Counter());
     }
 
     public static interface BatchHandler<T>

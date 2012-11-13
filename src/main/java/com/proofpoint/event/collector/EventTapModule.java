@@ -29,7 +29,7 @@ import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
 import static com.proofpoint.json.JsonCodecBinder.jsonCodecBinder;
-import static java.util.concurrent.Executors.newScheduledThreadPool;
+import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 
 public class EventTapModule implements Module
 {
@@ -50,8 +50,8 @@ public class EventTapModule implements Module
     }
 
     @Provides @EventTap
-    public ScheduledExecutorService createExecutor(EventTapConfig config)
+    public ScheduledExecutorService createExecutor()
     {
-        return newScheduledThreadPool(config.getEventTapThreads(), new ThreadFactoryBuilder().setNameFormat("event-tap-%s").build());
+        return newSingleThreadScheduledExecutor(new ThreadFactoryBuilder().setNameFormat("event-tap-%s").build());
     }
 }

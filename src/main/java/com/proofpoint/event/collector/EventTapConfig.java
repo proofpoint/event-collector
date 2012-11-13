@@ -30,12 +30,14 @@ public class EventTapConfig
     private int queueSize = 40000;
 
 
+    @Deprecated
     @Min(1)
     public int getEventTapThreads()
     {
         return eventTapThreads;
     }
 
+    @Deprecated
     @Config("collector.event-tap.threads")
     public void setEventTapThreads(int eventTapThreads)
     {

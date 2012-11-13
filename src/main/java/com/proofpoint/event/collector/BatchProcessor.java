@@ -61,7 +61,7 @@ public class BatchProcessor<T extends Event>
     @PostConstruct
     public void start()
     {
-        this.future.set(this.executor.submit(new Runnable()
+        future.set(executor.submit(new Runnable()
         {
             @Override
             public void run()
@@ -87,7 +87,7 @@ public class BatchProcessor<T extends Event>
     @PreDestroy
     public void stop()
     {
-        this.future.get().cancel(true);
+        future.get().cancel(true);
         executor.shutdownNow();
     }
 

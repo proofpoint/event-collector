@@ -83,7 +83,9 @@ public class S3Uploader
         File[] pendingFiles = localStagingDirectory.listFiles();
 
         for (final File file : pendingFiles) {
-            enqueuePendingFile(file);
+            if (file.isFile()) {
+                enqueuePendingFile(file);
+            }
         }
     }
 
@@ -177,8 +179,18 @@ public class S3Uploader
                     file.renameTo(new File(failedFileDir, file.getName()));
                 }
                 finally {
-                    Closeables.closeQuietly(filein);
-                    Closeables.closeQuietly(in);
+                    try {
+                        Closeables.close(filein, true);
+                    }
+                    catch (IOException e) {
+                        log.error(e, "Error closing FileInputStream");
+                    }
+                    try {
+                        Closeables.close(in, true);
+                    }
+                    catch (IOException e) {
+                        log.error(e, "Error closing BufferedReader");
+                    }
                 }
             }
         });

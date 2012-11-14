@@ -22,6 +22,7 @@ import com.proofpoint.event.collector.combiner.CombinedStoredObject;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
 import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 import java.util.Set;
@@ -36,7 +37,9 @@ public class TestS3Uploader
 {
     private File tempStageDir;
     private S3Uploader uploader;
-    DummyStorageSystem storageSystem;
+    private DummyStorageSystem storageSystem;
+    private ServerConfig serverConfig;
+    private SerialScheduledExecutorService executor;
 
     @BeforeMethod
     public void setup()
@@ -46,12 +49,33 @@ public class TestS3Uploader
         tempStageDir = Files.createTempDir();
         tempStageDir.deleteOnExit();
 
-        ServerConfig serverConfig = new ServerConfig()
+        serverConfig = new ServerConfig()
                     .setLocalStagingDirectory(tempStageDir)
                     .setS3StagingLocation("s3://fake-location");
 
-        SerialScheduledExecutorService executor = new SerialScheduledExecutorService();
+        executor = new SerialScheduledExecutorService();
+    }
+
+    @Test
+    public void testSuccessOnFailedDirExists()
+    {
+        new File(tempStageDir.getPath(), "failed").mkdir();
         uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
+    }
+
+    @Test (expectedExceptions = IllegalArgumentException.class)
+    public void testFailureOnFailedFileExists() throws IOException
+    {
+        new File(tempStageDir.getPath(), "failed").createNewFile();
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
+    }
+
+    @Test
+    public void testSuccessOnDirectoriesInStaging() throws IOException
+    {
+        new File(tempStageDir.getPath(), "directory").mkdir();
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
+        uploader.start();
     }
 
     @Test
@@ -61,6 +85,7 @@ public class TestS3Uploader
         Files.copy(new File(Resources.getResource("pending.json.snappy").toURI()), pendingFile);
 
         assertTrue(pendingFile.exists());
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
         uploader.start();
         assertFalse(pendingFile.exists());
         assertTrue(storageSystem.hasReceivedFile(pendingFile));
@@ -73,6 +98,7 @@ public class TestS3Uploader
         Files.copy(new File(Resources.getResource( "invalidjson.snappy").toURI()), invalidJsonFile);
 
         assertTrue(invalidJsonFile.exists());
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
         uploader.start();
         assertFalse(invalidJsonFile.exists());
         assertTrue(new File(tempStageDir.getPath() + "/failed" , invalidJsonFile.getName()).exists());

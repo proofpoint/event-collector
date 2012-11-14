@@ -1,12 +1,11 @@
 Event collector
 
-WARNING:
   The collector buffers data locally for up to collector.max-buffer-time,
-  which defaults to one minute.  Currently, the collector does not upload
-  this locally buffered data after a restart, nor does it save the event
-  name or partition for the files (the filename is simply a UUID).  This
-  means that the buffered data is effectively lost when the server is
-  stopped.  This will be fixed in a future release.
+  which defaults to one minute.  The collector uploads
+  this locally buffered, non uploaded data after a restart.
+  Any upload failed due to errors in accessing the file, snappy errors
+  or Json format errors will result in the file being moved
+  to the 'failed' subdirectory of the local staging location.
 
 
 API

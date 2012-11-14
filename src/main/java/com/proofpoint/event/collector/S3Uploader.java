@@ -181,15 +181,10 @@ public class S3Uploader
                 finally {
                     try {
                         Closeables.close(filein, true);
-                    }
-                    catch (IOException e) {
-                        log.error(e, "Error closing FileInputStream");
-                    }
-                    try {
                         Closeables.close(in, true);
                     }
                     catch (IOException e) {
-                        log.error(e, "Error closing BufferedReader");
+                        log.error(e, "Error closing FileInputStream");
                     }
                 }
             }

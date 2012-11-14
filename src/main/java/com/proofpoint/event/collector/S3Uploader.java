@@ -184,7 +184,7 @@ public class S3Uploader
                         Closeables.close(in, true);
                     }
                     catch (IOException e) {
-                        log.error(e, "Error closing FileInputStream");
+                        log.error(e, "Error closing event file");
                     }
                 }
             }

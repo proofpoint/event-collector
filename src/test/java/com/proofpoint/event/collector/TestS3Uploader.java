@@ -15,6 +15,7 @@
  */
 package com.proofpoint.event.collector;
 
+import com.google.common.collect.Sets;
 import com.google.common.io.Files;
 import com.google.common.io.Resources;
 import com.proofpoint.event.collector.combiner.CombinedStoredObject;
@@ -22,8 +23,8 @@ import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
 import java.io.File;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.List;
+import java.util.Set;
 import org.logicalshift.concurrent.SerialScheduledExecutorService;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -33,20 +34,17 @@ import static org.testng.Assert.assertTrue;
 
 public class TestS3Uploader
 {
+    private File tempStageDir;
     private S3Uploader uploader;
-    private File pendingFile;
     DummyStorageSystem storageSystem;
 
     @BeforeMethod
-    public void setup() throws Exception
+    public void setup()
     {
         storageSystem = new DummyStorageSystem();
 
-        File tempStageDir = Files.createTempDir();
+        tempStageDir = Files.createTempDir();
         tempStageDir.deleteOnExit();
-
-        pendingFile = new File(tempStageDir, "pending.json.snappy");
-        Files.copy(new File(Resources.getResource("pending.json.snappy").toURI()), pendingFile);
 
         ServerConfig serverConfig = new ServerConfig()
                     .setLocalStagingDirectory(tempStageDir)
@@ -57,18 +55,43 @@ public class TestS3Uploader
     }
 
     @Test
-    public void testEnquePendingFiles() throws URISyntaxException
+    public void testUploadPendingFiles() throws Exception
     {
+        File pendingFile = new File(tempStageDir, "pending.json.snappy");
+        Files.copy(new File(Resources.getResource("pending.json.snappy").toURI()), pendingFile);
+
         assertTrue(pendingFile.exists());
         uploader.start();
         assertFalse(pendingFile.exists());
+        assertTrue(storageSystem.hasReceivedFile(pendingFile));
+    }
+
+    @Test
+    public void testUploadPendingFilesFailure() throws Exception
+    {
+        File invalidJsonFile = new File(tempStageDir, "invalidjson.snappy");
+        Files.copy(new File(Resources.getResource( "invalidjson.snappy").toURI()), invalidJsonFile);
+
+        assertTrue(invalidJsonFile.exists());
+        uploader.start();
+        assertFalse(invalidJsonFile.exists());
+        assertTrue(new File(tempStageDir.getPath() + "/failed" , invalidJsonFile.getName()).exists());
+        assertFalse(storageSystem.hasReceivedFile(invalidJsonFile));
     }
 
     private class DummyStorageSystem implements StorageSystem
     {
+        private Set<File> receivedFiles = Sets.newHashSet();
+
+        public boolean hasReceivedFile(File file)
+        {
+            return receivedFiles.contains(file);
+        }
+
         @Override
         public StoredObject putObject(URI location, File source)
         {
+            receivedFiles.add(source);
             return new StoredObject(URI.create("s3://dummyUri/bucket/day/hour"));
         }
 

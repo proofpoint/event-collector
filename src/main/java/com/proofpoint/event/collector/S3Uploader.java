@@ -49,28 +49,32 @@ public class S3Uploader
     private static final JsonCodec<Event> codec = jsonCodec(Event.class);
     private final StorageSystem storageSystem;
     private final File localStagingDirectory;
-    private final ExecutorService executor;
+    private final ExecutorService uploadExecutor;
     private final ExecutorService pendingFileExecutor;
     private final String s3StagingLocation;
     private final EventPartitioner partitioner;
+    private final File failedFileDir;
 
     @Inject
     public S3Uploader(StorageSystem storageSystem,
             ServerConfig config,
             EventPartitioner partitioner,
-            @UploaderExecutorService ExecutorService executor,
+            @UploaderExecutorService ExecutorService uploadExecutor,
             @PendingFileExecutorService ExecutorService pendingFileExecutor)
     {
         this.storageSystem = storageSystem;
         this.localStagingDirectory = config.getLocalStagingDirectory();
         this.s3StagingLocation = config.getS3StagingLocation();
         this.partitioner = partitioner;
-        this.executor = executor;
+        this.uploadExecutor = uploadExecutor;
         this.pendingFileExecutor = pendingFileExecutor;
+        this.failedFileDir = new File(localStagingDirectory.getPath(), "failed");
 
         //noinspection ResultOfMethodCallIgnored
         localStagingDirectory.mkdirs();
         Preconditions.checkArgument(localStagingDirectory.isDirectory(), "localStagingDirectory is not a directory (%s)", localStagingDirectory);
+        failedFileDir.mkdir();
+        Preconditions.checkArgument(failedFileDir.isDirectory(), "failedFileDir is not a directory (%s)", failedFileDir);
     }
 
     @PostConstruct
@@ -93,7 +97,7 @@ public class S3Uploader
     @Override
     public void enqueueUpload(final EventPartition partition, final File file)
     {
-        executor.submit(new Runnable()
+        uploadExecutor.submit(new Runnable()
         {
             @Override
             public void run()
@@ -113,7 +117,7 @@ public class S3Uploader
     public void destroy()
             throws IOException
     {
-        executor.shutdown();
+        uploadExecutor.shutdown();
         pendingFileExecutor.shutdown();
     }
 
@@ -159,23 +163,22 @@ public class S3Uploader
             @Override
             public void run()
             {
+                BufferedReader in = null;
+                FileInputStream filein = null;
                 try {
-                    BufferedReader in = null;
-                    try {
-                        in = new BufferedReader(new InputStreamReader(new SnappyInputStream(new FileInputStream(file)), Charsets.UTF_8));
-                        Event event = codec.fromJson(in.readLine());
-                        EventPartition partition = partitioner.getPartition(event);
-                        enqueueUpload(partition, file);
-                    }
-                    catch (IOException e) {
-                        log.error(e, "Error while uploading file %s", file.getName());
-                    }
-                    finally {
-                        Closeables.closeQuietly(in);
-                    }
+                    filein = new FileInputStream(file);
+                    in = new BufferedReader(new InputStreamReader(new SnappyInputStream(filein), Charsets.UTF_8));
+                    Event event = codec.fromJson(in.readLine());
+                    EventPartition partition = partitioner.getPartition(event);
+                    enqueueUpload(partition, file);
                 }
                 catch (Exception e) {
-                    log.error(e, "Unable to schedule pending file %s for upload", file.getName());
+                    log.error(e, "Error while uploading file %s", file.getName());
+                    file.renameTo(new File(failedFileDir, file.getName()));
+                }
+                finally {
+                    Closeables.closeQuietly(filein);
+                    Closeables.closeQuietly(in);
                 }
             }
         });

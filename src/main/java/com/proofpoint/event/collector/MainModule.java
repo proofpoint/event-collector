@@ -33,8 +33,8 @@ import com.proofpoint.event.collector.combiner.S3StorageSystem;
 import com.proofpoint.event.collector.combiner.ScheduledCombiner;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObjectCombiner;
+import com.proofpoint.event.collector.stats.CollectorStats;
 import java.util.concurrent.ExecutorService;
-import org.weakref.jmx.guice.MBeanModule;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -45,6 +45,7 @@ import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
 import static com.proofpoint.event.client.EventBinder.eventBinder;
 import static com.proofpoint.event.collector.ProcessStats.HourlyEventCount;
+import static org.weakref.jmx.guice.MBeanModule.newExporter;
 
 public class MainModule
         implements Module
@@ -62,13 +63,13 @@ public class MainModule
         binder.bind(StorageSystem.class).to(S3StorageSystem.class).in(Scopes.SINGLETON);
 
         binder.bind(SpoolingEventWriter.class).in(Scopes.SINGLETON);
-        MBeanModule.newExporter(binder).export(SpoolingEventWriter.class).withGeneratedName();
+        newExporter(binder).export(SpoolingEventWriter.class).withGeneratedName();
         newSetBinder(binder, EventWriter.class).addBinding().to(Key.get(SpoolingEventWriter.class)).in(Scopes.SINGLETON);
 
         binder.bind(EventResource.class).in(Scopes.SINGLETON);
 
         binder.bind(StoredObjectCombiner.class).in(Scopes.SINGLETON);
-        MBeanModule.newExporter(binder).export(StoredObjectCombiner.class).withGeneratedName();
+        newExporter(binder).export(StoredObjectCombiner.class).withGeneratedName();
 
         binder.bind(ScheduledCombiner.class).in(Scopes.SINGLETON);
 
@@ -82,6 +83,9 @@ public class MainModule
         binder.bind(EventWriterStatsResource.class).in(Scopes.SINGLETON);
 
         eventBinder(binder).bindEventClient(HourlyEventCount.class);
+
+        binder.bind(CollectorStats.class).in(Scopes.SINGLETON);
+        newExporter(binder).export(CollectorStats.class).withGeneratedName();
 
         discoveryBinder(binder).bindHttpAnnouncement("collector");
     }
@@ -119,8 +123,8 @@ public class MainModule
     @Provides
     @Singleton
     @PendingFileExecutorService
-     private ExecutorService createPendingFileExecutor()
+     private ScheduledExecutorService createPendingFileExecutor()
     {
-        return Executors.newSingleThreadExecutor();
+        return Executors.newSingleThreadScheduledExecutor();
     }
 }

@@ -49,6 +49,8 @@ public class TestServerConfig
                 .setS3MetadataLocation(null)
                 .setCombinerEnabled(false)
                 .setCombinerMaxDaysBack(14)
+                .setRetryPeriod(new Duration(5, TimeUnit.MINUTES))
+                .setRetryDelay(new Duration(0, TimeUnit.MINUTES))
         );
     }
 
@@ -69,6 +71,8 @@ public class TestServerConfig
                 .put("collector.s3-metadata-location", "s3://example-metadata/")
                 .put("collector.combiner.enabled", "true")
                 .put("collector.combiner.max-days-back", "10")
+                .put("collector.retry-period", "10m")
+                .put("collector.retry-delay", "4m")
                 .build();
 
         ServerConfig expected = new ServerConfig()
@@ -84,7 +88,9 @@ public class TestServerConfig
                 .setS3DataLocation("s3://example-data/")
                 .setS3MetadataLocation("s3://example-metadata/")
                 .setCombinerEnabled(true)
-                .setCombinerMaxDaysBack(10);
+                .setCombinerMaxDaysBack(10)
+                .setRetryPeriod(new Duration(10, TimeUnit.MINUTES))
+                .setRetryDelay(new Duration(4, TimeUnit.MINUTES));
 
         ConfigAssertions.assertFullMapping(properties, expected);
     }

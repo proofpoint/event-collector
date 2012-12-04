@@ -48,6 +48,8 @@ public class ServerConfig
     private boolean combinerEnabled = false;
     private int combinerMaxDaysBack = 14;
     private Set<String> acceptedEventTypes = ImmutableSet.of();
+    private Duration retryPeriod = new Duration(5, TimeUnit.MINUTES);
+    private Duration retryDelay = new Duration(0, TimeUnit.MINUTES);
 
     @NotNull
     public Set<String> getAcceptedEventTypes()
@@ -242,5 +244,31 @@ public class ServerConfig
     public int getCombinerMaxDaysBack()
     {
         return combinerMaxDaysBack;
+    }
+
+    @Config("collector.retry-period")
+    @ConfigDescription("period between iterations for retrying files that were not successfully uploaded")
+    public ServerConfig setRetryPeriod(Duration retryPeriod)
+    {
+        this.retryPeriod = retryPeriod;
+        return this;
+    }
+
+    public Duration getRetryPeriod()
+    {
+        return retryPeriod;
+    }
+
+    @Config("collector.retry-delay")
+    @ConfigDescription("delay from startup before the the first retry iteration begins")
+    public ServerConfig setRetryDelay(Duration retryDelay)
+    {
+        this.retryDelay = retryDelay;
+        return this;
+    }
+
+    public Duration getRetryDelay()
+    {
+        return retryDelay;
     }
 }

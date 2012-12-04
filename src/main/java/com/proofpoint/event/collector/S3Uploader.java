@@ -21,8 +21,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.io.Closeables;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
+import com.proofpoint.event.collector.stats.CollectorStats;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
+import com.proofpoint.units.Duration;
 import org.codehaus.jackson.JsonParser;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.iq80.snappy.SnappyInputStream;
@@ -38,7 +40,9 @@ import java.io.InputStreamReader;
 import java.net.URI;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 
+import java.util.concurrent.TimeUnit;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.json.JsonCodec.jsonCodec;
 
@@ -50,31 +54,42 @@ public class S3Uploader
     private final StorageSystem storageSystem;
     private final File localStagingDirectory;
     private final ExecutorService uploadExecutor;
-    private final ExecutorService pendingFileExecutor;
+    private final ScheduledExecutorService retryExecutor;
     private final String s3StagingLocation;
     private final EventPartitioner partitioner;
     private final File failedFileDir;
+    private final File retryFileDir;
+    private final Duration retryPeriod;
+    private final Duration retryDelay;
+    private final CollectorStats stats;
 
     @Inject
     public S3Uploader(StorageSystem storageSystem,
             ServerConfig config,
             EventPartitioner partitioner,
             @UploaderExecutorService ExecutorService uploadExecutor,
-            @PendingFileExecutorService ExecutorService pendingFileExecutor)
+            @PendingFileExecutorService ScheduledExecutorService retryExecutor,
+            CollectorStats stats)
     {
         this.storageSystem = storageSystem;
         this.localStagingDirectory = config.getLocalStagingDirectory();
         this.s3StagingLocation = config.getS3StagingLocation();
         this.partitioner = partitioner;
         this.uploadExecutor = uploadExecutor;
-        this.pendingFileExecutor = pendingFileExecutor;
+        this.retryExecutor = retryExecutor;
         this.failedFileDir = new File(localStagingDirectory.getPath(), "failed");
+        this.retryFileDir = new File(localStagingDirectory.getPath(), "retry");
+        this.retryPeriod = config.getRetryPeriod();
+        this.retryDelay = config.getRetryDelay();
+        this.stats = stats;
 
         //noinspection ResultOfMethodCallIgnored
         localStagingDirectory.mkdirs();
         Preconditions.checkArgument(localStagingDirectory.isDirectory(), "localStagingDirectory is not a directory (%s)", localStagingDirectory);
         failedFileDir.mkdir();
         Preconditions.checkArgument(failedFileDir.isDirectory(), "failedFileDir is not a directory (%s)", failedFileDir);
+        retryFileDir.mkdir();
+        Preconditions.checkArgument(retryFileDir.isDirectory(), "retryFileDir is not a directory (%s)", retryFileDir);
     }
 
     @PostConstruct
@@ -84,9 +99,11 @@ public class S3Uploader
 
         for (final File file : pendingFiles) {
             if (file.isFile()) {
-                enqueuePendingFile(file);
+                enqueueLocalFileForUpload(file);
             }
         }
+
+        scheduleRetryTask();
     }
 
     @Override
@@ -105,11 +122,21 @@ public class S3Uploader
             public void run()
             {
                 try {
-                    upload(partition, file);
+                    verifyFile(file);
                 }
                 catch (Exception e) {
-                    log.error(e, "upload failed: %s: %s", partition, file);
-                    enqueuePendingFile(file);
+                    log.error(e, "error verifying file: %s: %s. Marking as failed", partition, file);
+                    handleFailure(file);
+                    return;
+                }
+
+                try {
+                    upload(partition, file);
+                    stats.uploadSucceeded();
+                }
+                catch (Exception e) {
+                    log.error(e, "upload failed: %s: %s. Sending for retry", partition, file);
+                    handleRetry(partition, file, e.getMessage());
                 }
             }
         });
@@ -120,14 +147,12 @@ public class S3Uploader
             throws IOException
     {
         uploadExecutor.shutdown();
-        pendingFileExecutor.shutdown();
+        retryExecutor.shutdown();
     }
 
     private void upload(EventPartition partition, File file)
             throws IOException
     {
-        verifyFile(file);
-
         URI location = buildS3Location(s3StagingLocation,
                 partition.getEventType(),
                 partition.getMajorTimeBucket(),
@@ -158,9 +183,9 @@ public class S3Uploader
     }
 
     @VisibleForTesting
-    public void enqueuePendingFile(final File file)
+    public void enqueueLocalFileForUpload(final File file)
     {
-        pendingFileExecutor.submit(new Runnable()
+        retryExecutor.submit(new Runnable()
         {
             @Override
             public void run()
@@ -175,8 +200,8 @@ public class S3Uploader
                     enqueueUpload(partition, file);
                 }
                 catch (Exception e) {
-                    log.error(e, "Error while uploading file %s", file.getName());
-                    file.renameTo(new File(failedFileDir, file.getName()));
+                    log.error(e, "Error while reading file %s before upload. Marking as failed", file.getName());
+                    handleFailure(file);
                 }
                 finally {
                     try {
@@ -189,5 +214,65 @@ public class S3Uploader
                 }
             }
         });
+    }
+
+    private void scheduleRetryTask()
+    {
+        retryExecutor.scheduleWithFixedDelay(new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                File[] retryFiles = retryFileDir.listFiles();
+                for (final File file : retryFiles) {
+                    if (file.isFile()) {
+                        //moving out of retry to avoid requeueing the file before the uploader gets to it
+                        File stagingFile = moveToStaging(file);
+                        enqueueLocalFileForUpload(stagingFile);
+                    }
+                }
+            }
+        }, (long) retryDelay.toMillis(), (long) retryPeriod.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    private void handleFailure(File file)
+    {
+        moveToFailed(file);
+        stats.fileError();
+    }
+
+    private void handleRetry(EventPartition partition, File file, String message)
+    {
+        moveToRetry(file);
+        stats.uploadFailed();
+    }
+
+    private void moveToFailed(File file)
+    {
+        moveFile(file, failedFileDir);
+    }
+
+    private void moveToRetry(File file)
+    {
+        moveFile(file, retryFileDir);
+    }
+
+    private File moveToStaging(File file)
+    {
+        return moveFile(file, localStagingDirectory);
+    }
+
+    private File moveFile(File file, File targetDirectory)
+    {
+        File targetFile = new File(targetDirectory, file.getName());
+        try {
+            if (!file.renameTo(targetFile)) {
+                log.error("Error renaming file %s to %s", file, targetFile);
+            }
+        }
+        catch (Exception e) {
+            log.error("Error renaming file %s to %s", file, targetFile);
+        }
+        return targetFile;
     }
 }

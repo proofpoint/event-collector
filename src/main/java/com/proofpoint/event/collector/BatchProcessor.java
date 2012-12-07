@@ -1,5 +1,5 @@
 /*
- * Copyright 2011 Proofpoint, Inc.
+ * Copyright 2011-2012 Proofpoint, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ import com.proofpoint.event.collector.EventCounters.CounterState;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -117,7 +116,7 @@ public class BatchProcessor<T extends Event>
 
     public static interface BatchHandler<T>
     {
-        void processBatch(Collection<T> entries);
+        void processBatch(List<T> entries);
     }
 
 }

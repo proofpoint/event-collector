@@ -1,5 +1,5 @@
 /*
- * Copyright 2011 Proofpoint, Inc.
+ * Copyright 2011-2012 Proofpoint, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import com.proofpoint.event.collector.EventCounters.CounterState;
 import org.joda.time.DateTime;
 import org.testng.annotations.Test;
 
-import java.util.Collection;
+import java.util.List;
 import java.util.Collections;
 import java.util.UUID;
 
@@ -86,7 +86,7 @@ public class TestQueueCounts
         return new BatchHandler<Event>()
         {
             @Override
-            public void processBatch(Collection<Event> entries)
+            public void processBatch(List<Event> entries)
             {
             }
         };
@@ -97,7 +97,7 @@ public class TestQueueCounts
         return new BatchHandler<Event>()
         {
             @Override
-            public void processBatch(Collection<Event> entries)
+            public void processBatch(List<Event> entries)
             {
                 // Wait for the right time to run
                 synchronized (monitor)

@@ -15,7 +15,6 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -55,6 +54,9 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+
 public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTapStats
 {
     private static final Logger log = Logger.get(EventTapWriter.class);
@@ -92,18 +94,12 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
             @EventTap ScheduledExecutorService executorService,
             EventTapConfig config)
     {
-        Preconditions.checkNotNull(selector, "selector is null");
-        Preconditions.checkNotNull(httpClient, "httpClient is null");
-        Preconditions.checkNotNull(eventCodec, "eventCodec is null");
-        Preconditions.checkNotNull(executorService, "executorService is null");
-        Preconditions.checkNotNull(config, "config is null");
-
-        this.maxBatchSize = config.getMaxBatchSize();
+        this.maxBatchSize = checkNotNull(config, "config is null").getMaxBatchSize();
         this.queueSize = config.getQueueSize();
-        this.selector = selector;
-        this.httpClient = httpClient;
-        this.eventsCodec = eventCodec;
-        this.executorService = executorService;
+        this.selector = checkNotNull(selector, "selector is null");
+        this.httpClient = checkNotNull(httpClient, "httpClient is null");
+        this.eventsCodec = checkNotNull(eventCodec, "eventCodec is null");
+        this.executorService = checkNotNull(executorService, "executorService is null");
         this.flowRefreshDuration = config.getEventTapRefreshDuration();
         refreshFlows();
     }
@@ -237,14 +233,10 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
 
         private EventFlow(String eventType, String flowId, List<URI> taps)
         {
-            Preconditions.checkNotNull(eventType, "eventType is null");
-            Preconditions.checkNotNull(flowId, "flowId is null");
-            Preconditions.checkNotNull(taps, "taps is null");
-            Preconditions.checkArgument(!taps.isEmpty(), "taps is empty");
-
-            this.eventType = eventType;
-            this.flowId = flowId;
-            this.taps = taps;
+            this.eventType = checkNotNull(eventType, "eventType is null");
+            this.flowId = checkNotNull(flowId, "flowId is null");
+            this.taps = checkNotNull(taps, "taps is null");
+            checkArgument(!taps.isEmpty(), "taps is empty");
         }
 
         public Map<String, CounterState> getCounters()

@@ -39,9 +39,10 @@ public class EventTapConfig
 
     @Deprecated
     @Config("collector.event-tap.threads")
-    public void setEventTapThreads(int eventTapThreads)
+    public EventTapConfig setEventTapThreads(int eventTapThreads)
     {
         this.eventTapThreads = eventTapThreads;
+        return this;
     }
 
     @NotNull
@@ -51,9 +52,10 @@ public class EventTapConfig
     }
 
     @Config("collector.event-tap.refresh")
-    public void setEventTapRefreshDuration(Duration eventTapRefreshDuration)
+    public EventTapConfig setEventTapRefreshDuration(Duration eventTapRefreshDuration)
     {
         this.eventTapRefreshDuration = eventTapRefreshDuration;
+        return this;
     }
 
     @Min(1)
@@ -63,9 +65,10 @@ public class EventTapConfig
     }
 
     @Config("collector.event-tap.batch-size-max")
-    public void setMaxBatchSize(int maxBatchSize)
+    public EventTapConfig setMaxBatchSize(int maxBatchSize)
     {
         this.maxBatchSize = maxBatchSize;
+        return this;
     }
 
     @Min(1)
@@ -75,8 +78,9 @@ public class EventTapConfig
     }
 
     @Config("collector.event-tap.batch-size-max")
-    public void setQueueSize(int queueSize)
+    public EventTapConfig setQueueSize(int queueSize)
     {
         this.queueSize = queueSize;
+        return this;
     }
 }

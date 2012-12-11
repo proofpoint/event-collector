@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
@@ -167,7 +168,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
         for (Entry<List<String>, Collection<URI>> entry : flows.asMap().entrySet()) {
             final String eventType = entry.getKey().get(0);
             final String flowId = entry.getKey().get(1);
-            List<URI> taps = ImmutableList.copyOf(entry.getValue());
+            Set<URI> taps = ImmutableSet.copyOf(entry.getValue());
 
             builder.put(eventType, new EventTapFlow(httpClient, eventsCodec, eventType, flowId, taps,
                     new EventTapFlow.Observer()

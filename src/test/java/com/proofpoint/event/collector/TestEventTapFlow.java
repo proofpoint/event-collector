@@ -17,6 +17,7 @@ package com.proofpoint.event.collector;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
 import com.proofpoint.http.client.BodyGenerator;
 import com.proofpoint.http.client.HttpClient;
@@ -32,6 +33,7 @@ import org.testng.annotations.Test;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.util.List;
+import java.util.Set;
 
 import static java.net.URI.create;
 import static org.mockito.Matchers.any;
@@ -42,12 +44,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertTrue;
 
 public class TestEventTapFlow
 {
     private static final JsonCodec<List<Event>> EVENT_LIST_JSON_CODEC = JsonCodec.listJsonCodec(Event.class);
-    private static final List<URI> taps = ImmutableList.of(create("http://n1.event.tap/post"), create("http://n2.event.tap/post"));
+    private static final Set<URI> taps = ImmutableSet.of(create("http://n1.event.tap/post"), create("http://n2.event.tap/post"));
     private final List<Event> events = ImmutableList.of(new Event("EventType", "UUID", "foo.com", DateTime.now(), ImmutableMap.<String, Object>of()));
     private HttpClient httpClient;
     private Observer observer;
@@ -94,7 +97,7 @@ public class TestEventTapFlow
     @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "taps is empty")
     public void testCustructorEmptyTaps()
     {
-        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", ImmutableList.<URI>of(), observer);
+        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", ImmutableSet.<URI>of(), observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "observer is null")
@@ -121,6 +124,13 @@ public class TestEventTapFlow
         assertEquals(byteArrayOutputStream.toString(), EVENT_LIST_JSON_CODEC.toJson(events));
 
         assertEquals(request.getHeaders().get("Content-Type"), ImmutableList.<String>of("application/json"));
+    }
+
+    @Test
+    public void testGetTaps()
+    {
+        EventTapFlow flow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowId", taps, observer);
+        assertEqualsNoOrder(flow.getTaps().toArray(), taps.toArray());
     }
 
     @Test

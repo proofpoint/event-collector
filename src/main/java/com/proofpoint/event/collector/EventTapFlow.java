@@ -15,6 +15,8 @@
  */
 package com.proofpoint.event.collector;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
@@ -29,6 +31,7 @@ import javax.ws.rs.core.MediaType;
 import java.net.URI;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -47,14 +50,14 @@ class EventTapFlow implements BatchHandler<Event>
     private final Observer observer;
 
     public EventTapFlow(HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
-            String eventType, String flowId, List<URI> taps,
+            String eventType, String flowId, Set<URI> taps,
             Observer observer)
     {
         this.httpClient = checkNotNull(httpClient, "httpClient is null");
         this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
         this.eventType = checkNotNull(eventType, "eventType is null");
         this.flowId = checkNotNull(flowId, "flowId is null");
-        this.taps = checkNotNull(taps, "taps is null");
+        this.taps = ImmutableList.<URI>copyOf(checkNotNull(taps, "taps is null"));
         checkArgument(!taps.isEmpty(), "taps is empty");
         this.observer = checkNotNull(observer, "observer is null");
     }
@@ -68,6 +71,11 @@ class EventTapFlow implements BatchHandler<Event>
         catch (Exception ignored) {
             // already logged
         }
+    }
+
+    public Set<URI> getTaps()
+    {
+        return ImmutableSet.<URI>copyOf(taps);
     }
 
     private void sendEvents(final List<Event> entries)

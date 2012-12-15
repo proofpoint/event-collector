@@ -26,7 +26,7 @@ import java.util.UUID;
 
 import static org.testng.Assert.assertEquals;
 
-public class TestQueueCounts
+public class TestBatchProcessor
 {
     @Test
     public void testEnqueue()

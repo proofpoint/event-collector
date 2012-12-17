@@ -17,7 +17,6 @@ package com.proofpoint.event.collector;
 
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.http.client.HttpClient;
-import com.proofpoint.http.client.JsonBodyGenerator;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.http.client.RequestBuilder;
 import com.proofpoint.http.client.Response;
@@ -25,12 +24,15 @@ import com.proofpoint.http.client.ResponseHandler;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
 
+import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.MediaType;
 import java.net.URI;
 import java.util.List;
 import java.util.Random;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.proofpoint.http.client.JsonBodyGenerator.jsonBodyGenerator;
 
 class EventTapFlow implements BatchHandler<Event>
 {
@@ -75,8 +77,8 @@ class EventTapFlow implements BatchHandler<Event>
 
         Request request = RequestBuilder.preparePost()
                 .setUri(uri)
-                .setHeader("Content-Type", "application/json")
-                .setBodyGenerator(JsonBodyGenerator.jsonBodyGenerator(eventsCodec, entries))
+                .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
+                .setBodyGenerator(jsonBodyGenerator(eventsCodec, entries))
                 .build();
 
         httpClient.execute(request, new ResponseHandler<Void, Exception>()

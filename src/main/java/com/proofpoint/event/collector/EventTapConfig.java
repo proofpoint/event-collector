@@ -77,7 +77,7 @@ public class EventTapConfig
         return queueSize;
     }
 
-    @Config("collector.event-tap.batch-size-max")
+    @Config("collector.event-tap.queue-size")
     public EventTapConfig setQueueSize(int queueSize)
     {
         this.queueSize = queueSize;

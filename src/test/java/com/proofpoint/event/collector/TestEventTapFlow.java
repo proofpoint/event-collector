@@ -33,10 +33,10 @@ import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.util.List;
 
+import static java.net.URI.create;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -46,9 +46,9 @@ import static org.testng.Assert.assertTrue;
 
 public class TestEventTapFlow
 {
-    private static final JsonCodec<List<Event>> OBJECT_CODEC = JsonCodec.listJsonCodec(Event.class);
-    private static final List<URI> taps = ImmutableList.<URI>of(URI.create("http://n1.event.tap/post"), URI.create("http://n2.event.tap/post"));
-    private final List<Event> events = ImmutableList.<Event>of(new Event("EventType", "UUID", "foo.com", DateTime.now(), ImmutableMap.<String, Object>of()));
+    private static final JsonCodec<List<Event>> EVENT_LIST_JSON_CODEC = JsonCodec.listJsonCodec(Event.class);
+    private static final List<URI> taps = ImmutableList.of(create("http://n1.event.tap/post"), create("http://n2.event.tap/post"));
+    private final List<Event> events = ImmutableList.of(new Event("EventType", "UUID", "foo.com", DateTime.now(), ImmutableMap.<String, Object>of()));
     private HttpClient httpClient;
     private Observer observer;
 
@@ -62,7 +62,7 @@ public class TestEventTapFlow
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "httpClient is null")
     public void testConstructorNullHttpClient()
     {
-        new EventTapFlow(null, OBJECT_CODEC, "EventType", "FlowID", taps, observer);
+        new EventTapFlow(null, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventsCodec is null")
@@ -74,38 +74,38 @@ public class TestEventTapFlow
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventType is null")
     public void testConstructorNullEventType()
     {
-        new EventTapFlow(httpClient, OBJECT_CODEC, null, "FlowID", taps, observer);
+        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, null, "FlowID", taps, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "flowId is null")
     public void testConstructorNullFlowId()
     {
-        new EventTapFlow(httpClient, OBJECT_CODEC, "EventType", null, taps, observer);
+        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", null, taps, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "taps is null")
     public void testConstructorNullTaps()
     {
-        new EventTapFlow(httpClient, OBJECT_CODEC, "EventType", "FlowID", null, observer);
+        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", null, observer);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "taps is empty")
     public void testCustructorEmptyTaps()
     {
-        new EventTapFlow(httpClient, OBJECT_CODEC, "EventType", "FlowID", ImmutableList.<URI>of(), observer);
+        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", ImmutableList.<URI>of(), observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "observer is null")
     public void testConstructorNullObserver()
     {
-        new EventTapFlow(httpClient, OBJECT_CODEC, "EventType", "FlowID", taps, null);
+        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, null);
     }
 
     @Test
     public void testProcessBatch()
             throws Exception
     {
-        EventTapFlow flow = new EventTapFlow(httpClient, OBJECT_CODEC, "EventType", "FlowID", taps, observer);
+        EventTapFlow flow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
         ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
@@ -117,21 +117,49 @@ public class TestEventTapFlow
         assertTrue(taps.contains(request.getUri()));
 
         bodyGenerator.write(byteArrayOutputStream);
-        assertEquals(byteArrayOutputStream.toString(), OBJECT_CODEC.toJson(events));
+        assertEquals(byteArrayOutputStream.toString(), EVENT_LIST_JSON_CODEC.toJson(events));
 
         assertEquals(request.getHeaders().get("Content-Type"), ImmutableList.<String>of("application/json"));
     }
 
     @Test
-    public void testObserver()
+    public void testObserverOnSuccess()
             throws Exception
     {
-        EventTapFlow flow = new EventTapFlow(httpClient, OBJECT_CODEC, "EventType", "FlowID", taps, observer);
+        EventTapFlow flow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
         ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
         ArgumentCaptor<ResponseHandler> responseHandlerArgumentCaptor = ArgumentCaptor.forClass(ResponseHandler.class);
         ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
 
+        // Process the events in order to get the EventTapFlow to provide us
+        // with the a request and response handler that we can use to feed
+        // it responses.
+        flow.processBatch(events);
+        verify(httpClient, times(1)).execute(requestArgumentCaptor.capture(), responseHandlerArgumentCaptor.capture());
+        ResponseHandler<Void, Exception> responseHandler = responseHandlerArgumentCaptor.getValue();
+        Request request = requestArgumentCaptor.getValue();
 
+        Response response = mock(Response.class);
+        when(response.getStatusCode()).thenReturn(200);
+        when(response.getStatusMessage()).thenReturn("OK");
+        responseHandler.handle(request, response);
+        verify(observer, times(1)).onRecordsSent(uriArgumentCaptor.capture(), eq(events.size()));
+        assertTrue(taps.contains(uriArgumentCaptor.getValue()));
+        verifyNoMoreInteractions(observer);
+    }
+
+    @Test
+    public void testObserverOnFailure()
+            throws Exception
+    {
+        EventTapFlow flow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
+        ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
+        ArgumentCaptor<ResponseHandler> responseHandlerArgumentCaptor = ArgumentCaptor.forClass(ResponseHandler.class);
+        ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
+
+        // Process the events in order to get the EventTapFlow to provide us
+        // with the a request and response handler that we can use to feed
+        // it responses.
         flow.processBatch(events);
         verify(httpClient, times(1)).execute(requestArgumentCaptor.capture(), responseHandlerArgumentCaptor.capture());
         Request request = requestArgumentCaptor.getValue();
@@ -140,18 +168,26 @@ public class TestEventTapFlow
         responseHandler.handleException(request, new Exception());
         verify(observer, times(1)).onRecordsLost(any(URI.class), eq(events.size()));
         verifyNoMoreInteractions(observer);
+    }
 
-        reset(observer);
+    @Test
+    public void testObserverOnNon200Error()
+            throws Exception
+    {
+        EventTapFlow flow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
+        ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
+        ArgumentCaptor<ResponseHandler> responseHandlerArgumentCaptor = ArgumentCaptor.forClass(ResponseHandler.class);
+        ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
+
+        // Process the events in order to get the EventTapFlow to provide us
+        // with the a request and response handler that we can use to feed
+        // it responses.
+        flow.processBatch(events);
+        verify(httpClient, times(1)).execute(requestArgumentCaptor.capture(), responseHandlerArgumentCaptor.capture());
+        Request request = requestArgumentCaptor.getValue();
+        ResponseHandler<Void, Exception> responseHandler = responseHandlerArgumentCaptor.getValue();
+
         Response response = mock(Response.class);
-        when(response.getStatusCode()).thenReturn(200);
-        when(response.getStatusMessage()).thenReturn("OK");
-        responseHandler.handle(request, response);
-        verify(observer, times(1)).onRecordsSent(uriArgumentCaptor.capture(), eq(events.size()));
-        assertTrue(taps.contains(uriArgumentCaptor.getValue()));
-        verifyNoMoreInteractions(observer);
-
-        reset(observer);
-        response = mock(Response.class);
         when(response.getStatusCode()).thenReturn(500);
         when(response.getStatusMessage()).thenReturn("Server Error");
         responseHandler.handle(request, response);

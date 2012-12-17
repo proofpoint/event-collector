@@ -79,7 +79,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @Inject
     public EventTapWriter(@ServiceType("eventTap") ServiceSelector selector,
             @EventTap HttpClient httpClient,
-            JsonCodec<List<Event>> eventCodec,
+            JsonCodec<List<Event>> eventsCodec,
             @EventTap ScheduledExecutorService executorService,
             EventTapConfig config)
     {
@@ -87,7 +87,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
         this.queueSize = config.getQueueSize();
         this.selector = checkNotNull(selector, "selector is null");
         this.httpClient = checkNotNull(httpClient, "httpClient is null");
-        this.eventsCodec = checkNotNull(eventCodec, "eventCodec is null");
+        this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
         this.executorService = checkNotNull(executorService, "executorService is null");
         this.flowRefreshDuration = config.getEventTapRefreshDuration();
         refreshFlows();

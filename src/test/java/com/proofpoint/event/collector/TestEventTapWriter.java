@@ -36,7 +36,7 @@ import static org.testng.Assert.assertTrue;
 
 public class TestEventTapWriter
 {
-    private static final JsonCodec<List<Event>> OBJECT_CODEC = JsonCodec.listJsonCodec(Event.class);
+    private static final JsonCodec<List<Event>> EVENT_LIST_JSON_CODEC = JsonCodec.listJsonCodec(Event.class);
     private ServiceSelector serviceSelector;
     private HttpClient httpClient;
     private ScheduledExecutorService executorService;
@@ -52,13 +52,13 @@ public class TestEventTapWriter
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "selector is null")
     public void testConstructorNullSelector()
     {
-        new EventTapWriter(null, httpClient, OBJECT_CODEC, executorService, new EventTapConfig());
+        new EventTapWriter(null, httpClient, EVENT_LIST_JSON_CODEC, executorService, new EventTapConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "httpClient is null")
     public void testConstructorNullHttpClient()
     {
-        new EventTapWriter(serviceSelector, null, OBJECT_CODEC, executorService, new EventTapConfig());
+        new EventTapWriter(serviceSelector, null, EVENT_LIST_JSON_CODEC, executorService, new EventTapConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventCodec is null")
@@ -70,13 +70,13 @@ public class TestEventTapWriter
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "executorService is null")
     public void testConstructorNullExecutorService()
     {
-        new EventTapWriter(serviceSelector, httpClient, OBJECT_CODEC, null, new EventTapConfig());
+        new EventTapWriter(serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, null, new EventTapConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
     {
-        new EventTapWriter(serviceSelector, httpClient, OBJECT_CODEC, executorService, null);
+        new EventTapWriter(serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService, null);
     }
 
     @Test
@@ -99,8 +99,8 @@ public class TestEventTapWriter
         Map<String, List<Event>> events = new HashMap<String, List<Event>>();
 
         ImmutableList.Builder<ServiceDescriptor> serviceDescriptorBuilder = ImmutableList.<ServiceDescriptor>builder();
-        for (int i_type = 0; i_type < numEventTypes; ++i_type) {
-            String type = String.format("Type%d", i_type);
+        for (int typeIndex = 0; typeIndex < numEventTypes; ++typeIndex) {
+            String type = String.format("Type%d", typeIndex);
             List<Event> typeEvents = new ArrayList<Event>();
             for (int i_event = 0; i_event < eventCountPerType; ++i_event) {
                 typeEvents.add(createEvent(type));
@@ -123,7 +123,7 @@ public class TestEventTapWriter
         EventTapWriter writer = new EventTapWriter(
                 new StaticServiceSelector(serviceDescriptorBuilder.build()),
                 httpClient,
-                OBJECT_CODEC,
+                EVENT_LIST_JSON_CODEC,
                 executorService,
                 new EventTapConfig().setMaxBatchSize(batchSize));
         writer.refreshFlows();
@@ -180,6 +180,6 @@ public class TestEventTapWriter
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
         BodyGenerator bodyGenerator = request.getBodyGenerator();
         bodyGenerator.write(byteArrayOutputStream);
-        return OBJECT_CODEC.fromJson(byteArrayOutputStream.toString());
+        return EVENT_LIST_JSON_CODEC.fromJson(byteArrayOutputStream.toString());
     }
 }

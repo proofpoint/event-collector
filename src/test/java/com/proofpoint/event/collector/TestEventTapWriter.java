@@ -76,7 +76,7 @@ public class TestEventTapWriter
         new EventTapWriter(serviceSelector, null, EVENT_LIST_JSON_CODEC, executorService, new EventTapConfig());
     }
 
-    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventCodec is null")
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventsCodec is null")
     public void testConstructorNullEventCodec()
     {
         new EventTapWriter(serviceSelector, httpClient, null, executorService, new EventTapConfig());

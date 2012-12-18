@@ -59,12 +59,12 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     private final HttpClient httpClient;
     private final JsonCodec<List<Event>> eventsCodec;
     private final ScheduledExecutorService executorService;
+    private final BatchProcessorFactory batchProcessorFactory;
 
     private final AtomicReference<Multimap<String, EventTapFlow>> eventFlows = new AtomicReference<Multimap<String, EventTapFlow>>(ImmutableMultimap.<String, EventTapFlow>of());
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
 
-    private final BatchProcessorConfig batchProcessorConfig;
     private final ConcurrentMap<String, BatchProcessor<Event>> processors = new ConcurrentHashMap<String, BatchProcessor<Event>>();
 
     private final EventCounters<List<String>> flowCounters = new EventCounters<List<String>>();
@@ -74,16 +74,15 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
             @EventTap HttpClient httpClient,
             JsonCodec<List<Event>> eventsCodec,
             @EventTap ScheduledExecutorService executorService,
-            BatchProcessorConfig batchProcessorConfig,
+            BatchProcessorFactory batchProcessorFactory,
             EventTapConfig config)
     {
-        this.batchProcessorConfig = checkNotNull(batchProcessorConfig, "batchProcessorConfig is null");
         this.selector = checkNotNull(selector, "selector is null");
         this.httpClient = checkNotNull(httpClient, "httpClient is null");
         this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
         this.executorService = checkNotNull(executorService, "executorService is null");
         this.flowRefreshDuration = checkNotNull(config, "config is null").getEventTapRefreshDuration();
-        refreshFlows();
+        this.batchProcessorFactory = checkNotNull(batchProcessorFactory, "batchProcessorFactory is null");
     }
 
     @PostConstruct
@@ -94,6 +93,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
             return;
         }
 
+        refreshFlows();
         refreshJob = executorService.scheduleWithFixedDelay(new Runnable()
         {
             @Override
@@ -197,7 +197,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
         for (String eventType : eventTypes) {
             if (!processors.containsKey(eventType)) {
                 log.debug("Creating resources for event type '%s': new event taps for type", eventType);
-                BatchProcessor<Event> batchProcessor = new BatchProcessor<Event>(eventType, this, batchProcessorConfig);
+                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(this, eventType);
                 processors.put(eventType, batchProcessor);
                 batchProcessor.start();
             }

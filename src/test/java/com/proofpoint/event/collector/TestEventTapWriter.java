@@ -67,31 +67,43 @@ public class TestEventTapWriter
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "selector is null")
     public void testConstructorNullSelector()
     {
-        new EventTapWriter(null, httpClient, EVENT_LIST_JSON_CODEC, executorService, new EventTapConfig());
+        new EventTapWriter(null, httpClient, EVENT_LIST_JSON_CODEC, executorService,
+                new BatchProcessorConfig(), new EventTapConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "httpClient is null")
     public void testConstructorNullHttpClient()
     {
-        new EventTapWriter(serviceSelector, null, EVENT_LIST_JSON_CODEC, executorService, new EventTapConfig());
+        new EventTapWriter(serviceSelector, null, EVENT_LIST_JSON_CODEC, executorService,
+                new BatchProcessorConfig(), new EventTapConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventsCodec is null")
     public void testConstructorNullEventCodec()
     {
-        new EventTapWriter(serviceSelector, httpClient, null, executorService, new EventTapConfig());
+        new EventTapWriter(serviceSelector, httpClient, null, executorService,
+                new BatchProcessorConfig(), new EventTapConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "executorService is null")
     public void testConstructorNullExecutorService()
     {
-        new EventTapWriter(serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, null, new EventTapConfig());
+        new EventTapWriter(serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, null,
+                new BatchProcessorConfig(), new EventTapConfig());
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "batchProcessorConfig is null")
+    public void testConstructorNullBatchProcessorConfig()
+    {
+        new EventTapWriter(serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
+                null, new EventTapConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
     {
-        new EventTapWriter(serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService, null);
+        new EventTapWriter(serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
+                new BatchProcessorConfig(), null);
     }
 
     @Test
@@ -140,7 +152,8 @@ public class TestEventTapWriter
                 httpClient,
                 EVENT_LIST_JSON_CODEC,
                 executorService,
-                new EventTapConfig().setMaxBatchSize(batchSize));
+                new BatchProcessorConfig().setMaxBatchSize(batchSize),
+                new EventTapConfig());
         writer.refreshFlows();
 
         for (List<Event> eventsOfType : events.values()) {

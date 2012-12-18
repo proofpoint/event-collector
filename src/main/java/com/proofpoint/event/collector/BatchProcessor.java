@@ -30,7 +30,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static java.lang.String.format;
@@ -45,16 +44,14 @@ public class BatchProcessor<T extends Event>
 
     private final AtomicReference<Counter> counter = new AtomicReference<Counter>(new Counter());
 
-    public BatchProcessor(String name, BatchHandler<T> handler, int maxBatchSize, int queueSize)
+    public BatchProcessor(String name, BatchHandler<T> handler, BatchProcessorConfig config)
     {
         checkNotNull(name, "name is null");
         checkNotNull(handler, "handler is null");
-        checkArgument(queueSize > 0, "queue size needs to be a positive integer");
-        checkArgument(maxBatchSize > 0, "max batch size needs to be a positive integer");
 
         this.handler = handler;
-        this.maxBatchSize = maxBatchSize;
-        this.queue = new ArrayBlockingQueue<T>(queueSize);
+        this.maxBatchSize = checkNotNull(config, "config is null").getMaxBatchSize();
+        this.queue = new ArrayBlockingQueue<T>(config.getQueueSize());
 
         this.executor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat(format("batch-processor-%s", name)).build());
     }
@@ -120,5 +117,4 @@ public class BatchProcessor<T extends Event>
     {
         void processBatch(List<T> entries);
     }
-
 }

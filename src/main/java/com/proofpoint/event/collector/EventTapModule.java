@@ -40,6 +40,8 @@ public class EventTapModule implements Module
         bindConfig(binder).to(EventTapConfig.class);
         jsonCodecBinder(binder).bindListJsonCodec(Event.class);
 
+        bindConfig(binder).to(BatchProcessorConfig.class);
+
         binder.bind(EventTapWriter.class).in(Scopes.SINGLETON);
         binder.bind(EventTapStats.class).to(EventTapWriter.class);
 
@@ -49,7 +51,8 @@ public class EventTapModule implements Module
         binder.bind(EventTapStatsResource.class).in(Scopes.SINGLETON);
     }
 
-    @Provides @EventTap
+    @Provides
+    @EventTap
     public ScheduledExecutorService createExecutor()
     {
         return newSingleThreadScheduledExecutor(new ThreadFactoryBuilder().setNameFormat("event-tap-%s").build());

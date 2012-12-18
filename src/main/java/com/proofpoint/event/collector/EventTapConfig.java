@@ -1,5 +1,5 @@
 /*
- * Copyright 2011 Proofpoint, Inc.
+ * Copyright 2011-2012 Proofpoint, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,9 +39,10 @@ public class EventTapConfig
 
     @Deprecated
     @Config("collector.event-tap.threads")
-    public void setEventTapThreads(int eventTapThreads)
+    public EventTapConfig setEventTapThreads(int eventTapThreads)
     {
         this.eventTapThreads = eventTapThreads;
+        return this;
     }
 
     @NotNull
@@ -51,9 +52,10 @@ public class EventTapConfig
     }
 
     @Config("collector.event-tap.refresh")
-    public void setEventTapRefreshDuration(Duration eventTapRefreshDuration)
+    public EventTapConfig setEventTapRefreshDuration(Duration eventTapRefreshDuration)
     {
         this.eventTapRefreshDuration = eventTapRefreshDuration;
+        return this;
     }
 
     @Min(1)
@@ -63,9 +65,10 @@ public class EventTapConfig
     }
 
     @Config("collector.event-tap.batch-size-max")
-    public void setMaxBatchSize(int maxBatchSize)
+    public EventTapConfig setMaxBatchSize(int maxBatchSize)
     {
         this.maxBatchSize = maxBatchSize;
+        return this;
     }
 
     @Min(1)
@@ -74,9 +77,10 @@ public class EventTapConfig
         return queueSize;
     }
 
-    @Config("collector.event-tap.batch-size-max")
-    public void setQueueSize(int queueSize)
+    @Config("collector.event-tap.queue-size")
+    public EventTapConfig setQueueSize(int queueSize)
     {
         this.queueSize = queueSize;
+        return this;
     }
 }

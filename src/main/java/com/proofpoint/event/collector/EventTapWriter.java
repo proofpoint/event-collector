@@ -1,5 +1,5 @@
 /*
- * Copyright 2011 Proofpoint, Inc.
+ * Copyright 2011-2012 Proofpoint, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -31,13 +30,7 @@ import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.http.client.HttpClient;
-import com.proofpoint.http.client.JsonBodyGenerator;
-import com.proofpoint.http.client.Request;
-import com.proofpoint.http.client.RequestBuilder;
-import com.proofpoint.http.client.Response;
-import com.proofpoint.http.client.ResponseHandler;
 import com.proofpoint.json.JsonCodec;
-import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 import org.weakref.jmx.Managed;
 
@@ -49,23 +42,21 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTapStats
 {
-    private static final Logger log = Logger.get(EventTapWriter.class);
-    private static final Random RANDOM = new Random();
-
     private final ServiceSelector selector;
     private final HttpClient httpClient;
     private final JsonCodec<List<Event>> eventsCodec;
     private final ScheduledExecutorService executorService;
 
-    private final AtomicReference<Multimap<String, EventFlow>> eventFlows = new AtomicReference<Multimap<String, EventFlow>>(ImmutableMultimap.<String, EventFlow>of());
+    private final AtomicReference<Multimap<String, EventTapFlow>> eventFlows = new AtomicReference<Multimap<String, EventTapFlow>>(ImmutableMultimap.<String, EventTapFlow>of());
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
 
@@ -88,22 +79,16 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @Inject
     public EventTapWriter(@ServiceType("eventTap") ServiceSelector selector,
             @EventTap HttpClient httpClient,
-            JsonCodec<List<Event>> eventCodec,
+            JsonCodec<List<Event>> eventsCodec,
             @EventTap ScheduledExecutorService executorService,
             EventTapConfig config)
     {
-        Preconditions.checkNotNull(selector, "selector is null");
-        Preconditions.checkNotNull(httpClient, "httpClient is null");
-        Preconditions.checkNotNull(eventCodec, "eventCodec is null");
-        Preconditions.checkNotNull(executorService, "executorService is null");
-        Preconditions.checkNotNull(config, "config is null");
-
-        this.maxBatchSize = config.getMaxBatchSize();
+        this.maxBatchSize = checkNotNull(config, "config is null").getMaxBatchSize();
         this.queueSize = config.getQueueSize();
-        this.selector = selector;
-        this.httpClient = httpClient;
-        this.eventsCodec = eventCodec;
-        this.executorService = executorService;
+        this.selector = checkNotNull(selector, "selector is null");
+        this.httpClient = checkNotNull(httpClient, "httpClient is null");
+        this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
+        this.executorService = checkNotNull(executorService, "executorService is null");
         this.flowRefreshDuration = config.getEventTapRefreshDuration();
         refreshFlows();
     }
@@ -129,7 +114,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @PreDestroy
     public synchronized void stop()
     {
-        for(BatchProcessor<Event> processor : processors.asMap().values()) {
+        for (BatchProcessor<Event> processor : processors.asMap().values()) {
             processor.stop();
         }
 
@@ -163,12 +148,32 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
             flows.put(ImmutableList.of(eventType, flowId), uri);
         }
 
-        ImmutableListMultimap.Builder<String, EventFlow> builder = ImmutableListMultimap.builder();
+        ImmutableListMultimap.Builder<String, EventTapFlow> builder = ImmutableListMultimap.builder();
         for (Entry<List<String>, Collection<URI>> entry : flows.asMap().entrySet()) {
-            String eventType = entry.getKey().get(0);
-            String flowId = entry.getKey().get(1);
+            final String eventType = entry.getKey().get(0);
+            final String flowId = entry.getKey().get(1);
             List<URI> taps = ImmutableList.copyOf(entry.getValue());
-            builder.put(eventType, new EventFlow(eventType, flowId, taps));
+
+            builder.put(eventType, new EventTapFlow(httpClient, eventsCodec, eventType, flowId, taps,
+                    new EventTapFlow.Observer()
+                    {
+                        @Override
+                        public void onRecordsSent(URI uri, int count)
+                        {
+                            flowCounters.recordReceived(createCounterKey(uri), count);
+                        }
+
+                        @Override
+                        public void onRecordsLost(URI uri, int count)
+                        {
+                            flowCounters.recordLost(createCounterKey(uri), count);
+                        }
+
+                        private List<String> createCounterKey(URI uri)
+                        {
+                            return ImmutableList.of(eventType, flowId, uri.toString());
+                        }
+                    }));
         }
         eventFlows.set(builder.build());
     }
@@ -180,21 +185,16 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     }
 
     @Override
-    public void processBatch(Collection<Event> events)
+    public void processBatch(List<Event> events)
     {
-        Multimap<String, EventFlow> eventFlows = this.eventFlows.get();
+        Multimap<String, EventTapFlow> eventFlows = this.eventFlows.get();
         if (eventFlows.isEmpty()) {
             return;
         }
 
-        Collection<EventFlow> currentFlows = eventFlows.get(events.iterator().next().getType());
-        for (EventFlow flow : currentFlows) {
-            try {
-                flow.sendEvents(ImmutableList.copyOf(events), flowCounters);
-            }
-            catch (Exception ignored) {
-                // already logged
-            }
+        Collection<EventTapFlow> currentFlows = eventFlows.get(events.iterator().next().getType());
+        for (EventTapFlow flow : currentFlows) {
+            flow.processBatch(ImmutableList.copyOf(events));
         }
     }
 
@@ -202,7 +202,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     public Map<String, CounterState> getQueueCounters()
     {
         ImmutableMap.Builder<String, CounterState> counters = ImmutableMap.builder();
-        for(Entry<String, BatchProcessor<Event>> entry : processors.asMap().entrySet()) {
+        for (Entry<String, BatchProcessor<Event>> entry : processors.asMap().entrySet()) {
             counters.put(entry.getKey(), entry.getValue().getCounterState());
         }
         return counters.build();
@@ -211,7 +211,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @Override
     public void resetQueueCounters()
     {
-        for(BatchProcessor<Event> processor : processors.asMap().values()) {
+        for (BatchProcessor<Event> processor : processors.asMap().values()) {
             processor.resetCounter();
         }
     }
@@ -228,68 +228,4 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
         flowCounters.resetCounts();
     }
 
-    private class EventFlow
-    {
-        private final String eventType;
-        private final String flowId;
-        private final List<URI> taps;
-        private final EventCounters<URI> counters = new EventCounters<URI>();
-
-        private EventFlow(String eventType, String flowId, List<URI> taps)
-        {
-            Preconditions.checkNotNull(eventType, "eventType is null");
-            Preconditions.checkNotNull(flowId, "flowId is null");
-            Preconditions.checkNotNull(taps, "taps is null");
-            Preconditions.checkArgument(!taps.isEmpty(), "taps is empty");
-
-            this.eventType = eventType;
-            this.flowId = flowId;
-            this.taps = taps;
-        }
-
-        public Map<String, CounterState> getCounters()
-        {
-            return counters.getCounts();
-        }
-
-        public void sendEvents(final List<Event> value, final EventCounters<List<String>> counters)
-                throws Exception
-        {
-            final URI uri = taps.get(RANDOM.nextInt(taps.size()));
-
-            Request request = RequestBuilder.preparePost()
-                    .setUri(uri)
-                    .setHeader("Content-Type", "application/json")
-                    .setBodyGenerator(JsonBodyGenerator.jsonBodyGenerator(eventsCodec, value))
-                    .build();
-
-            final List<String> counterKey = ImmutableList.of(eventType, flowId, uri.toString());
-
-            httpClient.execute(request, new ResponseHandler<Void, Exception>()
-            {
-                @Override
-                public Exception handleException(Request request, Exception exception)
-                {
-                    log.warn(exception, "Error posting %s events to flow %s at %s ", eventType, flowId, uri);
-                    counters.recordLost(counterKey, value.size());
-                    return exception;
-                }
-
-                @Override
-                public Void handle(Request request, Response response)
-                        throws Exception
-                {
-                    if (response.getStatusCode() / 100 != 2) {
-                        log.warn("Error posting %s events to flow %s at %s: got response %s %s ", eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
-                        counters.recordLost(counterKey, value.size());
-                    }
-                    else {
-                        log.debug("Posted %s events", value.size());
-                        counters.recordReceived(counterKey, value.size());
-                    }
-                    return null;
-                }
-            });
-        }
-    }
 }

@@ -51,12 +51,14 @@ public class TestEventTapFlow
     private final List<Event> events = ImmutableList.of(new Event("EventType", "UUID", "foo.com", DateTime.now(), ImmutableMap.<String, Object>of()));
     private HttpClient httpClient;
     private Observer observer;
+    private EventTapFlow eventTapFlow;
 
     @BeforeMethod
     private void setup()
     {
         httpClient = mock(HttpClient.class);
         observer = mock(Observer.class);
+        eventTapFlow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "httpClient is null")
@@ -105,11 +107,10 @@ public class TestEventTapFlow
     public void testProcessBatch()
             throws Exception
     {
-        EventTapFlow flow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
         ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
-        flow.processBatch(events);
+        eventTapFlow.processBatch(events);
         verify(httpClient, times(1)).execute(requestArgumentCaptor.capture(), any(ResponseHandler.class));
 
         Request request = requestArgumentCaptor.getValue();
@@ -126,15 +127,14 @@ public class TestEventTapFlow
     public void testObserverOnSuccess()
             throws Exception
     {
-        EventTapFlow flow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
         ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
         ArgumentCaptor<ResponseHandler> responseHandlerArgumentCaptor = ArgumentCaptor.forClass(ResponseHandler.class);
         ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
 
         // Process the events in order to get the EventTapFlow to provide us
-        // with the a request and response handler that we can use to feed
+        // with a request and response handler that we can use to feed
         // it responses.
-        flow.processBatch(events);
+        eventTapFlow.processBatch(events);
         verify(httpClient, times(1)).execute(requestArgumentCaptor.capture(), responseHandlerArgumentCaptor.capture());
         ResponseHandler<Void, Exception> responseHandler = responseHandlerArgumentCaptor.getValue();
         Request request = requestArgumentCaptor.getValue();
@@ -152,7 +152,6 @@ public class TestEventTapFlow
     public void testObserverOnFailure()
             throws Exception
     {
-        EventTapFlow flow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
         ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
         ArgumentCaptor<ResponseHandler> responseHandlerArgumentCaptor = ArgumentCaptor.forClass(ResponseHandler.class);
         ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
@@ -160,7 +159,7 @@ public class TestEventTapFlow
         // Process the events in order to get the EventTapFlow to provide us
         // with the a request and response handler that we can use to feed
         // it responses.
-        flow.processBatch(events);
+        eventTapFlow.processBatch(events);
         verify(httpClient, times(1)).execute(requestArgumentCaptor.capture(), responseHandlerArgumentCaptor.capture());
         Request request = requestArgumentCaptor.getValue();
         ResponseHandler<Void, Exception> responseHandler = responseHandlerArgumentCaptor.getValue();
@@ -174,7 +173,6 @@ public class TestEventTapFlow
     public void testObserverOnNon200Error()
             throws Exception
     {
-        EventTapFlow flow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
         ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
         ArgumentCaptor<ResponseHandler> responseHandlerArgumentCaptor = ArgumentCaptor.forClass(ResponseHandler.class);
         ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
@@ -182,7 +180,7 @@ public class TestEventTapFlow
         // Process the events in order to get the EventTapFlow to provide us
         // with the a request and response handler that we can use to feed
         // it responses.
-        flow.processBatch(events);
+        eventTapFlow.processBatch(events);
         verify(httpClient, times(1)).execute(requestArgumentCaptor.capture(), responseHandlerArgumentCaptor.capture());
         Request request = requestArgumentCaptor.getValue();
         ResponseHandler<Void, Exception> responseHandler = responseHandlerArgumentCaptor.getValue();

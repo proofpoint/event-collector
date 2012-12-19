@@ -143,7 +143,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
             }
             flows.put(ImmutableList.of(eventType, flowId), uri);
             // Save the event types for later to avoid accessing the (concurrent)
-            // processors map more to only once per event type.
+            // processors map more than once per event type.
             eventTypes.add(eventType);
         }
 

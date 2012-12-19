@@ -15,16 +15,16 @@
  */
 package com.proofpoint.event.collector;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableListMultimap;
-import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
-import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
+import com.proofpoint.event.collector.BatchProcessor.Observer;
 import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
@@ -35,21 +35,21 @@ import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import java.net.URI;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Strings.nullToEmpty;
 
-public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTapStats
+public class EventTapWriter implements EventWriter, EventTapStats
 {
     private static final Logger log = Logger.get(EventTapWriter.class);
     private final ServiceSelector selector;
@@ -57,11 +57,11 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     private final BatchProcessorFactory batchProcessorFactory;
     private final EventTapFlowFactory eventTapFlowFactory;
 
-    private final AtomicReference<Multimap<String, EventTapFlow>> eventFlows = new AtomicReference<Multimap<String, EventTapFlow>>(ImmutableMultimap.<String, EventTapFlow>of());
+    private final AtomicReference<Map<String, EventTypeInfo>> eventTypeInfo = new AtomicReference<Map<String, EventTypeInfo>>(
+            ImmutableMap.<String, EventTypeInfo>of());
+
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
-
-    private final ConcurrentMap<String, BatchProcessor<Event>> processors = new ConcurrentHashMap<String, BatchProcessor<Event>>();
 
     private final EventCounters<String> queueCounters = new EventCounters<String>();
     private final EventCounters<List<String>> flowCounters = new EventCounters<List<String>>();
@@ -102,10 +102,10 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @PreDestroy
     public synchronized void stop()
     {
-        for (BatchProcessor<Event> processor : processors.values()) {
-            processor.stop();
+        for (Map.Entry<String, EventTypeInfo> entry : eventTypeInfo.get().entrySet()) {
+            stopEventType(entry.getKey(), entry.getValue());
         }
-        processors.clear();
+        eventTypeInfo.set(ImmutableMap.<String, EventTypeInfo>of());
 
         if (refreshJob != null) {
             refreshJob.cancel(false);
@@ -116,100 +116,102 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @Managed
     public void refreshFlows()
     {
-        Multimap<List<String>, URI> flows = ArrayListMultimap.create();
+        // This function works by creating a new Map of EventTypeInfo objects
+        // based on the current taps in discovery. The EventTypeInfo objects
+        // in the new map are new, but they refer to the existing BatchProcessor,
+        // BatchCloner, and EventTapFlow objects for taps that still exist.
+        Map<String, EventTypeInfo> eventTypeInfo = this.eventTypeInfo.get();
+        // First level is EventType, second is flowId
+        Map<String, Multimap<String, URI>> flows = new HashMap<String, Multimap<String, URI>>();
+        ImmutableMap.Builder<String, EventTypeInfo> eventTypeInfoBuilder = ImmutableMap.<String, EventTypeInfo>builder();
         List<ServiceDescriptor> descriptors = selector.selectAllServices();
-        Set<String> eventTypes = new HashSet<String>();         // Event types that have listeners
+        Set<String> seenEventTypes = new HashSet<String>();
 
         for (ServiceDescriptor descriptor : descriptors) {
-            String eventType = descriptor.getProperties().get("eventType");
-            if (eventType == null) {
+            Map<String, String> properties = descriptor.getProperties();
+            String eventType = properties.get("eventType");
+            if (nullToEmpty(eventType).isEmpty()) {
                 continue;
             }
-            String flowId = descriptor.getProperties().get("tapId");
-            if (flowId == null) {
+            String flowId = properties.get("tapId");
+            if (nullToEmpty(flowId).isEmpty()) {
                 continue;
             }
             URI uri;
             try {
-                uri = URI.create(descriptor.getProperties().get("http"));
+                uri = URI.create(properties.get("http"));
             }
             catch (Exception e) {
                 continue;
             }
-            flows.put(ImmutableList.of(eventType, flowId), uri);
-            // Save the event types for later to avoid accessing the (concurrent)
-            // processors map more than once per event type.
-            eventTypes.add(eventType);
-        }
-
-        // By removing the processors that are no longer required first, the
-        // existing flows in eventFlow will stop being used before they are
-        // destroyed (because any event received for a non-existing processor
-        // will be dropped).
-        Set<String> oldEventTypes = new HashSet<String>();
-        for (String eventType : processors.keySet()) {
-            if (!eventTypes.contains(eventType)) {
-                oldEventTypes.add(eventType);
+            Multimap<String, URI> typeInfo = flows.get(eventType);
+            if (typeInfo == null) {
+                typeInfo = ArrayListMultimap.<String, URI>create();
+                flows.put(eventType, typeInfo);
             }
-        }
-        for (String eventType : oldEventTypes) {
-            log.debug("Cleaning up resources for event type '%s': no more event taps for type", eventType);
-            BatchProcessor<Event> processor = processors.remove(eventType);
-            processor.stop();
+            typeInfo.put(flowId, uri);
+            seenEventTypes.add(eventType);
         }
 
-        ImmutableListMultimap.Builder<String, EventTapFlow> builder = ImmutableListMultimap.builder();
-        for (Entry<List<String>, Collection<URI>> entry : flows.asMap().entrySet()) {
-            final String eventType = entry.getKey().get(0);
-            final String flowId = entry.getKey().get(1);
-            Set<URI> taps = ImmutableSet.copyOf(entry.getValue());
+        for (Map.Entry<String, Multimap<String, URI>> eventTypeFlows : flows.entrySet()) {
+            String eventType = eventTypeFlows.getKey();
+            Multimap<String, URI> flowsForType = eventTypeFlows.getValue();
+            EventTypeInfo.Builder newEventTypeInfoBuilder = new EventTypeInfo.Builder();
 
-            EventTapFlow eventTapFlow = eventTapFlowFactory.createEventTapFlow(eventType, flowId, taps,
-                    new EventTapFlow.Observer()
-                    {
-                        @Override
-                        public void onRecordsSent(URI uri, int count)
-                        {
-                            flowCounters.recordReceived(createCounterKey(uri), count);
-                        }
+            EventTypeInfo oldEventTypeInfo = eventTypeInfo.get(eventType);
+            if (oldEventTypeInfo == null) {
+                BatchCloner<Event> batchCloner = new BatchCloner<Event>();
+                oldEventTypeInfo = new EventTypeInfo.Builder()
+                        .withBestEffortCloner(batchCloner)
+                        .withBestEffortProcessor(createBatchProcessor(eventType, batchCloner))
+                        .build();
 
-                        @Override
-                        public void onRecordsLost(URI uri, int count)
-                        {
-                            flowCounters.recordLost(createCounterKey(uri), count);
-                        }
+                log.debug("Starting processor for type %s", eventType);
+                oldEventTypeInfo.bestEffortProcessor.start();
+            }
 
-                        private List<String> createCounterKey(URI uri)
-                        {
-                            return ImmutableList.of(eventType, flowId, uri.toString());
-                        }
-                    });
-            builder.put(eventType, eventTapFlow);
+            newEventTypeInfoBuilder
+                    .withBestEffortProcessor(oldEventTypeInfo.bestEffortProcessor)
+                    .withBestEffortCloner(oldEventTypeInfo.bestEffortCloner);
+
+            for (Entry<String, Collection<URI>> flowEntry : flowsForType.asMap().entrySet()) {
+                String flowId = flowEntry.getKey();
+                Set<URI> uris = ImmutableSet.copyOf(flowEntry.getValue());
+                EventTapFlow oldEventTapFlow = oldEventTypeInfo.bestEffortTaps.get(flowId);
+
+                EventTapFlow newEventTapFlow;
+                if (oldEventTapFlow == null) {
+                    log.debug("new event flow: id=%s uris=%s", flowId, uris);
+                    newEventTapFlow = createEventTapFlow(eventType, flowId, uris);
+                }
+                else if (!uris.equals(oldEventTapFlow.getTaps())) {
+                    log.debug("update event flow: id=%s uris=%s (was %s)",
+                            flowId, uris, oldEventTapFlow.getTaps());
+                    newEventTapFlow = oldEventTapFlow;
+                    newEventTapFlow.setTaps(uris);
+                }
+                else {
+                    newEventTapFlow = oldEventTapFlow;
+                }
+
+                newEventTypeInfoBuilder.withBestEffortTap(flowId, newEventTapFlow);
+            }
+
+            EventTypeInfo newEventTypeInfo = newEventTypeInfoBuilder.build();
+            newEventTypeInfo.bestEffortCloner.setDestinations(
+                    ImmutableSet.copyOf(newEventTypeInfo.bestEffortTaps.values()));
+
+            eventTypeInfoBuilder.put(eventType, newEventTypeInfo);
         }
-        eventFlows.set(builder.build());
 
-        // By creating new processors after the event flows have been updated,
-        // the new flow will be available for the processor when it needs it.
-        for (final String eventType : eventTypes) {
-            if (!processors.containsKey(eventType)) {
-                log.debug("Creating resources for event type '%s': new event taps for type", eventType);
-                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(eventType, this,
-                        new BatchProcessor.Observer() {
+        this.eventTypeInfo.set(eventTypeInfoBuilder.build());
 
-                            @Override
-                            public void onRecordsLost(int count)
-                            {
-                                queueCounters.recordLost(eventType, count);
-                            }
-
-                            @Override
-                            public void onRecordsReceived(int count)
-                            {
-                                queueCounters.recordReceived(eventType, count);
-                            }
-                        });
-                processors.put(eventType, batchProcessor);
-                batchProcessor.start();
+        // Now that the new processors are going to be used, stop the old ones
+        // that were not pulled into the new map.
+        for (Map.Entry<String, EventTypeInfo> entry : eventTypeInfo.entrySet()) {
+            String eventType = entry.getKey();
+            if (!seenEventTypes.contains(eventType)) {
+                stopEventType(eventType, entry.getValue());
             }
         }
     }
@@ -217,27 +219,12 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @Override
     public void write(Event event)
     {
-        BatchProcessor<Event> processor = processors.get(event.getType());
-        if (processor != null) {
-            processor.put(event);
+        EventTypeInfo eventTypeInfo = this.eventTypeInfo.get().get(event.getType());
+        if (eventTypeInfo != null) {
+            eventTypeInfo.bestEffortProcessor.put(event);
         }
     }
 
-    @Override
-    public void processBatch(List<Event> events)
-    {
-        Multimap<String, EventTapFlow> eventFlows = this.eventFlows.get();
-        if (eventFlows.isEmpty()) {
-            return;
-        }
-
-        Collection<EventTapFlow> currentFlows = eventFlows.get(events.iterator().next().getType());
-        for (EventTapFlow flow : currentFlows) {
-            flow.processBatch(ImmutableList.copyOf(events));
-        }
-    }
-
-    @Override
     public Map<String, CounterState> getQueueCounters()
     {
         return queueCounters.getCounts();
@@ -259,5 +246,98 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     public void resetFlowCounters()
     {
         flowCounters.resetCounts();
+    }
+
+    private BatchProcessor<Event> createBatchProcessor(final String eventType, BatchProcessor.BatchHandler<Event> batchHandler)
+    {
+        return batchProcessorFactory.createBatchProcessor(eventType, batchHandler, new Observer()
+        {
+            @Override
+            public void onRecordsLost(int count)
+            {
+                queueCounters.recordLost(eventType, count);
+            }
+
+            @Override
+            public void onRecordsReceived(int count)
+            {
+                queueCounters.recordReceived(eventType, count);
+            }
+        });
+    }
+
+    private EventTapFlow createEventTapFlow(final String eventType, final String flowId, Set<URI> taps)
+    {
+        final List<String> key = ImmutableList.of(eventType, flowId);
+
+        return eventTapFlowFactory.createEventTapFlow(eventType, flowId, taps,
+                new EventTapFlow.Observer()
+                {
+                    @Override
+                    public void onRecordsSent(URI uri, int count)
+                    {
+                        flowCounters.recordReceived(key, count);
+                    }
+
+                    @Override
+                    public void onRecordsLost(URI uri, int count)
+                    {
+                        flowCounters.recordLost(key, count);
+                    }
+                });
+    }
+
+    private void stopEventType(String eventType, EventTypeInfo eventTypeInfo)
+    {
+        log.debug("Stopping processor for type %s: no longer required", eventType);
+        eventTypeInfo.bestEffortProcessor.stop();
+    }
+
+    @VisibleForTesting
+    static class EventTypeInfo
+    {
+        public final BatchProcessor<Event> bestEffortProcessor;
+        public final BatchCloner<Event> bestEffortCloner;
+        public final Map<String, EventTapFlow> bestEffortTaps;
+
+        private EventTypeInfo(
+                BatchProcessor<Event> bestEffortProcessor,
+                BatchCloner<Event> bestEffortCloner,
+                Map<String, EventTapFlow> bestEffortTaps)
+        {
+            this.bestEffortProcessor = bestEffortProcessor;
+            this.bestEffortCloner = bestEffortCloner;
+            this.bestEffortTaps = bestEffortTaps;
+        }
+
+        public static class Builder
+        {
+            private BatchProcessor<Event> bestEffortProcessor = null;
+            private BatchCloner<Event> bestEffortCloner = null;
+            private ImmutableMap.Builder<String, EventTapFlow> bestEffortTapsBuilder = ImmutableMap.builder();
+
+            public Builder withBestEffortProcessor(BatchProcessor<Event> bestEffortProcessor)
+            {
+                this.bestEffortProcessor = bestEffortProcessor;
+                return this;
+            }
+
+            public Builder withBestEffortCloner(BatchCloner<Event> bestEffortCloner)
+            {
+                this.bestEffortCloner = bestEffortCloner;
+                return this;
+            }
+
+            public Builder withBestEffortTap(String flowId, EventTapFlow eventTapFlow)
+            {
+                bestEffortTapsBuilder.put(flowId, eventTapFlow);
+                return this;
+            }
+
+            public EventTypeInfo build()
+            {
+                return new EventTypeInfo(bestEffortProcessor, bestEffortCloner, bestEffortTapsBuilder.build());
+            }
+        }
     }
 }

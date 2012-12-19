@@ -45,6 +45,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
+import static org.testng.Assert.assertNotEquals;
 import static org.testng.Assert.assertTrue;
 
 public class TestHttpEventTapFlow
@@ -129,8 +130,22 @@ public class TestHttpEventTapFlow
     @Test
     public void testGetTaps()
     {
-        EventTapFlow flow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowId", taps, observer);
-        assertEqualsNoOrder(flow.getTaps().toArray(), taps.toArray());
+        assertEqualsNoOrder(eventTapFlow.getTaps().toArray(), taps.toArray());
+    }
+
+    @Test
+    public void testSetTaps()
+    {
+        Set<URI> taps = ImmutableSet.of(
+                create("http://n1.event.tap/post"),
+                create("http://n2.event.tap/post"),
+                create("http://n3.event.tap/post"));
+
+        // Make sure we are actually changing the taps
+        assertNotEquals(taps, eventTapFlow.getTaps());
+
+        eventTapFlow.setTaps(taps);
+        assertEquals(eventTapFlow.getTaps(), taps);
     }
 
     @Test

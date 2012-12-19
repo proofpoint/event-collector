@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableSet;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import org.testng.annotations.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.mockito.Mockito.mock;
@@ -28,6 +29,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.testng.Assert.assertEqualsNoOrder;
 
 public class TestBatchCloner
 {
@@ -39,7 +41,7 @@ public class TestBatchCloner
     }
 
     @Test
-    public void testSetDesintations()
+    public void testSetDestinations()
     {
         BatchHandler<Object> handler1 = createMockHandler();
         BatchHandler<Object> handler2 = createMockHandler();
@@ -86,8 +88,49 @@ public class TestBatchCloner
         verifyZeroInteractions(handler);
     }
 
+    @Test
+    public void testProcessBatchImmutableToChanges()
+    {
+        // If one client change the content of the list is sees,
+        // the other client doesn't see the change.
+        List<Object> entries = new ArrayList<Object>();
+        entries.add(new Object());
+        entries.add(new Object());
+
+        BatchHandler<Object> handler1 = new DuplicateHandler<Object>(entries);
+        BatchHandler<Object> handler2 = new DuplicateHandler<Object>(entries);
+
+        BatchCloner<Object> cloner = new BatchCloner<Object>();
+        cloner.setDestinations(ImmutableSet.of(handler1, handler2));
+
+        cloner.processBatch(entries);
+    }
+
     private BatchHandler<Object> createMockHandler()
     {
         return mock(BatchHandler.class);
+    }
+
+    static class DuplicateHandler<T> implements BatchHandler<T>
+    {
+        private final ImmutableList<T> entries;
+
+        public DuplicateHandler(List<T> entries)
+        {
+            this.entries = ImmutableList.copyOf(entries);
+        }
+
+        @Override
+        public void processBatch(List<T> events)
+        {
+            assertEqualsNoOrder(events.toArray(), this.entries.toArray());
+
+            // ImmutableList.clear() throws this exception
+            try {
+                events.clear();
+            }
+            catch (UnsupportedOperationException ignored) {
+            }
+        }
     }
 }

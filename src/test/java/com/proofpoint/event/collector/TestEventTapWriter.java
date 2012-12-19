@@ -162,18 +162,18 @@ public class TestEventTapWriter
         EventTapConfig eventTapConfig = new EventTapConfig();
         BatchProcessorFactory batchProcessorFactory = createBatchProcessorFactory();
         String type1 = "Type1";
-        ServiceDescriptor tap1 = createServiceDescriptor(type1);
-        ServiceDescriptor tap2 = createServiceDescriptor(type1);
+        ServiceDescriptor tap1a = createServiceDescriptor(type1);
+        ServiceDescriptor tap1b = createServiceDescriptor(type1);
         ServiceSelector serviceSelector = mock(ServiceSelector.class);
         EventTapWriter eventTapWriter = new EventTapWriter(
                 serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
                 batchProcessorFactory, eventTapConfig);
 
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1));
+        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1a));
         eventTapWriter.refreshFlows();
         checkActiveProcessors(type1);
 
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap2));
+        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1b));
         eventTapWriter.refreshFlows();
         checkActiveProcessors(type1);
     }
@@ -196,14 +196,15 @@ public class TestEventTapWriter
 
         when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1));
 
-        // When refreshFlows() is it must create new processors using the factory.
+        // When refreshFlows() is called, it will create new processors using the factory,
+        // which adds them to the batchProcessor map.
         assertTrue(batchProcessors.isEmpty());
         eventTapWriter.start();
 
         assertTrue(batchProcessors.containsKey(type1));
         assertEquals(batchProcessors.get(type1).size(), 1);
 
-        // If the refreshFlows() is called after the period, tap2 should
+        // If the refreshFlows() is called after the period, tap2 should be
         // created to handle the new tap after one period.
         when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap2));
         executorService.elapseTime(
@@ -291,7 +292,7 @@ public class TestEventTapWriter
     }
 
     @Test
-    public void testWriteDoesntSentToOldProcessor()
+    public void testWriteDoesntSendToOldProcessor()
     {
         EventTapConfig eventTapConfig = new EventTapConfig();
         BatchProcessorFactory batchProcessorFactory = createBatchProcessorFactory();

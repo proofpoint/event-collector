@@ -21,18 +21,18 @@ import javax.inject.Inject;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-public class BatchProcessorFactoryImpl<T extends Event> implements BatchProcessorFactory<T>
+public class BatchProcessorFactoryImpl implements BatchProcessorFactory
 {
-    BatchProcessorConfig config;
+    private final BatchProcessorConfig config;
 
     @Inject
     public BatchProcessorFactoryImpl(BatchProcessorConfig config)
     {
-        this.config = checkNotNull(config);
+        this.config = checkNotNull(config, "config is null");
     }
 
     @Override
-    public BatchProcessor<T> createBatchProcessor(BatchHandler<T> batchHandler, String eventType)
+    public <T extends Event> BatchProcessor<T> createBatchProcessor(BatchHandler<T> batchHandler, String eventType)
     {
         return new BatchProcessor<T>(eventType, batchHandler, config);
     }

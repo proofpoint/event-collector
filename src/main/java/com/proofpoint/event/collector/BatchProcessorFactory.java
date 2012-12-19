@@ -17,7 +17,7 @@ package com.proofpoint.event.collector;
 
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 
-public interface BatchProcessorFactory<T extends Event>
+public interface BatchProcessorFactory
 {
-    public BatchProcessor<T> createBatchProcessor(BatchHandler<T> batchHandler, String eventType);
+    public <T extends Event> BatchProcessor<T> createBatchProcessor(BatchHandler<T> batchHandler, String eventType);
 }

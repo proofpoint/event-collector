@@ -16,6 +16,7 @@
 package com.proofpoint.event.collector;
 
 import com.proofpoint.configuration.Config;
+import com.proofpoint.configuration.ConfigDescription;
 
 import javax.validation.constraints.Min;
 
@@ -31,6 +32,7 @@ public class BatchProcessorConfig
     }
 
     @Config("collector.event-tap.batch-size-max")
+    @ConfigDescription("The maximum number of events to include in a single batch posted to a given event tap.")
     public BatchProcessorConfig setMaxBatchSize(int maxBatchSize)
     {
         this.maxBatchSize = maxBatchSize;
@@ -44,6 +46,7 @@ public class BatchProcessorConfig
     }
 
     @Config("collector.event-tap.queue-size")
+    @ConfigDescription("The maximum number of events queued for a given event type's queue.")
     public BatchProcessorConfig setQueueSize(int queueSize)
     {
         this.queueSize = queueSize;

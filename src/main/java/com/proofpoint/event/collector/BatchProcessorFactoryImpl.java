@@ -32,7 +32,7 @@ public class BatchProcessorFactoryImpl implements BatchProcessorFactory
     }
 
     @Override
-    public <T extends Event> BatchProcessor<T> createBatchProcessor(BatchHandler<T> batchHandler, String eventType)
+    public <T> BatchProcessor<T> createBatchProcessor(BatchHandler<T> batchHandler, String eventType)
     {
         return new BatchProcessor<T>(eventType, batchHandler, config);
     }

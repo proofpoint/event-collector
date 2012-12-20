@@ -34,7 +34,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static java.lang.String.format;
 
-public class BatchProcessor<T extends Event>
+public class BatchProcessor<T>
 {
     private final BatchHandler<T> handler;
     private final int maxBatchSize;

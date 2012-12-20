@@ -15,14 +15,12 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
@@ -31,6 +29,7 @@ import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.json.JsonCodec;
+import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 import org.weakref.jmx.Managed;
 
@@ -39,9 +38,13 @@ import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import java.net.URI;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -51,28 +54,18 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTapStats
 {
+    private static final Logger log = Logger.get(EventTapWriter.class);
     private final ServiceSelector selector;
     private final HttpClient httpClient;
     private final JsonCodec<List<Event>> eventsCodec;
     private final ScheduledExecutorService executorService;
+    private final BatchProcessorFactory batchProcessorFactory;
 
     private final AtomicReference<Multimap<String, EventTapFlow>> eventFlows = new AtomicReference<Multimap<String, EventTapFlow>>(ImmutableMultimap.<String, EventTapFlow>of());
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
 
-    private final int maxBatchSize;
-    private final int queueSize;
-    private final LoadingCache<String, BatchProcessor<Event>> processors = CacheBuilder.newBuilder().build(new CacheLoader<String, BatchProcessor<Event>>()
-    {
-        @Override
-        public BatchProcessor<Event> load(String key)
-                throws Exception
-        {
-            BatchProcessor<Event> processor = new BatchProcessor<Event>(key, EventTapWriter.this, maxBatchSize, queueSize);
-            processor.start();
-            return processor;
-        }
-    });
+    private final ConcurrentMap<String, BatchProcessor<Event>> processors = new ConcurrentHashMap<String, BatchProcessor<Event>>();
 
     private final EventCounters<List<String>> flowCounters = new EventCounters<List<String>>();
 
@@ -81,16 +74,15 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
             @EventTap HttpClient httpClient,
             JsonCodec<List<Event>> eventsCodec,
             @EventTap ScheduledExecutorService executorService,
+            BatchProcessorFactory batchProcessorFactory,
             EventTapConfig config)
     {
-        this.maxBatchSize = checkNotNull(config, "config is null").getMaxBatchSize();
-        this.queueSize = config.getQueueSize();
         this.selector = checkNotNull(selector, "selector is null");
         this.httpClient = checkNotNull(httpClient, "httpClient is null");
         this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
         this.executorService = checkNotNull(executorService, "executorService is null");
-        this.flowRefreshDuration = config.getEventTapRefreshDuration();
-        refreshFlows();
+        this.flowRefreshDuration = checkNotNull(config, "config is null").getEventTapRefreshDuration();
+        this.batchProcessorFactory = checkNotNull(batchProcessorFactory, "batchProcessorFactory is null");
     }
 
     @PostConstruct
@@ -101,6 +93,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
             return;
         }
 
+        refreshFlows();
         refreshJob = executorService.scheduleWithFixedDelay(new Runnable()
         {
             @Override
@@ -114,9 +107,10 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @PreDestroy
     public synchronized void stop()
     {
-        for (BatchProcessor<Event> processor : processors.asMap().values()) {
+        for (BatchProcessor<Event> processor : processors.values()) {
             processor.stop();
         }
+        processors.clear();
 
         if (refreshJob != null) {
             refreshJob.cancel(false);
@@ -129,6 +123,8 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     {
         Multimap<List<String>, URI> flows = ArrayListMultimap.create();
         List<ServiceDescriptor> descriptors = selector.selectAllServices();
+        Set<String> eventTypes = new HashSet<String>();         // Event types that have listeners
+
         for (ServiceDescriptor descriptor : descriptors) {
             String eventType = descriptor.getProperties().get("eventType");
             if (eventType == null) {
@@ -146,13 +142,32 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
                 continue;
             }
             flows.put(ImmutableList.of(eventType, flowId), uri);
+            // Save the event types for later to avoid accessing the (concurrent)
+            // processors map more than once per event type.
+            eventTypes.add(eventType);
+        }
+
+        // By removing the processors that are no longer required first, the
+        // existing flows in eventFlow will stop being used before they are
+        // destroyed (because any event received for a non-existing processor
+        // will be dropped).
+        Set<String> oldEventTypes = new HashSet<String>();
+        for (String eventType : processors.keySet()) {
+            if (!eventTypes.contains(eventType)) {
+                oldEventTypes.add(eventType);
+            }
+        }
+        for (String eventType : oldEventTypes) {
+            log.debug("Cleaning up resources for event type '%s': no more event taps for type", eventType);
+            BatchProcessor<Event> processor = processors.remove(eventType);
+            processor.stop();
         }
 
         ImmutableListMultimap.Builder<String, EventTapFlow> builder = ImmutableListMultimap.builder();
         for (Entry<List<String>, Collection<URI>> entry : flows.asMap().entrySet()) {
             final String eventType = entry.getKey().get(0);
             final String flowId = entry.getKey().get(1);
-            List<URI> taps = ImmutableList.copyOf(entry.getValue());
+            Set<URI> taps = ImmutableSet.copyOf(entry.getValue());
 
             builder.put(eventType, new EventTapFlow(httpClient, eventsCodec, eventType, flowId, taps,
                     new EventTapFlow.Observer()
@@ -176,12 +191,26 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
                     }));
         }
         eventFlows.set(builder.build());
+
+        // By creating new processors after the event flows have been updated,
+        // the new flow will be available for the processor when it needs it.
+        for (String eventType : eventTypes) {
+            if (!processors.containsKey(eventType)) {
+                log.debug("Creating resources for event type '%s': new event taps for type", eventType);
+                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(this, eventType);
+                processors.put(eventType, batchProcessor);
+                batchProcessor.start();
+            }
+        }
     }
 
     @Override
     public void write(Event event)
     {
-        processors.getUnchecked(event.getType()).put(event);
+        BatchProcessor<Event> processor = processors.get(event.getType());
+        if (processor != null) {
+            processor.put(event);
+        }
     }
 
     @Override
@@ -202,7 +231,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     public Map<String, CounterState> getQueueCounters()
     {
         ImmutableMap.Builder<String, CounterState> counters = ImmutableMap.builder();
-        for (Entry<String, BatchProcessor<Event>> entry : processors.asMap().entrySet()) {
+        for (Entry<String, BatchProcessor<Event>> entry : processors.entrySet()) {
             counters.put(entry.getKey(), entry.getValue().getCounterState());
         }
         return counters.build();
@@ -211,7 +240,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @Override
     public void resetQueueCounters()
     {
-        for (BatchProcessor<Event> processor : processors.asMap().values()) {
+        for (BatchProcessor<Event> processor : processors.values()) {
             processor.resetCounter();
         }
     }
@@ -227,5 +256,4 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     {
         flowCounters.resetCounts();
     }
-
 }

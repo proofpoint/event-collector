@@ -15,7 +15,6 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.event.collector.EventCounters.Counter;
 import com.proofpoint.event.collector.EventCounters.CounterState;
@@ -31,6 +30,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static java.lang.String.format;
 
 public class BatchProcessor<T extends Event>
@@ -43,16 +44,14 @@ public class BatchProcessor<T extends Event>
 
     private final AtomicReference<Counter> counter = new AtomicReference<Counter>(new Counter());
 
-    public BatchProcessor(String name, BatchHandler<T> handler, int maxBatchSize, int queueSize)
+    public BatchProcessor(String name, BatchHandler<T> handler, BatchProcessorConfig config)
     {
-        Preconditions.checkNotNull(name, "name is null");
-        Preconditions.checkNotNull(handler, "handler is null");
-        Preconditions.checkArgument(queueSize > 0, "queue size needs to be a positive integer");
-        Preconditions.checkArgument(maxBatchSize > 0, "max batch size needs to be a positive integer");
+        checkNotNull(name, "name is null");
+        checkNotNull(handler, "handler is null");
 
         this.handler = handler;
-        this.maxBatchSize = maxBatchSize;
-        this.queue = new ArrayBlockingQueue<T>(queueSize);
+        this.maxBatchSize = checkNotNull(config, "config is null").getMaxBatchSize();
+        this.queue = new ArrayBlockingQueue<T>(config.getQueueSize());
 
         this.executor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat(format("batch-processor-%s", name)).build());
     }
@@ -92,8 +91,8 @@ public class BatchProcessor<T extends Event>
 
     public void put(T entry)
     {
-        Preconditions.checkState(future != null && !future.get().isCancelled(), "Processor is not running");
-        Preconditions.checkNotNull(entry, "entry is null");
+        checkState(future.get() != null && !future.get().isCancelled(), "Processor is not running");
+        checkNotNull(entry, "entry is null");
 
         while (!queue.offer(entry)) {
             // throw away oldest and try again
@@ -118,5 +117,4 @@ public class BatchProcessor<T extends Event>
     {
         void processBatch(List<T> entries);
     }
-
 }

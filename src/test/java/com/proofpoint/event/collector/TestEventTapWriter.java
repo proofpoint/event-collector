@@ -30,6 +30,7 @@ import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
 import org.joda.time.DateTime;
 import org.logicalshift.concurrent.SerialScheduledExecutorService;
+import org.mockito.ArgumentCaptor;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
@@ -44,13 +45,19 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Strings.nullToEmpty;
+import static com.google.common.collect.Iterables.concat;
 import static java.lang.String.format;
 import static java.util.UUID.randomUUID;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertTrue;
 
 public class TestEventTapWriter
@@ -112,33 +119,72 @@ public class TestEventTapWriter
     @Test
     public void testRefreshFlowsCreatesNewEntries()
     {
-        ServiceDescriptor tapA = createServiceDescriptor("TypeA");
-        ServiceDescriptor tapB = createServiceDescriptor("TypeB");
+        String typeA = "TypeA";
+        String typeB = "TypeB";
+        ServiceDescriptor tapA = createServiceDescriptor(typeA);
+        ServiceDescriptor tapB = createServiceDescriptor(typeB);
+        Event eventA1 = createEvent(typeA);
+        Event eventA2 = createEvent(typeA);
+        Event eventB1 = createEvent(typeB);
+        Event eventB2 = createEvent(typeB);
 
         updateThenRefreshFlowsThenCheck(tapA);
+        eventTapWriter.write(eventA1);
+        eventTapWriter.write(eventB1);
+        checkTapEvents(tapA, eventA1);
+        checkTapEvents(tapB);
+
         updateThenRefreshFlowsThenCheck(tapA, tapB);
+        eventTapWriter.write(eventA2);
+        eventTapWriter.write(eventB2);
+        checkTapEvents(tapA, eventA1, eventA2);
+        checkTapEvents(tapB, eventB2);
     }
 
     @Test
     public void testRefreshFlowsRemovesOldEntries()
     {
-        ServiceDescriptor tapA = createServiceDescriptor("TypeA");
-        ServiceDescriptor tapB = createServiceDescriptor("TypeB");
+        String typeA = "TypeA";
+        String typeB = "TypeB";
+        ServiceDescriptor tapA = createServiceDescriptor(typeA);
+        ServiceDescriptor tapB = createServiceDescriptor(typeB);
+        Event eventA1 = createEvent(typeA);
+        Event eventA2 = createEvent(typeA);
+        Event eventB1 = createEvent(typeB);
+        Event eventB2 = createEvent(typeB);
 
         updateThenRefreshFlowsThenCheck(tapA, tapB);
+        eventTapWriter.write(eventA1);
+        eventTapWriter.write(eventB1);
+        checkTapEvents(tapA, eventA1);
+        checkTapEvents(tapB, eventB1);
+
         updateThenRefreshFlowsThenCheck(tapA);
+        eventTapWriter.write(eventA2);
+        eventTapWriter.write(eventB2);
+        checkTapEvents(tapA, eventA1, eventA2);
+        checkTapEvents(tapB, eventB1);
     }
 
     @Test
     public void testRefreshFlowsUpdatesExistingProcessor()
     {
-        // If the entries for a given tap changes, don't create the processor
+        // If the taps for a given event type changes, don't create the processor
         String typeA = "TypeA";
-        ServiceDescriptor tapA1 = createServiceDescriptor(typeA);
-        ServiceDescriptor tapA2 = createServiceDescriptor(typeA);
+        ServiceDescriptor tapA1 = createServiceDescriptor(typeA, ImmutableMap.of("tapId", "1"));
+        ServiceDescriptor tapA2 = createServiceDescriptor(typeA, ImmutableMap.of("tapId", "2"));
+        Event eventA1 = createEvent(typeA);
+        Event eventA2 = createEvent(typeA);
 
         updateThenRefreshFlowsThenCheck(tapA1);
+        eventTapWriter.write(eventA1);
+        checkTapEvents(tapA1, eventA1);
+        checkTapEvents(tapA2);
+
         updateThenRefreshFlowsThenCheck(tapA2);
+        eventTapWriter.write(eventA2);
+        checkTapEvents(tapA1, eventA1);
+        checkTapEvents(tapA2, eventA2);
     }
 
     @Test
@@ -195,16 +241,16 @@ public class TestEventTapWriter
         updateTaps(tap1, tap2);
         eventTapWriter.start();
 
-        Event eventType1 = createEvent(type1);
-        Event eventType2 = createEvent(type2);
-        Event eventType3 = createEvent(type3);
+        Event event1 = createEvent(type1);
+        Event event2 = createEvent(type2);
+        Event event3 = createEvent(type3);
 
-        eventTapWriter.write(eventType1);
-        eventTapWriter.write(eventType2);
-        eventTapWriter.write(eventType3);
+        eventTapWriter.write(event1);
+        eventTapWriter.write(event2);
+        eventTapWriter.write(event3);
 
-        checkEventsReceived(type1, eventType1);
-        checkEventsReceived(type2, eventType2);
+        checkTapEvents(tap1, event1);
+        checkTapEvents(tap2, event2);
     }
 
     @Test
@@ -218,23 +264,23 @@ public class TestEventTapWriter
         updateTaps(tap1);
         eventTapWriter.start();
 
-        Event eventType1a = createEvent(type1);
-        Event eventType1b = createEvent(type1);
-        Event eventType2a = createEvent(type2);
-        Event eventType2b = createEvent(type2);
+        Event event1a = createEvent(type1);
+        Event event1b = createEvent(type1);
+        Event event2a = createEvent(type2);
+        Event event2b = createEvent(type2);
 
-        eventTapWriter.write(eventType1a);
-        eventTapWriter.write(eventType2a);
-        checkEventsReceived(type1, eventType1a);
+        eventTapWriter.write(event1a);
+        eventTapWriter.write(event2a);
+        checkTapEvents(tap1, event1a);
 
         updateTaps(tap1, tap2);
         when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1, tap2));
         eventTapWriter.refreshFlows();
 
-        eventTapWriter.write(eventType1b);
-        eventTapWriter.write(eventType2b);
-        checkEventsReceived(type1, eventType1a, eventType1b);
-        checkEventsReceived(type2, eventType2b);
+        eventTapWriter.write(event1b);
+        eventTapWriter.write(event2b);
+        checkTapEvents(tap1, event1a, event1b);
+        checkTapEvents(tap2, event2b);
     }
 
     @Test
@@ -248,23 +294,23 @@ public class TestEventTapWriter
         updateTaps(tap1, tap2);
         eventTapWriter.start();
 
-        Event eventType1a = createEvent(type1);
-        Event eventType1b = createEvent(type1);
-        Event eventType2a = createEvent(type2);
-        Event eventType2b = createEvent(type2);
+        Event event1a = createEvent(type1);
+        Event event1b = createEvent(type1);
+        Event event2a = createEvent(type2);
+        Event event2b = createEvent(type2);
 
-        eventTapWriter.write(eventType1a);
-        eventTapWriter.write(eventType2a);
-        checkEventsReceived(type1, eventType1a);
-        checkEventsReceived(type2, eventType2a);
+        eventTapWriter.write(event1a);
+        eventTapWriter.write(event2a);
+        checkTapEvents(tap1, event1a);
+        checkTapEvents(tap2, event2a);
 
         updateTaps(tap1);
         eventTapWriter.refreshFlows();
 
-        eventTapWriter.write(eventType1b);
-        eventTapWriter.write(eventType2b);
-        checkEventsReceived(type1, eventType1a, eventType1b);
-        checkEventsReceived(type2, eventType2a);
+        eventTapWriter.write(event1b);
+        eventTapWriter.write(event2b);
+        checkTapEvents(tap1, event1a, event1b);
+        checkTapEvents(tap2, event2a);
     }
 
     @Test
@@ -346,15 +392,25 @@ public class TestEventTapWriter
         }
     }
 
-    private void checkEventsReceived(String type, Event... events)
+    private void checkTapEvents(ServiceDescriptor tap, Event... events)
     {
-        assertTrue(batchProcessors.containsKey(type), format("no processor for type %s", type));
+        String eventType = nullToEmpty(tap.getProperties().get("eventType"));
+        String flowId = nullToEmpty(tap.getProperties().get("tapId"));
+        EventTapFlow eventTapFlow = eventTapFlows.get(ImmutableList.of(eventType, flowId));
+        @SuppressWarnings("deprecated")
+        ArgumentCaptor<List<Event>> eventArgumentCaptor = new ArgumentCaptor<List<Event>>();
 
-        List<MockBatchProcessor<Event>> processors = ImmutableList.copyOf(batchProcessors.get(type));
-        assertEquals(processors.size(), 1);
-        MockBatchProcessor<Event> processor = processors.get(0);
-
-        assertEqualsNoOrder(processor.entries.toArray(), events);
+        if (events.length == 0) {
+            if (eventTapFlow != null) {
+                verify(eventTapFlow, never()).processBatch(any(List.class));
+            }
+        }
+        else {
+            assertNotNull(eventTapFlow);
+            verify(eventTapFlow, atLeast(1)).processBatch(eventArgumentCaptor.capture());
+            List<Event> actualEvents = ImmutableList.copyOf(concat(eventArgumentCaptor.getAllValues()));
+            assertEqualsNoOrder(actualEvents.toArray(), ImmutableList.copyOf(events).toArray());
+        }
     }
 
     private void checkCounters(Map<String, CounterState> counters, String type, int received, int lost)

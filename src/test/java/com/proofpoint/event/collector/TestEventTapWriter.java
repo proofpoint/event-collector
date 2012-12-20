@@ -41,6 +41,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import static com.google.common.base.Strings.nullToEmpty;
 import static java.lang.String.format;
 import static java.util.UUID.randomUUID;
 import static org.mockito.Mockito.mock;
@@ -112,52 +113,33 @@ public class TestEventTapWriter
     @Test
     public void testRefreshFlowsCreatesNewEntries()
     {
-        String type1 = "Type1";
-        String type2 = "Type2";
-        ServiceDescriptor tap1 = createServiceDescriptor(type1);
-        ServiceDescriptor tap2 = createServiceDescriptor(type2);
+        ServiceDescriptor tapA = createServiceDescriptor("TypeA");
+        ServiceDescriptor tapB = createServiceDescriptor("TypeB");
 
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1));
-        eventTapWriter.refreshFlows();
-        checkActiveProcessors(type1);
-
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1, tap2));
-        eventTapWriter.refreshFlows();
-        checkActiveProcessors(type1, type2);
+        updateThenRefreshFlowsThenCheck(tapA);
+        updateThenRefreshFlowsThenCheck(tapA, tapB);
     }
 
     @Test
     public void testRefreshFlowsRemovesOldEntries()
     {
-        String type1 = "Type1";
-        String type2 = "Type2";
-        ServiceDescriptor tap1 = createServiceDescriptor(type1);
-        ServiceDescriptor tap2 = createServiceDescriptor(type2);
+        ServiceDescriptor tapA = createServiceDescriptor("TypeA");
+        ServiceDescriptor tapB = createServiceDescriptor("TypeB");
 
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1, tap2));
-        eventTapWriter.refreshFlows();
-        checkActiveProcessors(type1, type2);
-
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1));
-        eventTapWriter.refreshFlows();
-        checkActiveProcessors(type1);
+        updateThenRefreshFlowsThenCheck(tapA, tapB);
+        updateThenRefreshFlowsThenCheck(tapA);
     }
 
     @Test
     public void testRefreshFlowsUpdatesExistingProcessor()
     {
         // If the entries for a given tap changes, don't create the processor
-        String type1 = "Type1";
-        ServiceDescriptor tap1a = createServiceDescriptor(type1);
-        ServiceDescriptor tap1b = createServiceDescriptor(type1);
+        String typeA = "TypeA";
+        ServiceDescriptor tapA1 = createServiceDescriptor(typeA);
+        ServiceDescriptor tapA2 = createServiceDescriptor(typeA);
 
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1a));
-        eventTapWriter.refreshFlows();
-        checkActiveProcessors(type1);
-
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1b));
-        eventTapWriter.refreshFlows();
-        checkActiveProcessors(type1);
+        updateThenRefreshFlowsThenCheck(tapA1);
+        updateThenRefreshFlowsThenCheck(tapA2);
     }
 
     @Test
@@ -170,7 +152,7 @@ public class TestEventTapWriter
         ServiceDescriptor tap2 = createServiceDescriptor(type2);
         ServiceDescriptor tap3 = createServiceDescriptor(type3);
 
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1));
+        updateTaps(tap1);
 
         // When refreshFlows() is called, it will create new processors using the factory,
         // which adds them to the batchProcessor map.
@@ -182,7 +164,7 @@ public class TestEventTapWriter
 
         // If the refreshFlows() is called after the period, tap2 should be
         // created to handle the new tap after one period.
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap2));
+        updateTaps(tap2);
         executorService.elapseTime(
                 (long) eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
                 TimeUnit.MILLISECONDS);
@@ -192,7 +174,7 @@ public class TestEventTapWriter
         assertEquals(batchProcessors.get(type2).size(), 1);
 
         // Same is true after the second period, but with tap3.
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap3));
+        updateTaps(tap3);
         executorService.elapseTime(
                 (long) eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
                 TimeUnit.MILLISECONDS);
@@ -211,7 +193,7 @@ public class TestEventTapWriter
         ServiceDescriptor tap1 = createServiceDescriptor(type1);
         ServiceDescriptor tap2 = createServiceDescriptor(type2);
 
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1, tap2));
+        updateTaps(tap1, tap2);
         eventTapWriter.start();
 
         Event eventType1 = createEvent(type1);
@@ -234,7 +216,7 @@ public class TestEventTapWriter
         ServiceDescriptor tap1 = createServiceDescriptor(type1);
         ServiceDescriptor tap2 = createServiceDescriptor(type2);
 
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1));
+        updateTaps(tap1);
         eventTapWriter.start();
 
         Event eventType1a = createEvent(type1);
@@ -246,6 +228,7 @@ public class TestEventTapWriter
         eventTapWriter.write(eventType2a);
         checkEventsReceived(type1, eventType1a);
 
+        updateTaps(tap1, tap2);
         when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1, tap2));
         eventTapWriter.refreshFlows();
 
@@ -263,7 +246,7 @@ public class TestEventTapWriter
         ServiceDescriptor tap1 = createServiceDescriptor(type1);
         ServiceDescriptor tap2 = createServiceDescriptor(type2);
 
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1, tap2));
+        updateTaps(tap1, tap2);
         eventTapWriter.start();
 
         Event eventType1a = createEvent(type1);
@@ -276,7 +259,7 @@ public class TestEventTapWriter
         checkEventsReceived(type1, eventType1a);
         checkEventsReceived(type2, eventType2a);
 
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1));
+        updateTaps(tap1);
         eventTapWriter.refreshFlows();
 
         eventTapWriter.write(eventType1b);
@@ -285,20 +268,33 @@ public class TestEventTapWriter
         checkEventsReceived(type2, eventType2a);
     }
 
+    private void updateThenRefreshFlowsThenCheck(ServiceDescriptor... taps)
+    {
+        updateTaps(taps);
+        eventTapWriter.refreshFlows();
+        checkActiveProcessors(taps);
+    }
+
+    private void updateTaps(ServiceDescriptor... taps)
+    {
+        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.copyOf(taps));
+    }
+
     private Event createEvent(String type)
     {
         return new Event(type, randomUUID().toString(), "host", DateTime.now(), ImmutableMap.<String, Object>of());
     }
 
-    private void checkActiveProcessors(String... types)
+    private void checkActiveProcessors(ServiceDescriptor... taps)
     {
-        List<String> typesAsList = ImmutableList.copyOf(types);
+        List<ServiceDescriptor> tapsAsList = ImmutableList.copyOf(taps);
 
-        for (String type : typesAsList) {
-            assertTrue(batchProcessors.containsKey(type), format("no processor created for %s", type));
+        for (ServiceDescriptor tap : tapsAsList) {
+            String processorName = extractProcessorName(tap);
+            assertTrue(batchProcessors.containsKey(processorName), format("no processor created for %s", processorName));
 
-            List<BatchProcessor<Event>> processors = ImmutableList.copyOf(batchProcessors.get(type));
-            assertEquals(processors.size(), 1, format("wrong number of processors for %s", type));
+            List<BatchProcessor<Event>> processors = ImmutableList.copyOf(batchProcessors.get(processorName));
+            assertEquals(processors.size(), 1, format("wrong number of processors for %s", processorName));
 
             // The batch processor should have been started, but not stopped
             // if it is still active.
@@ -309,12 +305,20 @@ public class TestEventTapWriter
 
         // For all non-active processors, make sure they have been stopped.
         for (Entry<String, Collection<BatchProcessor<Event>>> entry : batchProcessors.asMap().entrySet()) {
-            if (typesAsList.contains(entry.getKey())) {
-                continue;           // Handles in loop above
+            String processorName = entry.getKey();
+            ServiceDescriptor tap = null;
+            for (ServiceDescriptor t: tapsAsList) {
+                if (processorName.equals(extractProcessorName(t))) {
+                    tap = t;
+                    break;
+                }
+            }
+            if (tap != null) {
+                continue;           // Handled in loop above
             }
 
             List<BatchProcessor<Event>> processors = ImmutableList.copyOf(entry.getValue());
-            assertEquals(processors.size(), 1, format("wrong number of processors for %s", entry.getKey()));
+            assertEquals(processors.size(), 1, format("wrong number of processors for %s", processorName));
 
             // The batch processor should have been started and stopped.
             BatchProcessor<Event> processor = processors.get(0);
@@ -336,9 +340,24 @@ public class TestEventTapWriter
         assertEqualsNoOrder(eventArgumentCaptor.getAllValues().toArray(), events);
     }
 
-    private ServiceDescriptor createServiceDescriptor(String eventType)
+    private String extractProcessorName(ServiceDescriptor tap)
+    {
+        return nullToEmpty(tap.getProperties().get("eventType"));
+    }
+
+    private ServiceDescriptor createServiceDescriptor(String eventType, Map<String, String> properties)
     {
         String nodeId = randomUUID().toString();
+        ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
+
+        builder.putAll(properties);
+        builder.put("eventType", eventType);
+        if (!properties.containsKey("tapId")) {
+            builder.put("tapId", "1");
+        }
+        if (!properties.containsKey("http")) {
+             builder.put("http", format("http://%s.event.tap", eventType));
+        }
         return new ServiceDescriptor(
                 randomUUID(),
                 nodeId,
@@ -346,7 +365,12 @@ public class TestEventTapWriter
                 "global",
                 "/" + nodeId,
                 ServiceState.RUNNING,
-                ImmutableMap.<String, String>of("eventType", eventType, "tapId", "1", "http", format("http://%s.event.tap", eventType)));
+                builder.build());
+    }
+
+    private ServiceDescriptor createServiceDescriptor(String eventType)
+    {
+        return createServiceDescriptor(eventType, ImmutableMap.<String, String>of());
     }
 
     private class MockBatchProcessorFactory implements BatchProcessorFactory

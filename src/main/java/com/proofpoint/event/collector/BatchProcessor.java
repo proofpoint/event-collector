@@ -15,26 +15,35 @@
  */
 package com.proofpoint.event.collector;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 import java.util.List;
 
 public interface BatchProcessor<T>
 {
-    @PostConstruct
+    Observer NULL_OBSERVER = new Observer()
+    {
+        @Override
+        public void onRecordsLost(int count)
+        {
+        }
+
+        @Override
+        public void onRecordsReceived(int count)
+        {
+        }
+    };
+
     void start();
 
-    @PreDestroy
     void stop();
 
     void put(T entry);
 
-    public static interface BatchHandler<T>
+    interface BatchHandler<T>
     {
         void processBatch(List<T> entries);
     }
 
-    public static interface Observer
+    interface Observer
     {
         void onRecordsLost(int count);
 

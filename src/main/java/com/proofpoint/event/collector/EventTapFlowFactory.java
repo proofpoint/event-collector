@@ -25,4 +25,7 @@ public interface EventTapFlowFactory
 {
     public EventTapFlow createEventTapFlow(@Assisted("eventType") String eventType,
             @Assisted("flowId") String flowId, Set<URI> taps, Observer observer);
+
+    public EventTapFlow createEventTapFlow(@Assisted("eventType") String eventType,
+            @Assisted("flowId") String flowId, Set<URI> taps);
 }

@@ -16,11 +16,7 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.proofpoint.event.collector.EventCounters.Counter;
-import com.proofpoint.event.collector.EventCounters.CounterState;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -43,7 +39,7 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
     private final Observer observer;
     private final AtomicReference<Future<?>> future = new AtomicReference<Future<?>>();
 
-    public AsyncBatchProcessor(String name, BatchHandler<T> handler, Observer observer, BatchProcessorConfig config)
+    public AsyncBatchProcessor(String name, BatchHandler<T> handler, BatchProcessorConfig config, Observer observer)
     {
         checkNotNull(name, "name is null");
         checkNotNull(handler, "handler is null");
@@ -57,7 +53,6 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
     }
 
     @Override
-    @PostConstruct
     public void start()
     {
         future.set(executor.submit(new Runnable()
@@ -84,7 +79,6 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
     }
 
     @Override
-    @PreDestroy
     public void stop()
     {
         future.get().cancel(true);

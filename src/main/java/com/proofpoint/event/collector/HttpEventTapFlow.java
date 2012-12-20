@@ -18,6 +18,7 @@ package com.proofpoint.event.collector;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.inject.assistedinject.Assisted;
+import com.google.inject.assistedinject.AssistedInject;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.http.client.RequestBuilder;
@@ -50,7 +51,7 @@ class HttpEventTapFlow implements EventTapFlow
     private final List<URI> taps;
     private final Observer observer;
 
-    @Inject
+    @AssistedInject
     public HttpEventTapFlow(@EventTap HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
             @Assisted("eventType") String eventType, @Assisted("flowId") String flowId, @Assisted Set<URI> taps,
             @Assisted Observer observer)
@@ -59,9 +60,17 @@ class HttpEventTapFlow implements EventTapFlow
         this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
         this.eventType = checkNotNull(eventType, "eventType is null");
         this.flowId = checkNotNull(flowId, "flowId is null");
-        this.taps = ImmutableList.<URI>copyOf(checkNotNull(taps, "taps is null"));
+        this.taps = ImmutableList.copyOf(checkNotNull(taps, "taps is null"));
         checkArgument(!taps.isEmpty(), "taps is empty");
         this.observer = checkNotNull(observer, "observer is null");
+    }
+
+    @AssistedInject
+    public HttpEventTapFlow(@EventTap HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
+            @Assisted("eventType") String eventType, @Assisted("flowId") String flowId,
+            @Assisted Set<URI> taps)
+    {
+        this(httpClient, eventsCodec, eventType, flowId, taps, NULL_OBSERVER);
     }
 
     @Override
@@ -78,7 +87,7 @@ class HttpEventTapFlow implements EventTapFlow
     @Override
     public Set<URI> getTaps()
     {
-        return ImmutableSet.<URI>copyOf(taps);
+        return ImmutableSet.copyOf(taps);
     }
 
     private void sendEvents(final List<Event> entries)

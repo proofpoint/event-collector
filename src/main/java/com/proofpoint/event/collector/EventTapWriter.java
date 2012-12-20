@@ -18,7 +18,6 @@ package com.proofpoint.event.collector;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
@@ -191,11 +190,10 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
 
         // By creating new processors after the event flows have been updated,
         // the new flow will be available for the processor when it needs it.
-        for (String et : eventTypes) {
-            final String eventType = et;
+        for (final String eventType : eventTypes) {
             if (!processors.containsKey(eventType)) {
                 log.debug("Creating resources for event type '%s': new event taps for type", eventType);
-                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(this, eventType,
+                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(eventType, this,
                         new BatchProcessor.Observer() {
 
                             @Override

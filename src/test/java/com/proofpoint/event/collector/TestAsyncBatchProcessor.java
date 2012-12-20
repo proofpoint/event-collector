@@ -45,25 +45,25 @@ public class TestAsyncBatchProcessor
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "name is null")
     public void testConstructorNullName()
     {
-        new AsyncBatchProcessor(null, handler(), observer, new BatchProcessorConfig());
+        new AsyncBatchProcessor(null, handler(), new BatchProcessorConfig(), observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "handler is null")
     public void testConstructorNullHandler()
     {
-        new AsyncBatchProcessor("name", null, observer, new BatchProcessorConfig());
+        new AsyncBatchProcessor("name", null, new BatchProcessorConfig(), observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "observer is null")
     public void testConstructorNullObserver()
     {
-        new AsyncBatchProcessor("name", handler(), null, new BatchProcessorConfig());
+        new AsyncBatchProcessor("name", handler(), new BatchProcessorConfig(), null);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
     {
-        new AsyncBatchProcessor("name", handler(), observer, null);
+        new AsyncBatchProcessor("name", handler(), null, observer);
     }
 
     @Test
@@ -71,8 +71,8 @@ public class TestAsyncBatchProcessor
             throws Exception
     {
         BatchProcessor<Event> processor = new AsyncBatchProcessor<Event>(
-                "foo", handler(), observer,
-                new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100));
+                "foo", handler(), new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100), observer
+        );
         processor.start();
 
         processor.put(event("foo"));
@@ -93,8 +93,8 @@ public class TestAsyncBatchProcessor
 
         synchronized (monitor) {
             BatchProcessor<Event> processor = new AsyncBatchProcessor<Event>(
-                    "foo", blockingHandler, observer,
-                    new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(1));
+                    "foo", blockingHandler, new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(1), observer
+            );
 
             processor.start();
 
@@ -165,7 +165,7 @@ public class TestAsyncBatchProcessor
     private int totalCount(Collection<Integer> integers)
     {
         int result = 0;
-        for (Integer i : integers) {
+        for (int i : integers) {
             result += i;
         }
         return result;

@@ -22,9 +22,22 @@ import java.util.Set;
 
 public interface EventTapFlow extends BatchHandler<Event>
 {
+    Observer NULL_OBSERVER = new Observer()
+    {
+        @Override
+        public void onRecordsSent(URI uri, int count)
+        {
+        }
+
+        @Override
+        public void onRecordsLost(URI uri, int count)
+        {
+        }
+    };
+
     Set<URI> getTaps();
 
-    public interface Observer
+    interface Observer
     {
         void onRecordsSent(URI uri, int count);
 

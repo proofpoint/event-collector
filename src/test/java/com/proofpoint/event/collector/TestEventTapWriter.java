@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.google.inject.assistedinject.Assisted;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceState;
@@ -326,11 +327,11 @@ public class TestEventTapWriter
         MockBatchProcessor<Event> processors = batchProcessors.get(type).iterator().next();
         eventTapWriter.write(event1);
         checkCounters(eventTapWriter.getQueueCounters(), type, 1, 0);
-        checkCountersForOnly(eventTapWriter.getQueueCounters(), type);
+        assertCountersOnlyExistWithTheseNames(eventTapWriter.getQueueCounters(), type);
         processors.succeed = false;
         eventTapWriter.write(event2);
         checkCounters(eventTapWriter.getQueueCounters(), type, 2, 1);
-        checkCountersForOnly(eventTapWriter.getQueueCounters(), type);
+        assertCountersOnlyExistWithTheseNames(eventTapWriter.getQueueCounters(), type);
     }
 
     private void updateThenRefreshFlowsThenCheck(ServiceDescriptor... taps)
@@ -420,9 +421,9 @@ public class TestEventTapWriter
         assertEquals(counterState.getLost(), lost);
     }
 
-    private void checkCountersForOnly(Map<String, CounterState> counters, String... types)
+    private void assertCountersOnlyExistWithTheseNames(Map<String, CounterState> counters, String... types)
     {
-        assertEquals(Sets.difference(counters.keySet(), ImmutableSet.copyOf(types)), ImmutableSet.<String>of());
+        assertEquals(Sets.difference(counters.keySet(), ImmutableSet.copyOf(types)), ImmutableSet.of());
     }
 
     private String extractProcessorName(ServiceDescriptor tap)
@@ -461,12 +462,18 @@ public class TestEventTapWriter
     private class MockBatchProcessorFactory implements BatchProcessorFactory
     {
         @Override
-        public <T> BatchProcessor<T> createBatchProcessor(BatchHandler<T> batchHandler, String eventType, BatchProcessor.Observer observer)
+        public <T> BatchProcessor<T> createBatchProcessor(String name, BatchHandler<T> batchHandler, BatchProcessor.Observer observer)
         {
             @SuppressWarnings("unchecked")
-            MockBatchProcessor batchProcessor = new MockBatchProcessor(eventType, batchHandler, observer);
-            batchProcessors.put(eventType, batchProcessor);
+            MockBatchProcessor batchProcessor = new MockBatchProcessor(name, batchHandler, observer);
+            batchProcessors.put(name, batchProcessor);
             return batchProcessor;
+        }
+
+        @Override
+        public <T> BatchProcessor<T> createBatchProcessor(String name, BatchHandler<T> batchHandler)
+        {
+            return createBatchProcessor(name, batchHandler, BatchProcessor.NULL_OBSERVER);
         }
     }
 
@@ -478,8 +485,8 @@ public class TestEventTapWriter
         public List<T> entries = new LinkedList<T>();
         public final String name;
 
-        private BatchHandler<T> handler;
-        private Observer observer;
+        private final BatchHandler<T> handler;
+        private final Observer observer;
 
         public MockBatchProcessor(String name, BatchHandler<T> batchHandler, Observer observer)
         {
@@ -527,6 +534,11 @@ public class TestEventTapWriter
             }
             return eventTapFlow;
         }
-    }
 
+        @Override
+        public EventTapFlow createEventTapFlow(@Assisted("eventType") String eventType, @Assisted("flowId") String flowId, Set<URI> taps)
+        {
+            return createEventTapFlow(eventType, flowId, taps, EventTapFlow.NULL_OBSERVER);
+        }
+    }
 }

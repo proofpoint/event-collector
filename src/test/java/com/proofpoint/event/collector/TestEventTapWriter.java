@@ -25,17 +25,20 @@ import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceState;
 import com.proofpoint.discovery.client.testing.StaticServiceSelector;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
-import com.proofpoint.http.client.HttpClient;
-import com.proofpoint.json.JsonCodec;
+import com.proofpoint.event.collector.EventTapFlow.Observer;
 import org.joda.time.DateTime;
 import org.logicalshift.concurrent.SerialScheduledExecutorService;
 import org.mockito.ArgumentCaptor;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
+import java.net.URI;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static java.lang.String.format;
@@ -52,76 +55,67 @@ import static org.testng.Assert.assertTrue;
 
 public class TestEventTapWriter
 {
-    private static final JsonCodec<List<Event>> EVENT_LIST_JSON_CODEC = JsonCodec.listJsonCodec(Event.class);
     private ServiceSelector serviceSelector;
-    private HttpClient httpClient;
     private SerialScheduledExecutorService executorService;
+    private BatchProcessorFactory batchProcessorFactory = new MockBatchProcessorFactory();
     private Multimap<String, BatchProcessor<Event>> batchProcessors;
+    private EventTapFlowFactory eventTapFlowFactory = new MockEventTapFlowFactory();
+    private Map<List<String>, EventTapFlow> eventTapFlows;
+    private EventTapConfig eventTapConfig;
+    private EventTapWriter eventTapWriter;
 
     @BeforeMethod
     public void setup()
     {
         serviceSelector = new StaticServiceSelector(ImmutableSet.<ServiceDescriptor>of());
-        httpClient = mock(HttpClient.class);
         executorService = new SerialScheduledExecutorService();
         batchProcessors = HashMultimap.create();
+        eventTapFlows = new HashMap();
+        eventTapConfig = new EventTapConfig();
+        serviceSelector = mock(ServiceSelector.class);
+        eventTapWriter = new EventTapWriter(
+                serviceSelector, executorService,
+                batchProcessorFactory, eventTapFlowFactory,
+                eventTapConfig);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "selector is null")
     public void testConstructorNullSelector()
     {
-        new EventTapWriter(null, httpClient, EVENT_LIST_JSON_CODEC, executorService,
-                createBatchProcessorFactory(), new EventTapConfig());
-    }
-
-    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "httpClient is null")
-    public void testConstructorNullHttpClient()
-    {
-        new EventTapWriter(serviceSelector, null, EVENT_LIST_JSON_CODEC, executorService,
-                createBatchProcessorFactory(), new EventTapConfig());
-    }
-
-    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventsCodec is null")
-    public void testConstructorNullEventCodec()
-    {
-        new EventTapWriter(serviceSelector, httpClient, null, executorService,
-                createBatchProcessorFactory(), new EventTapConfig());
+        new EventTapWriter(null, executorService, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "executorService is null")
     public void testConstructorNullExecutorService()
     {
-        new EventTapWriter(serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, null,
-                createBatchProcessorFactory(), new EventTapConfig());
+        new EventTapWriter(serviceSelector, null, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "batchProcessorFactory is null")
     public void testConstructorNullBatchProcessorFactory()
     {
-        new EventTapWriter(serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
-                null, new EventTapConfig());
+        new EventTapWriter(serviceSelector, executorService, null, eventTapFlowFactory, new EventTapConfig());
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventTapFlowFactory is null")
+    public void testConstructorNullEventTapFlowFactory()
+    {
+        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, null, new EventTapConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
     {
-        new EventTapWriter(serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
-                createBatchProcessorFactory(), null);
+        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, eventTapFlowFactory, null);
     }
 
     @Test
     public void testRefreshFlowsCreatesNewEntries()
     {
-        EventTapConfig eventTapConfig = new EventTapConfig();
-        BatchProcessorFactory batchProcessorFactory = createBatchProcessorFactory();
         String type1 = "Type1";
         String type2 = "Type2";
         ServiceDescriptor tap1 = createServiceDescriptor(type1);
         ServiceDescriptor tap2 = createServiceDescriptor(type2);
-        ServiceSelector serviceSelector = mock(ServiceSelector.class);
-        EventTapWriter eventTapWriter = new EventTapWriter(
-                serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
-                batchProcessorFactory, eventTapConfig);
 
         when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1));
         eventTapWriter.refreshFlows();
@@ -135,16 +129,10 @@ public class TestEventTapWriter
     @Test
     public void testRefreshFlowsRemovesOldEntries()
     {
-        EventTapConfig eventTapConfig = new EventTapConfig();
-        BatchProcessorFactory batchProcessorFactory = createBatchProcessorFactory();
         String type1 = "Type1";
         String type2 = "Type2";
         ServiceDescriptor tap1 = createServiceDescriptor(type1);
         ServiceDescriptor tap2 = createServiceDescriptor(type2);
-        ServiceSelector serviceSelector = mock(ServiceSelector.class);
-        EventTapWriter eventTapWriter = new EventTapWriter(
-                serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
-                batchProcessorFactory, eventTapConfig);
 
         when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1, tap2));
         eventTapWriter.refreshFlows();
@@ -159,15 +147,9 @@ public class TestEventTapWriter
     public void testRefreshFlowsUpdatesExistingProcessor()
     {
         // If the entries for a given tap changes, don't create the processor
-        EventTapConfig eventTapConfig = new EventTapConfig();
-        BatchProcessorFactory batchProcessorFactory = createBatchProcessorFactory();
         String type1 = "Type1";
         ServiceDescriptor tap1a = createServiceDescriptor(type1);
         ServiceDescriptor tap1b = createServiceDescriptor(type1);
-        ServiceSelector serviceSelector = mock(ServiceSelector.class);
-        EventTapWriter eventTapWriter = new EventTapWriter(
-                serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
-                batchProcessorFactory, eventTapConfig);
 
         when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1a));
         eventTapWriter.refreshFlows();
@@ -181,18 +163,12 @@ public class TestEventTapWriter
     @Test
     public void testRefreshFlowsIsCalledPeriodically()
     {
-        EventTapConfig eventTapConfig = new EventTapConfig();
-        BatchProcessorFactory batchProcessorFactory = createBatchProcessorFactory();
         String type1 = "Type1";
         String type2 = "Type2";
         String type3 = "Type3";
         ServiceDescriptor tap1 = createServiceDescriptor(type1);
         ServiceDescriptor tap2 = createServiceDescriptor(type2);
         ServiceDescriptor tap3 = createServiceDescriptor(type3);
-        ServiceSelector serviceSelector = mock(ServiceSelector.class);
-        EventTapWriter eventTapWriter = new EventTapWriter(
-                serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
-                batchProcessorFactory, eventTapConfig);
 
         when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1));
 
@@ -229,17 +205,11 @@ public class TestEventTapWriter
     @Test
     public void testWritePartitionsByType()
     {
-        EventTapConfig eventTapConfig = new EventTapConfig();
-        BatchProcessorFactory batchProcessorFactory = createBatchProcessorFactory();
         String type1 = "Type1";
         String type2 = "Type2";
         String type3 = "Type3";
         ServiceDescriptor tap1 = createServiceDescriptor(type1);
         ServiceDescriptor tap2 = createServiceDescriptor(type2);
-        ServiceSelector serviceSelector = mock(ServiceSelector.class);
-        EventTapWriter eventTapWriter = new EventTapWriter(
-                serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
-                batchProcessorFactory, eventTapConfig);
 
         when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1, tap2));
         eventTapWriter.start();
@@ -259,16 +229,10 @@ public class TestEventTapWriter
     @Test
     public void testWriteSendsToNewProcessor()
     {
-        EventTapConfig eventTapConfig = new EventTapConfig();
-        BatchProcessorFactory batchProcessorFactory = createBatchProcessorFactory();
         String type1 = "Type1";
         String type2 = "Type2";
         ServiceDescriptor tap1 = createServiceDescriptor(type1);
         ServiceDescriptor tap2 = createServiceDescriptor(type2);
-        ServiceSelector serviceSelector = mock(ServiceSelector.class);
-        EventTapWriter eventTapWriter = new EventTapWriter(
-                serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
-                batchProcessorFactory, eventTapConfig);
 
         when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1));
         eventTapWriter.start();
@@ -294,16 +258,10 @@ public class TestEventTapWriter
     @Test
     public void testWriteDoesntSendToOldProcessor()
     {
-        EventTapConfig eventTapConfig = new EventTapConfig();
-        BatchProcessorFactory batchProcessorFactory = createBatchProcessorFactory();
         String type1 = "Type1";
         String type2 = "Type2";
         ServiceDescriptor tap1 = createServiceDescriptor(type1);
         ServiceDescriptor tap2 = createServiceDescriptor(type2);
-        ServiceSelector serviceSelector = mock(ServiceSelector.class);
-        EventTapWriter eventTapWriter = new EventTapWriter(
-                serviceSelector, httpClient, EVENT_LIST_JSON_CODEC, executorService,
-                batchProcessorFactory, eventTapConfig);
 
         when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.of(tap1, tap2));
         eventTapWriter.start();
@@ -391,11 +349,6 @@ public class TestEventTapWriter
                 ImmutableMap.<String, String>of("eventType", eventType, "tapId", "1", "http", format("http://%s.event.tap", eventType)));
     }
 
-    private BatchProcessorFactory createBatchProcessorFactory()
-    {
-        return new MockBatchProcessorFactory();
-    }
-
     private class MockBatchProcessorFactory implements BatchProcessorFactory
     {
         @Override
@@ -407,4 +360,20 @@ public class TestEventTapWriter
             return batchProcessor;
         }
     }
+
+    private class MockEventTapFlowFactory implements EventTapFlowFactory
+    {
+        @Override
+        public EventTapFlow createEventTapFlow(String eventType, String flowId, Set<URI> taps, Observer observer)
+        {
+            List<String> key = ImmutableList.of(eventType, flowId);
+            EventTapFlow eventTapFlow = eventTapFlows.get(key);
+            if (eventTapFlow == null) {
+                eventTapFlow = mock(EventTapFlow.class);
+                eventTapFlows.put(key, eventTapFlow);
+            }
+            return eventTapFlow;
+        }
+    }
+
 }

@@ -47,63 +47,63 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertTrue;
 
-public class TestEventTapFlow
+public class TestHttpEventTapFlow
 {
     private static final JsonCodec<List<Event>> EVENT_LIST_JSON_CODEC = JsonCodec.listJsonCodec(Event.class);
     private static final Set<URI> taps = ImmutableSet.of(create("http://n1.event.tap/post"), create("http://n2.event.tap/post"));
     private final List<Event> events = ImmutableList.of(new Event("EventType", "UUID", "foo.com", DateTime.now(), ImmutableMap.<String, Object>of()));
     private HttpClient httpClient;
     private Observer observer;
-    private EventTapFlow eventTapFlow;
+    private HttpEventTapFlow eventTapFlow;
 
     @BeforeMethod
     private void setup()
     {
         httpClient = mock(HttpClient.class);
         observer = mock(Observer.class);
-        eventTapFlow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
+        eventTapFlow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "httpClient is null")
     public void testConstructorNullHttpClient()
     {
-        new EventTapFlow(null, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
+        new HttpEventTapFlow(null, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventsCodec is null")
     public void testConstructorNullEventsCodec()
     {
-        new EventTapFlow(httpClient, null, "EventType", "FlowID", taps, observer);
+        new HttpEventTapFlow(httpClient, null, "EventType", "FlowID", taps, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventType is null")
     public void testConstructorNullEventType()
     {
-        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, null, "FlowID", taps, observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, null, "FlowID", taps, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "flowId is null")
     public void testConstructorNullFlowId()
     {
-        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", null, taps, observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", null, taps, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "taps is null")
     public void testConstructorNullTaps()
     {
-        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", null, observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", null, observer);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "taps is empty")
     public void testCustructorEmptyTaps()
     {
-        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", ImmutableSet.<URI>of(), observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", ImmutableSet.<URI>of(), observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "observer is null")
     public void testConstructorNullObserver()
     {
-        new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, null);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, null);
     }
 
     @Test
@@ -129,7 +129,7 @@ public class TestEventTapFlow
     @Test
     public void testGetTaps()
     {
-        EventTapFlow flow = new EventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowId", taps, observer);
+        EventTapFlow flow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowId", taps, observer);
         assertEqualsNoOrder(flow.getTaps().toArray(), taps.toArray());
     }
 

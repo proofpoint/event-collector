@@ -15,19 +15,14 @@
  */
 package com.proofpoint.event.collector;
 
-import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
+import com.google.inject.assistedinject.Assisted;
+import com.proofpoint.event.collector.EventTapFlow.Observer;
 
 import java.net.URI;
 import java.util.Set;
 
-public interface EventTapFlow extends BatchHandler<Event>
+public interface EventTapFlowFactory
 {
-    Set<URI> getTaps();
-
-    public interface Observer
-    {
-        void onRecordsSent(URI uri, int count);
-
-        void onRecordsLost(URI uri, int count);
-    }
+    public EventTapFlow createEventTapFlow(@Assisted("eventType") String eventType,
+            @Assisted("flowId") String flowId, Set<URI> taps, Observer observer);
 }

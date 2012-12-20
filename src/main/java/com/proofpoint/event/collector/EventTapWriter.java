@@ -27,8 +27,6 @@ import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.EventCounters.CounterState;
-import com.proofpoint.http.client.HttpClient;
-import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 import org.weakref.jmx.Managed;
@@ -56,10 +54,9 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
 {
     private static final Logger log = Logger.get(EventTapWriter.class);
     private final ServiceSelector selector;
-    private final HttpClient httpClient;
-    private final JsonCodec<List<Event>> eventsCodec;
     private final ScheduledExecutorService executorService;
     private final BatchProcessorFactory batchProcessorFactory;
+    private final EventTapFlowFactory eventTapFlowFactory;
 
     private final AtomicReference<Multimap<String, EventTapFlow>> eventFlows = new AtomicReference<Multimap<String, EventTapFlow>>(ImmutableMultimap.<String, EventTapFlow>of());
     private ScheduledFuture<?> refreshJob;
@@ -71,18 +68,16 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
 
     @Inject
     public EventTapWriter(@ServiceType("eventTap") ServiceSelector selector,
-            @EventTap HttpClient httpClient,
-            JsonCodec<List<Event>> eventsCodec,
             @EventTap ScheduledExecutorService executorService,
             BatchProcessorFactory batchProcessorFactory,
+            EventTapFlowFactory eventTapFlowFactory,
             EventTapConfig config)
     {
         this.selector = checkNotNull(selector, "selector is null");
-        this.httpClient = checkNotNull(httpClient, "httpClient is null");
-        this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
         this.executorService = checkNotNull(executorService, "executorService is null");
         this.flowRefreshDuration = checkNotNull(config, "config is null").getEventTapRefreshDuration();
         this.batchProcessorFactory = checkNotNull(batchProcessorFactory, "batchProcessorFactory is null");
+        this.eventTapFlowFactory = checkNotNull(eventTapFlowFactory, "eventTapFlowFactory is null");
     }
 
     @PostConstruct
@@ -169,7 +164,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
             final String flowId = entry.getKey().get(1);
             Set<URI> taps = ImmutableSet.copyOf(entry.getValue());
 
-            builder.put(eventType, new EventTapFlow(httpClient, eventsCodec, eventType, flowId, taps,
+            EventTapFlow eventTapFlow = eventTapFlowFactory.createEventTapFlow(eventType, flowId, taps,
                     new EventTapFlow.Observer()
                     {
                         @Override
@@ -188,7 +183,8 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
                         {
                             return ImmutableList.of(eventType, flowId, uri.toString());
                         }
-                    }));
+                    });
+            builder.put(eventType, eventTapFlow);
         }
         eventFlows.set(builder.build());
 

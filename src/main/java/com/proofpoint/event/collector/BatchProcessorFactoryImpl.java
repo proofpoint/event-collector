@@ -34,6 +34,6 @@ public class BatchProcessorFactoryImpl implements BatchProcessorFactory
     @Override
     public <T> BatchProcessor<T> createBatchProcessor(BatchHandler<T> batchHandler, String eventType)
     {
-        return new BatchProcessor<T>(eventType, batchHandler, config);
+        return new AsyncBatchProcessor<T>(eventType, batchHandler, config);
     }
 }

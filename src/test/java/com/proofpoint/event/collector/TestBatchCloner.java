@@ -91,7 +91,7 @@ public class TestBatchCloner
     @Test
     public void testProcessBatchImmutableToChanges()
     {
-        // If one client change the content of the list is sees,
+        // If one client changes the content of the list is sees,
         // the other client doesn't see the change.
         List<Object> entries = new ArrayList<Object>();
         entries.add(new Object());

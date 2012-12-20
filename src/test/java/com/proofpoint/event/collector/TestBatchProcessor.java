@@ -20,19 +20,38 @@ import com.proofpoint.event.collector.EventCounters.CounterState;
 import org.joda.time.DateTime;
 import org.testng.annotations.Test;
 
-import java.util.List;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 import static org.testng.Assert.assertEquals;
 
-public class TestQueueCounts
+public class TestBatchProcessor
 {
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "name is null")
+    public void testConstructorNullName()
+    {
+        new BatchProcessor(null, handler(), new BatchProcessorConfig());
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "handler is null")
+    public void testConstructorNullHandler()
+    {
+        new BatchProcessor("name", null, new BatchProcessorConfig());
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
+    public void testConstructorNullConfig()
+    {
+        new BatchProcessor("name", handler(), null);
+    }
+
     @Test
     public void testEnqueue()
             throws Exception
     {
-        BatchProcessor<Event> processor = new BatchProcessor<Event>("foo", handler(), 100, 100);
+        BatchProcessor<Event> processor = new BatchProcessor<Event>("foo", handler(),
+                new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100));
         processor.start();
 
         processor.put(event("foo"));
@@ -51,7 +70,8 @@ public class TestQueueCounts
         BatchHandler<Event> blockingHandler = blockingHandler(monitor);
 
         synchronized (monitor) {
-            BatchProcessor<Event> processor = new BatchProcessor<Event>("foo", blockingHandler, 100, 1);
+            BatchProcessor<Event> processor = new BatchProcessor<Event>("foo", blockingHandler,
+                    new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(1));
 
             processor.start();
 
@@ -100,8 +120,7 @@ public class TestQueueCounts
             public void processBatch(List<Event> entries)
             {
                 // Wait for the right time to run
-                synchronized (monitor)
-                {
+                synchronized (monitor) {
                     // Signal that we've started running
                     monitor.notify();
                     try {

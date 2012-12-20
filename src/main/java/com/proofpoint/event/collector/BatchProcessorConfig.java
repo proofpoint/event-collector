@@ -16,42 +16,41 @@
 package com.proofpoint.event.collector;
 
 import com.proofpoint.configuration.Config;
-import com.proofpoint.units.Duration;
+import com.proofpoint.configuration.ConfigDescription;
 
 import javax.validation.constraints.Min;
-import javax.validation.constraints.NotNull;
-import java.util.concurrent.TimeUnit;
 
-public class EventTapConfig
+public class BatchProcessorConfig
 {
-    private int eventTapThreads = 20;
-    private Duration eventTapRefreshDuration = new Duration(10, TimeUnit.SECONDS);
+    private int maxBatchSize = 1000;
+    private int queueSize = 40000;
 
-    @Deprecated
     @Min(1)
-    public int getEventTapThreads()
+    public int getMaxBatchSize()
     {
-        return eventTapThreads;
+        return maxBatchSize;
     }
 
-    @Deprecated
-    @Config("collector.event-tap.threads")
-    public EventTapConfig setEventTapThreads(int eventTapThreads)
+    @Config("collector.event-tap.batch-size-max")
+    @ConfigDescription("The maximum number of events to include in a single batch posted to a given event tap.")
+    public BatchProcessorConfig setMaxBatchSize(int maxBatchSize)
     {
-        this.eventTapThreads = eventTapThreads;
+        this.maxBatchSize = maxBatchSize;
         return this;
     }
 
-    @NotNull
-    public Duration getEventTapRefreshDuration()
+    @Min(1)
+    public int getQueueSize()
     {
-        return eventTapRefreshDuration;
+        return queueSize;
     }
 
-    @Config("collector.event-tap.refresh")
-    public EventTapConfig setEventTapRefreshDuration(Duration eventTapRefreshDuration)
+    @Config("collector.event-tap.queue-size")
+    @ConfigDescription("The maximum number of events queued for a given event type's queue.")
+    public BatchProcessorConfig setQueueSize(int queueSize)
     {
-        this.eventTapRefreshDuration = eventTapRefreshDuration;
+        this.queueSize = queueSize;
         return this;
     }
+
 }

@@ -16,6 +16,7 @@
 package com.proofpoint.event.collector;
 
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
+import com.proofpoint.event.collector.BatchProcessor.Observer;
 
 import javax.inject.Inject;
 
@@ -32,8 +33,8 @@ public class BatchProcessorFactoryImpl implements BatchProcessorFactory
     }
 
     @Override
-    public <T> BatchProcessor<T> createBatchProcessor(BatchHandler<T> batchHandler, String eventType)
+    public <T> BatchProcessor<T> createBatchProcessor(BatchHandler<T> batchHandler, String eventType, Observer observer)
     {
-        return new AsyncBatchProcessor<T>(eventType, batchHandler, config);
+        return new AsyncBatchProcessor<T>(eventType, batchHandler, observer, config);
     }
 }

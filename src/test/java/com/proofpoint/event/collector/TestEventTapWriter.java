@@ -20,21 +20,23 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceState;
 import com.proofpoint.discovery.client.testing.StaticServiceSelector;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
+import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
 import org.joda.time.DateTime;
 import org.logicalshift.concurrent.SerialScheduledExecutorService;
-import org.mockito.ArgumentCaptor;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import java.net.URI;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -45,9 +47,6 @@ import static com.google.common.base.Strings.nullToEmpty;
 import static java.lang.String.format;
 import static java.util.UUID.randomUUID;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
@@ -59,7 +58,7 @@ public class TestEventTapWriter
     private ServiceSelector serviceSelector;
     private SerialScheduledExecutorService executorService;
     private BatchProcessorFactory batchProcessorFactory = new MockBatchProcessorFactory();
-    private Multimap<String, BatchProcessor<Event>> batchProcessors;
+    private Multimap<String, MockBatchProcessor<Event>> batchProcessors;
     private EventTapFlowFactory eventTapFlowFactory = new MockEventTapFlowFactory();
     private Map<List<String>, EventTapFlow> eventTapFlows;
     private EventTapConfig eventTapConfig;
@@ -268,6 +267,26 @@ public class TestEventTapWriter
         checkEventsReceived(type2, eventType2a);
     }
 
+    @Test
+    public void testQueueCounters()
+    {
+        String type = "Type";
+        ServiceDescriptor tap = createServiceDescriptor(type);
+        Event event1 = createEvent(type);
+        Event event2 = createEvent(type);
+        updateTaps(tap);
+        eventTapWriter.start();
+
+        MockBatchProcessor<Event> processors = batchProcessors.get(type).iterator().next();
+        eventTapWriter.write(event1);
+        checkCounters(eventTapWriter.getQueueCounters(), type, 1, 0);
+        checkCountersForOnly(eventTapWriter.getQueueCounters(), type);
+        processors.succeed = false;
+        eventTapWriter.write(event2);
+        checkCounters(eventTapWriter.getQueueCounters(), type, 2, 1);
+        checkCountersForOnly(eventTapWriter.getQueueCounters(), type);
+    }
+
     private void updateThenRefreshFlowsThenCheck(ServiceDescriptor... taps)
     {
         updateTaps(taps);
@@ -293,21 +312,21 @@ public class TestEventTapWriter
             String processorName = extractProcessorName(tap);
             assertTrue(batchProcessors.containsKey(processorName), format("no processor created for %s", processorName));
 
-            List<BatchProcessor<Event>> processors = ImmutableList.copyOf(batchProcessors.get(processorName));
+            List<MockBatchProcessor<Event>> processors = ImmutableList.copyOf(batchProcessors.get(processorName));
             assertEquals(processors.size(), 1, format("wrong number of processors for %s", processorName));
 
             // The batch processor should have been started, but not stopped
             // if it is still active.
-            BatchProcessor<Event> processor = processors.get(0);
-            verify(processor).start();
-            verify(processor, never()).stop();
+            MockBatchProcessor<Event> processor = processors.get(0);
+            assertEquals(processor.startCount, 1);
+            assertEquals(processor.stopCount, 0);
         }
 
         // For all non-active processors, make sure they have been stopped.
-        for (Entry<String, Collection<BatchProcessor<Event>>> entry : batchProcessors.asMap().entrySet()) {
+        for (Entry<String, Collection<MockBatchProcessor<Event>>> entry : batchProcessors.asMap().entrySet()) {
             String processorName = entry.getKey();
             ServiceDescriptor tap = null;
-            for (ServiceDescriptor t: tapsAsList) {
+            for (ServiceDescriptor t : tapsAsList) {
                 if (processorName.equals(extractProcessorName(t))) {
                     tap = t;
                     break;
@@ -317,13 +336,13 @@ public class TestEventTapWriter
                 continue;           // Handled in loop above
             }
 
-            List<BatchProcessor<Event>> processors = ImmutableList.copyOf(entry.getValue());
+            List<MockBatchProcessor<Event>> processors = ImmutableList.copyOf(entry.getValue());
             assertEquals(processors.size(), 1, format("wrong number of processors for %s", processorName));
 
             // The batch processor should have been started and stopped.
-            BatchProcessor<Event> processor = processors.get(0);
-            verify(processor).start();
-            verify(processor).stop();
+            MockBatchProcessor<Event> processor = processors.get(0);
+            assertEquals(processor.startCount, 1);
+            assertEquals(processor.stopCount, 1);
         }
     }
 
@@ -331,13 +350,23 @@ public class TestEventTapWriter
     {
         assertTrue(batchProcessors.containsKey(type), format("no processor for type %s", type));
 
-        List<BatchProcessor<Event>> processors = ImmutableList.copyOf(batchProcessors.get(type));
+        List<MockBatchProcessor<Event>> processors = ImmutableList.copyOf(batchProcessors.get(type));
         assertEquals(processors.size(), 1);
-        BatchProcessor<Event> processor = processors.get(0);
+        MockBatchProcessor<Event> processor = processors.get(0);
 
-        ArgumentCaptor<Event> eventArgumentCaptor = ArgumentCaptor.forClass(Event.class);
-        verify(processor, times(events.length)).put(eventArgumentCaptor.capture());
-        assertEqualsNoOrder(eventArgumentCaptor.getAllValues().toArray(), events);
+        assertEqualsNoOrder(processor.entries.toArray(), events);
+    }
+
+    private void checkCounters(Map<String, CounterState> counters, String type, int received, int lost)
+    {
+        CounterState counterState = counters.get(type);
+        assertEquals(counterState.getReceived(), received);
+        assertEquals(counterState.getLost(), lost);
+    }
+
+    private void checkCountersForOnly(Map<String, CounterState> counters, String... types)
+    {
+        assertEquals(Sets.difference(counters.keySet(), ImmutableSet.copyOf(types)), ImmutableSet.<String>of());
     }
 
     private String extractProcessorName(ServiceDescriptor tap)
@@ -376,12 +405,56 @@ public class TestEventTapWriter
     private class MockBatchProcessorFactory implements BatchProcessorFactory
     {
         @Override
-        public BatchProcessor createBatchProcessor(BatchHandler batchHandler, String eventType)
+        public <T> BatchProcessor<T> createBatchProcessor(BatchHandler<T> batchHandler, String eventType, BatchProcessor.Observer observer)
         {
             @SuppressWarnings("unchecked")
-            BatchProcessor<Event> batchProcessor = mock(BatchProcessor.class);
+            MockBatchProcessor batchProcessor = new MockBatchProcessor(eventType, batchHandler, observer);
             batchProcessors.put(eventType, batchProcessor);
             return batchProcessor;
+        }
+    }
+
+    private class MockBatchProcessor<T> implements BatchProcessor<T>
+    {
+        public int startCount = 0;
+        public int stopCount = 0;
+        public boolean succeed = true;
+        public List<T> entries = new LinkedList<T>();
+        public final String name;
+
+        private BatchHandler<T> handler;
+        private Observer observer;
+
+        public MockBatchProcessor(String name, BatchHandler<T> batchHandler, Observer observer)
+        {
+            this.name = name;
+            this.handler = batchHandler;
+            this.observer = observer;
+        }
+
+        @Override
+        public void start()
+        {
+            startCount += 1;
+        }
+
+        @Override
+        public void stop()
+        {
+            stopCount += 1;
+        }
+
+        @Override
+        public void put(T entry)
+        {
+            entries.add(entry);
+            if (succeed) {
+                handler.processBatch(ImmutableList.of(entry));
+            }
+            else {
+                observer.onRecordsLost(1);
+            }
+            observer.onRecordsReceived(1);
         }
     }
 

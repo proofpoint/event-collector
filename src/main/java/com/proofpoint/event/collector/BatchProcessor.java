@@ -15,8 +15,6 @@
  */
 package com.proofpoint.event.collector;
 
-import com.proofpoint.event.collector.EventCounters.CounterState;
-
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.util.List;
@@ -31,12 +29,15 @@ public interface BatchProcessor<T>
 
     void put(T entry);
 
-    CounterState getCounterState();
-
-    void resetCounter();
-
     public static interface BatchHandler<T>
     {
         void processBatch(List<T> entries);
+    }
+
+    public static interface Observer
+    {
+        void onRecordsLost(int count);
+
+        void onRecordsReceived(int count);
     }
 }

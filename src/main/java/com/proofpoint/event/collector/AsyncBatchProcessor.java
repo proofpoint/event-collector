@@ -40,11 +40,10 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
     private final int maxBatchSize;
     private final BlockingQueue<T> queue;
     private final ExecutorService executor;
+    private final Observer observer;
     private final AtomicReference<Future<?>> future = new AtomicReference<Future<?>>();
 
-    private final AtomicReference<Counter> counter = new AtomicReference<Counter>(new Counter());
-
-    public AsyncBatchProcessor(String name, BatchHandler<T> handler, BatchProcessorConfig config)
+    public AsyncBatchProcessor(String name, BatchHandler<T> handler, Observer observer, BatchProcessorConfig config)
     {
         checkNotNull(name, "name is null");
         checkNotNull(handler, "handler is null");
@@ -54,6 +53,7 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
         this.queue = new ArrayBlockingQueue<T>(config.getQueueSize());
 
         this.executor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat(format("batch-processor-%s", name)).build());
+        this.observer = checkNotNull(observer, "observer is null");
     }
 
     @Override
@@ -100,22 +100,9 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
         while (!queue.offer(entry)) {
             // throw away oldest and try again
             queue.poll();
-            counter.get().recordLost(1);
+            observer.onRecordsLost(1);
         }
 
-        counter.get().recordReceived(1);
+        observer.onRecordsReceived(1);
     }
-
-    @Override
-    public CounterState getCounterState()
-    {
-        return counter.get().getState();
-    }
-
-    @Override
-    public void resetCounter()
-    {
-        counter.set(new Counter());
-    }
-
 }

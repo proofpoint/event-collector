@@ -64,6 +64,7 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
 
     private final ConcurrentMap<String, BatchProcessor<Event>> processors = new ConcurrentHashMap<String, BatchProcessor<Event>>();
 
+    private final EventCounters<String> queueCounters = new EventCounters<String>();
     private final EventCounters<List<String>> flowCounters = new EventCounters<List<String>>();
 
     @Inject
@@ -190,10 +191,25 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
 
         // By creating new processors after the event flows have been updated,
         // the new flow will be available for the processor when it needs it.
-        for (String eventType : eventTypes) {
+        for (String et : eventTypes) {
+            final String eventType = et;
             if (!processors.containsKey(eventType)) {
                 log.debug("Creating resources for event type '%s': new event taps for type", eventType);
-                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(this, eventType);
+                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(this, eventType,
+                        new BatchProcessor.Observer() {
+
+                            @Override
+                            public void onRecordsLost(int count)
+                            {
+                                queueCounters.recordLost(eventType, count);
+                            }
+
+                            @Override
+                            public void onRecordsReceived(int count)
+                            {
+                                queueCounters.recordReceived(eventType, count);
+                            }
+                        });
                 processors.put(eventType, batchProcessor);
                 batchProcessor.start();
             }
@@ -226,19 +242,13 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @Override
     public Map<String, CounterState> getQueueCounters()
     {
-        ImmutableMap.Builder<String, CounterState> counters = ImmutableMap.builder();
-        for (Entry<String, BatchProcessor<Event>> entry : processors.entrySet()) {
-            counters.put(entry.getKey(), entry.getValue().getCounterState());
-        }
-        return counters.build();
+        return queueCounters.getCounts();
     }
 
     @Override
     public void resetQueueCounters()
     {
-        for (BatchProcessor<Event> processor : processors.values()) {
-            processor.resetCounter();
-        }
+        queueCounters.resetCounts();
     }
 
     @Override

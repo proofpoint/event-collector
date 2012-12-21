@@ -16,50 +16,72 @@
 package com.proofpoint.event.collector;
 
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
-import com.proofpoint.event.collector.EventCounters.CounterState;
+import com.proofpoint.event.collector.BatchProcessor.Observer;
 import org.joda.time.DateTime;
+import org.mockito.ArgumentCaptor;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.testng.Assert.assertEquals;
 
-public class TestBatchProcessor
+public class TestAsyncBatchProcessor
 {
+    private Observer observer;
+
+    @BeforeMethod
+    public void setup()
+    {
+        observer = mock(Observer.class);
+    }
+
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "name is null")
     public void testConstructorNullName()
     {
-        new BatchProcessor(null, handler(), new BatchProcessorConfig());
+        new AsyncBatchProcessor(null, handler(), new BatchProcessorConfig(), observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "handler is null")
     public void testConstructorNullHandler()
     {
-        new BatchProcessor("name", null, new BatchProcessorConfig());
+        new AsyncBatchProcessor("name", null, new BatchProcessorConfig(), observer);
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "observer is null")
+    public void testConstructorNullObserver()
+    {
+        new AsyncBatchProcessor("name", handler(), new BatchProcessorConfig(), null);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
     {
-        new BatchProcessor("name", handler(), null);
+        new AsyncBatchProcessor("name", handler(), null, observer);
     }
 
     @Test
     public void testEnqueue()
             throws Exception
     {
-        BatchProcessor<Event> processor = new BatchProcessor<Event>("foo", handler(),
-                new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100));
+        BatchProcessor<Event> processor = new AsyncBatchProcessor<Event>(
+                "foo", handler(), new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100), observer
+        );
         processor.start();
 
         processor.put(event("foo"));
-        assertEquals(processor.getCounterState().getReceived(), 1);
+
+        assertCounterValues(1, 0);
 
         processor.put(event("foo"));
         processor.put(event("foo"));
-        assertCounterValues(processor.getCounterState(), 3, 0);
+        assertCounterValues(3, 0);
     }
 
     @Test
@@ -70,8 +92,9 @@ public class TestBatchProcessor
         BatchHandler<Event> blockingHandler = blockingHandler(monitor);
 
         synchronized (monitor) {
-            BatchProcessor<Event> processor = new BatchProcessor<Event>("foo", blockingHandler,
-                    new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(1));
+            BatchProcessor<Event> processor = new AsyncBatchProcessor<Event>(
+                    "foo", blockingHandler, new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(1), observer
+            );
 
             processor.start();
 
@@ -86,14 +109,19 @@ public class TestBatchProcessor
 
             processor.put(event("foo"));
 
-            assertCounterValues(processor.getCounterState(), 3, 1);
+            assertCounterValues(3, 1);
         }
     }
 
-    private void assertCounterValues(CounterState counterState, long transferred, long lost)
+    private void assertCounterValues(long transferred, long lost)
     {
-        assertEquals(counterState.getReceived(), transferred);
-        assertEquals(counterState.getLost(), lost);
+        ArgumentCaptor<Integer> receivedCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(observer, atLeast(0)).onRecordsReceived(receivedCaptor.capture());
+        assertEquals(totalCount(receivedCaptor.getAllValues()), transferred);
+
+        ArgumentCaptor<Integer> lostCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(observer, atLeast(0)).onRecordsLost(lostCaptor.capture());
+        assertEquals(totalCount(lostCaptor.getAllValues()), lost);
     }
 
     private static Event event(String type)
@@ -132,5 +160,14 @@ public class TestBatchProcessor
                 }
             }
         };
+    }
+
+    private int totalCount(Collection<Integer> integers)
+    {
+        int result = 0;
+        for (int i : integers) {
+            result += i;
+        }
+        return result;
     }
 }

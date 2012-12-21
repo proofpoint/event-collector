@@ -15,12 +15,17 @@
  */
 package com.proofpoint.event.collector;
 
-import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
-import com.proofpoint.event.collector.BatchProcessor.Observer;
+import com.google.inject.assistedinject.Assisted;
+import com.proofpoint.event.collector.EventTapFlow.Observer;
 
-public interface BatchProcessorFactory
+import java.net.URI;
+import java.util.Set;
+
+public interface EventTapFlowFactory
 {
-    public <T> BatchProcessor<T> createBatchProcessor(String name, BatchHandler<T> batchHandler, Observer observer);
+    public EventTapFlow createEventTapFlow(@Assisted("eventType") String eventType,
+            @Assisted("flowId") String flowId, Set<URI> taps, Observer observer);
 
-    public <T> BatchProcessor<T> createBatchProcessor(String name, BatchHandler<T> batchHandler);
+    public EventTapFlow createEventTapFlow(@Assisted("eventType") String eventType,
+            @Assisted("flowId") String flowId, Set<URI> taps);
 }

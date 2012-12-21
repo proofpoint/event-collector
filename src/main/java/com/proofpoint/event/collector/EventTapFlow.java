@@ -15,108 +15,29 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
-import com.proofpoint.http.client.HttpClient;
-import com.proofpoint.http.client.Request;
-import com.proofpoint.http.client.RequestBuilder;
-import com.proofpoint.http.client.Response;
-import com.proofpoint.http.client.ResponseHandler;
-import com.proofpoint.json.JsonCodec;
-import com.proofpoint.log.Logger;
 
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.MediaType;
 import java.net.URI;
-import java.util.List;
-import java.util.Random;
 import java.util.Set;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.proofpoint.http.client.JsonBodyGenerator.jsonBodyGenerator;
-
-class EventTapFlow implements BatchHandler<Event>
+public interface EventTapFlow extends BatchHandler<Event>
 {
-    private static final Random RANDOM = new Random();
-    private static final Logger log = Logger.get(EventTapFlow.class);
-
-    private final HttpClient httpClient;
-    private final JsonCodec<List<Event>> eventsCodec;
-    private final String eventType;
-    private final String flowId;
-    private final List<URI> taps;
-    private final Observer observer;
-
-    public EventTapFlow(HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
-            String eventType, String flowId, Set<URI> taps,
-            Observer observer)
+    Observer NULL_OBSERVER = new Observer()
     {
-        this.httpClient = checkNotNull(httpClient, "httpClient is null");
-        this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
-        this.eventType = checkNotNull(eventType, "eventType is null");
-        this.flowId = checkNotNull(flowId, "flowId is null");
-        this.taps = ImmutableList.<URI>copyOf(checkNotNull(taps, "taps is null"));
-        checkArgument(!taps.isEmpty(), "taps is empty");
-        this.observer = checkNotNull(observer, "observer is null");
-    }
-
-    @Override
-    public void processBatch(List<Event> entries)
-    {
-        try {
-            sendEvents(entries);
-        }
-        catch (Exception ignored) {
-            // already logged
-        }
-    }
-
-    public Set<URI> getTaps()
-    {
-        return ImmutableSet.<URI>copyOf(taps);
-    }
-
-    private void sendEvents(final List<Event> entries)
-            throws Exception
-    {
-        final URI uri = taps.get(RANDOM.nextInt(taps.size()));
-
-        Request request = RequestBuilder.preparePost()
-                .setUri(uri)
-                .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
-                .setBodyGenerator(jsonBodyGenerator(eventsCodec, entries))
-                .build();
-
-        httpClient.execute(request, new ResponseHandler<Void, Exception>()
+        @Override
+        public void onRecordsSent(URI uri, int count)
         {
-            @Override
-            public Exception handleException(Request request, Exception exception)
-            {
-                log.warn(exception, "Error posting %s events to flow %s at %s ", eventType, flowId, uri);
-                observer.onRecordsLost(uri, entries.size());
-                return exception;
-            }
+        }
 
-            @Override
-            public Void handle(Request request, Response response)
-                    throws Exception
-            {
-                if (response.getStatusCode() / 100 != 2) {
-                    log.warn("Error posting %s events to flow %s at %s: got response %s %s ", eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
-                    observer.onRecordsLost(uri, entries.size());
-                }
-                else {
-                    log.debug("Posted %s events", entries.size());
-                    observer.onRecordsSent(uri, entries.size());
-                }
-                return null;
-            }
-        });
-    }
+        @Override
+        public void onRecordsLost(URI uri, int count)
+        {
+        }
+    };
 
-    public interface Observer
+    Set<URI> getTaps();
+
+    interface Observer
     {
         void onRecordsSent(URI uri, int count);
 

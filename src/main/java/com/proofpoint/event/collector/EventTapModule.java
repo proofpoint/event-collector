@@ -22,6 +22,7 @@ import com.google.inject.Module;
 import com.google.inject.Provides;
 import com.google.inject.Scopes;
 import com.google.inject.assistedinject.FactoryModuleBuilder;
+import com.google.inject.name.Names;
 import org.weakref.jmx.guice.MBeanModule;
 
 import java.util.concurrent.ScheduledExecutorService;
@@ -47,7 +48,8 @@ public class EventTapModule implements Module
 
         binder.install(
                 new FactoryModuleBuilder()
-                        .implement(EventTapFlow.class, HttpEventTapFlow.class)
+                        .implement(EventTapFlow.class, Names.named("nonQos"), HttpEventTapFlow.class)
+                        .implement(EventTapFlow.class, Names.named("qos"), HttpEventTapFlow.class)
                         .build(EventTapFlowFactory.class));
 
         binder.bind(EventTapWriter.class).in(Scopes.SINGLETON);

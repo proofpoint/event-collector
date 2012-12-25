@@ -268,23 +268,28 @@ public class EventTapWriter implements EventWriter, EventTapStats
 
     private EventTapFlow createEventTapFlow(final String eventType, final String flowId, Set<URI> taps)
     {
+        log.debug("Create event tap flow: eventType=%s id=%s uris=%s", eventType, flowId, taps);
+        return eventTapFlowFactory.createEventTapFlow(eventType, flowId, taps, createEventTapFlowObserver(eventType, flowId));
+    }
+
+    private EventTapFlow.Observer createEventTapFlowObserver(String eventType, String flowId)
+    {
         final List<String> key = ImmutableList.of(eventType, flowId);
 
-        return eventTapFlowFactory.createEventTapFlow(eventType, flowId, taps,
-                new EventTapFlow.Observer()
-                {
-                    @Override
-                    public void onRecordsSent(URI uri, int count)
-                    {
-                        flowCounters.recordReceived(key, count);
-                    }
+        return new EventTapFlow.Observer()
+        {
+            @Override
+            public void onRecordsSent(URI uri, int count)
+            {
+                flowCounters.recordReceived(key, count);
+            }
 
-                    @Override
-                    public void onRecordsLost(URI uri, int count)
-                    {
-                        flowCounters.recordLost(key, count);
-                    }
-                });
+            @Override
+            public void onRecordsLost(URI uri, int count)
+            {
+                flowCounters.recordLost(key, count);
+            }
+        };
     }
 
     private void stopEventType(String eventType, EventTypeInfo eventTypeInfo)

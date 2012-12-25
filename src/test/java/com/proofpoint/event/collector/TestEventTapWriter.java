@@ -512,6 +512,18 @@ public class TestEventTapWriter
         {
             return createEventTapFlow(eventType, flowId, taps, EventTapFlow.NULL_OBSERVER);
         }
+
+        @Override
+        public EventTapFlow createQosEventTapFlow(@Assisted("eventType") String eventType, @Assisted("flowId") String flowId, Set<URI> taps, Observer observer)
+        {
+            return createEventTapFlow(eventType, flowId, taps, observer);
+        }
+
+        @Override
+        public EventTapFlow createQosEventTapFlow(@Assisted("eventType") String eventType, @Assisted("flowId") String flowId, Set<URI> taps)
+        {
+            return createQosEventTapFlow(eventType, flowId, taps, EventTapFlow.NULL_OBSERVER);
+        }
     }
 
     private static class MockEventTapFlow implements EventTapFlow

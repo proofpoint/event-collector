@@ -31,7 +31,6 @@ import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
 import org.joda.time.DateTime;
 import org.logicalshift.concurrent.SerialScheduledExecutorService;
-import org.mockito.ArgumentCaptor;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
@@ -46,19 +45,15 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Strings.nullToEmpty;
-import static com.google.common.collect.Iterables.concat;
 import static java.lang.String.format;
 import static java.util.UUID.randomUUID;
-import static org.mockito.Matchers.anyListOf;
-import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 
 public class TestEventTapWriter
@@ -100,7 +95,7 @@ public class TestEventTapWriter
     private BatchProcessorFactory batchProcessorFactory = new MockBatchProcessorFactory();
     private Multimap<String, MockBatchProcessor<Event>> batchProcessors;
     private EventTapFlowFactory eventTapFlowFactory = new MockEventTapFlowFactory();
-    private Map<List<String>, EventTapFlow> eventTapFlows;
+    private Map<List<String>, MockEventTapFlow> eventTapFlows;
     private EventTapConfig eventTapConfig;
     private EventTapWriter eventTapWriter;
 
@@ -110,7 +105,7 @@ public class TestEventTapWriter
         serviceSelector = new StaticServiceSelector(ImmutableSet.<ServiceDescriptor>of());
         executorService = new SerialScheduledExecutorService();
         batchProcessors = HashMultimap.create();
-        eventTapFlows = new HashMap<List<String>, EventTapFlow>();
+        eventTapFlows = new HashMap<List<String>, MockEventTapFlow>();
         eventTapConfig = new EventTapConfig();
         serviceSelector = mock(ServiceSelector.class);
         eventTapWriter = new EventTapWriter(
@@ -155,13 +150,13 @@ public class TestEventTapWriter
     {
         updateThenRefreshFlowsThenCheck(tapA);
         writeEvents(eventsA[0], eventsB[0]);
-        checkTapEvents(tapA, eventsA[0]);
-        checkTapEvents(tapB);
+        forTap(tapA).verifyEvents(eventsA[0]);
+        forTap(tapB).verifyNoFlow();
 
         updateThenRefreshFlowsThenCheck(tapA, tapB);
         writeEvents(eventsA[1], eventsB[1]);
-        checkTapEvents(tapA, eventsA[0], eventsA[1]);
-        checkTapEvents(tapB, eventsB[1]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1]);
+        forTap(tapB).verifyEvents(eventsB[1]);
     }
 
     @Test
@@ -169,13 +164,13 @@ public class TestEventTapWriter
     {
         updateThenRefreshFlowsThenCheck(tapA, tapB);
         writeEvents(eventsA[0], eventsB[0]);
-        checkTapEvents(tapA, eventsA[0]);
-        checkTapEvents(tapB, eventsB[0]);
+        forTap(tapA).verifyEvents(eventsA[0]);
+        forTap(tapB).verifyEvents(eventsB[0]);
 
         updateThenRefreshFlowsThenCheck(tapA);
         writeEvents(eventsA[1], eventsB[1]);
-        checkTapEvents(tapA, eventsA[0], eventsA[1]);
-        checkTapEvents(tapB, eventsB[0]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1]);
+        forTap(tapB).verifyEvents(eventsB[0]);
     }
 
     @Test
@@ -184,13 +179,13 @@ public class TestEventTapWriter
         // If the taps for a given event type changes, don't create the processor
         updateThenRefreshFlowsThenCheck(tapA1);
         writeEvents(eventsA[0]);
-        checkTapEvents(tapA1, eventsA[0]);
-        checkTapEvents(tapA2);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forTap(tapA2).verifyNoFlow();
 
         updateThenRefreshFlowsThenCheck(tapA2);
         writeEvents(eventsA[1]);
-        checkTapEvents(tapA1, eventsA[0]);
-        checkTapEvents(tapA2, eventsA[1]);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forTap(tapA2).verifyEvents(eventsA[1]);
     }
 
     @Test
@@ -232,8 +227,8 @@ public class TestEventTapWriter
     {
         updateThenRefreshFlowsThenCheck(tapA, tapB);
         writeEvents(eventsA[0], eventsB[0], eventsC[0]);
-        checkTapEvents(tapA, eventsA[0]);
-        checkTapEvents(tapB, eventsB[0]);
+        forTap(tapA).verifyEvents(eventsA[0]);
+        forTap(tapB).verifyEvents(eventsB[0]);
     }
 
     @Test
@@ -241,12 +236,12 @@ public class TestEventTapWriter
     {
         updateThenRefreshFlowsThenCheck(tapA);
         writeEvents(eventsA[0], eventsB[0]);
-        checkTapEvents(tapA, eventsA[0]);
+        forTap(tapA).verifyEvents(eventsA[0]);
 
         updateThenRefreshFlowsThenCheck(tapA, tapB);
         writeEvents(eventsA[1], eventsB[1]);
-        checkTapEvents(tapA, eventsA[0], eventsA[1]);
-        checkTapEvents(tapB, eventsB[1]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1]);
+        forTap(tapB).verifyEvents(eventsB[1]);
     }
 
     @Test
@@ -254,13 +249,13 @@ public class TestEventTapWriter
     {
         updateThenRefreshFlowsThenCheck(tapA, tapB);
         writeEvents(eventsA[0], eventsB[0]);
-        checkTapEvents(tapA, eventsA[0]);
-        checkTapEvents(tapB, eventsB[0]);
+        forTap(tapA).verifyEvents(eventsA[0]);
+        forTap(tapB).verifyEvents(eventsB[0]);
 
         updateThenRefreshFlowsThenCheck(tapA);
         writeEvents(eventsA[1], eventsB[1]);
-        checkTapEvents(tapA, eventsA[0], eventsA[1]);
-        checkTapEvents(tapB, eventsB[0]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1]);
+        forTap(tapB).verifyEvents(eventsB[0]);
     }
 
     @Test
@@ -354,25 +349,40 @@ public class TestEventTapWriter
         }
     }
 
-    private void checkTapEvents(ServiceDescriptor tap, Event... events)
+    private EventTapFlowVerifier forTap(ServiceDescriptor tap)
     {
-        String eventType = nullToEmpty(tap.getProperties().get("eventType"));
-        String flowId = nullToEmpty(tap.getProperties().get("tapId"));
-        EventTapFlow eventTapFlow = eventTapFlows.get(ImmutableList.of(eventType, flowId));
-        @SuppressWarnings("deprecated")
-        ArgumentCaptor<List<Event>> eventArgumentCaptor = new ArgumentCaptor<List<Event>>();
+        return forSharedTaps(tap);
+    }
 
-        if (events.length == 0) {
-            if (eventTapFlow != null) {
-                verify(eventTapFlow, never()).processBatch(anyListOf(Event.class));
+    private EventTapFlowVerifier forSharedTaps(ServiceDescriptor... taps)
+    {
+        ImmutableSet.Builder<URI> urisBuilder = ImmutableSet.builder();
+        String eventType = null;
+        String flowId = null;
+
+        for (ServiceDescriptor tap : taps) {
+            String thisEventType = tap.getProperties().get("eventType");
+            String thisFlowId = tap.getProperties().get("tapId");
+            String thisUri = tap.getProperties().get("http");
+
+            assertNotNull(thisEventType);
+            assertNotNull(thisFlowId);
+            assertNotNull(thisUri);
+            if (eventType != null) {
+                assertEquals(thisEventType, eventType, "multiple taps must have the same EventType");
+                assertEquals(thisFlowId, flowId, "multiple taps must have the same flowId");
             }
+            else {
+                eventType = thisEventType;
+                flowId = thisFlowId;
+            }
+            urisBuilder.add(URI.create(thisUri));
         }
-        else {
-            assertNotNull(eventTapFlow);
-            verify(eventTapFlow, atLeast(1)).processBatch(eventArgumentCaptor.capture());
-            List<Event> actualEvents = ImmutableList.copyOf(concat(eventArgumentCaptor.getAllValues()));
-            assertEqualsNoOrder(actualEvents.toArray(), ImmutableList.copyOf(events).toArray());
-        }
+
+        assertNotNull(eventType, "No taps specified?");
+        assertNotNull(flowId, "No taps specified?");
+
+        return new EventTapFlowVerifier(urisBuilder.build(), eventType, flowId);
     }
 
     private static void checkCounters(Map<String, CounterState> counters, String type, int received, int lost)
@@ -489,9 +499,9 @@ public class TestEventTapWriter
         public EventTapFlow createEventTapFlow(String eventType, String flowId, Set<URI> taps, Observer observer)
         {
             List<String> key = ImmutableList.of(eventType, flowId);
-            EventTapFlow eventTapFlow = eventTapFlows.get(key);
+            MockEventTapFlow eventTapFlow = eventTapFlows.get(key);
             if (eventTapFlow == null) {
-                eventTapFlow = mock(EventTapFlow.class);
+                eventTapFlow = new MockEventTapFlow(taps);
                 eventTapFlows.put(key, eventTapFlow);
             }
             return eventTapFlow;
@@ -501,6 +511,79 @@ public class TestEventTapWriter
         public EventTapFlow createEventTapFlow(@Assisted("eventType") String eventType, @Assisted("flowId") String flowId, Set<URI> taps)
         {
             return createEventTapFlow(eventType, flowId, taps, EventTapFlow.NULL_OBSERVER);
+        }
+    }
+
+    private static class MockEventTapFlow implements EventTapFlow
+    {
+        private Set<URI> taps;
+        private List<Event> events;
+
+        public MockEventTapFlow(Set<URI> taps)
+        {
+            this.taps = taps;
+            this.events = new LinkedList<Event>();
+        }
+
+        @Override
+        public Set<URI> getTaps()
+        {
+            return taps;
+        }
+
+        @Override
+        public void setTaps(Set<URI> taps)
+        {
+            this.taps = taps;
+        }
+
+        @Override
+        public void processBatch(List<Event> entries)
+        {
+            events.addAll(entries);
+        }
+
+        public List<Event> getEvents()
+        {
+            return ImmutableList.copyOf(events);
+        }
+    }
+
+    private class EventTapFlowVerifier
+    {
+        private final Set<URI> taps;
+        private final String eventType;
+        private final String flowId;
+        private final List<String> key;
+
+        public EventTapFlowVerifier(Set<URI> taps, String eventType, String flowId)
+        {
+            this.taps = taps;
+            this.eventType = eventType;
+            this.flowId = flowId;
+            this.key = ImmutableList.of(eventType, flowId);
+        }
+
+        public EventTapFlowVerifier verifyEvents(Event... events)
+        {
+            MockEventTapFlow eventTapFlow = eventTapFlows.get(key);
+
+            assertNotNull(eventTapFlow);
+            assertEquals(eventTapFlow.getTaps(), taps);
+
+            assertEqualsNoOrder(eventTapFlow.getEvents().toArray(), ImmutableList.copyOf(events).toArray());
+            return this;
+        }
+
+        public EventTapFlowVerifier verifyNoEvents()
+        {
+            return verifyEvents();
+        }
+
+        public EventTapFlowVerifier verifyNoFlow()
+        {
+            assertNull(eventTapFlows.get(key));
+            return this;
         }
     }
 }

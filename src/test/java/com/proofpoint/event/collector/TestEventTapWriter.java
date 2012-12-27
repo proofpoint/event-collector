@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.google.inject.assistedinject.Assisted;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceState;
@@ -29,6 +28,7 @@ import com.proofpoint.discovery.client.testing.StaticServiceSelector;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
+import com.proofpoint.log.Logger;
 import org.joda.time.DateTime;
 import org.logicalshift.concurrent.SerialScheduledExecutorService;
 import org.testng.annotations.BeforeMethod;
@@ -36,7 +36,6 @@ import org.testng.annotations.Test;
 
 import java.net.URI;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +62,7 @@ public class TestEventTapWriter
     private static final String typeC = "typeC";
     private static final String flowId1 = "1";
     private static final String flowId2 = "2";
+    private static final String flowId3 = "3";
     private static final String instanceA = "a";
     private static final String instanceB = "b";
     private static final Event[] eventsA = createEvents(typeA, 10);
@@ -89,13 +89,37 @@ public class TestEventTapWriter
     private static final ServiceDescriptor tapC2 = createServiceDescriptor(typeC, flowId2, instanceA);
     private static final ServiceDescriptor tapC2a = tapC2;
     private static final ServiceDescriptor tapC2b = createServiceDescriptor(typeC, flowId2, instanceB);
+    private static final ServiceDescriptor qtapA = createQosServiceDescriptor(typeA, flowId1, instanceA);
+    private static final ServiceDescriptor qtapA1 = qtapA;
+    private static final ServiceDescriptor qtapA1a = qtapA1;
+    private static final ServiceDescriptor qtapA1b = createQosServiceDescriptor(typeA, flowId1, instanceB);
+    private static final ServiceDescriptor qtapA2 = createQosServiceDescriptor(typeA, flowId2, instanceA);
+    private static final ServiceDescriptor qtapA2a = qtapA2;
+    private static final ServiceDescriptor qtapA2b = createQosServiceDescriptor(typeA, flowId2, instanceB);
+    private static final ServiceDescriptor qtapA3 = createQosServiceDescriptor(typeA, flowId3, instanceA);
+    private static final ServiceDescriptor qtapB = createQosServiceDescriptor(typeB, flowId1, instanceA);
+    private static final ServiceDescriptor qtapB1 = qtapB;
+    private static final ServiceDescriptor qtapB1a = qtapB1;
+    private static final ServiceDescriptor qtapB1b = createQosServiceDescriptor(typeB, flowId1, instanceB);
+    private static final ServiceDescriptor qtapB2 = createQosServiceDescriptor(typeB, flowId2, instanceA);
+    private static final ServiceDescriptor qtapB3 = createQosServiceDescriptor(typeB, flowId3, instanceA);
+    private static final ServiceDescriptor qtapB2a = qtapB2;
+    private static final ServiceDescriptor qtapB2b = createQosServiceDescriptor(typeB, flowId2, instanceB);
+    private static final ServiceDescriptor qtapC = createQosServiceDescriptor(typeC, flowId1, instanceA);
+    private static final ServiceDescriptor qtapC1 = qtapC;
+    private static final ServiceDescriptor qtapC1a = qtapC1;
+    private static final ServiceDescriptor qtapC1b = createQosServiceDescriptor(typeC, flowId1, instanceB);
+    private static final ServiceDescriptor qtapC2 = createQosServiceDescriptor(typeC, flowId2, instanceA);
+    private static final ServiceDescriptor qtapC2a = qtapC2;
+    private static final ServiceDescriptor qtapC2b = createQosServiceDescriptor(typeC, flowId2, instanceB);
 
     private ServiceSelector serviceSelector;
     private SerialScheduledExecutorService executorService;
     private BatchProcessorFactory batchProcessorFactory = new MockBatchProcessorFactory();
     private Multimap<String, MockBatchProcessor<Event>> batchProcessors;
     private EventTapFlowFactory eventTapFlowFactory = new MockEventTapFlowFactory();
-    private Map<List<String>, MockEventTapFlow> eventTapFlows;
+    private Multimap<List<String>, MockEventTapFlow> nonQosEventTapFlows;
+    private Multimap<List<String>, MockEventTapFlow> qosEventTapFlows;
     private EventTapConfig eventTapConfig;
     private EventTapWriter eventTapWriter;
 
@@ -105,7 +129,8 @@ public class TestEventTapWriter
         serviceSelector = new StaticServiceSelector(ImmutableSet.<ServiceDescriptor>of());
         executorService = new SerialScheduledExecutorService();
         batchProcessors = HashMultimap.create();
-        eventTapFlows = new HashMap<List<String>, MockEventTapFlow>();
+        nonQosEventTapFlows = HashMultimap.create();
+        qosEventTapFlows = HashMultimap.create();
         eventTapConfig = new EventTapConfig();
         serviceSelector = mock(ServiceSelector.class);
         eventTapWriter = new EventTapWriter(
@@ -146,7 +171,38 @@ public class TestEventTapWriter
     }
 
     @Test
-    public void testRefreshFlowsCreatesNewEntries()
+    public void testRefreshFlowsCreateNonQosTapFromExistingTap()
+    {
+        // [] -> tapA -> []
+        // tapA -> tapA, tapB -> tapA
+        testRefreshFlowsCreateOneTapFromExistingTap(tapA, tapB);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosTapFromExistingTap()
+    {
+        // [] -> tapA -> []
+        // tapA -> tapA, qtapB -> tapA
+        testRefreshFlowsCreateOneTapFromExistingTap(tapA, qtapB);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosTapFromExistingQosTap()
+    {
+        // [] -> qtapA -> []
+        // qtapA -> qtapA, tapB -> qtapA
+        testRefreshFlowsCreateOneTapFromExistingTap(qtapA, tapB);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosTapFromExistingQosTap()
+    {
+        // [] -> qtapA -> []
+        // qtapA -> qtapA, qtapB -> qtapA
+        testRefreshFlowsCreateOneTapFromExistingTap(qtapA, qtapB);
+    }
+
+    private void testRefreshFlowsCreateOneTapFromExistingTap(ServiceDescriptor tapA, ServiceDescriptor tapB)
     {
         updateThenRefreshFlowsThenCheck(tapA);
         writeEvents(eventsA[0], eventsB[0]);
@@ -157,6 +213,432 @@ public class TestEventTapWriter
         writeEvents(eventsA[1], eventsB[1]);
         forTap(tapA).verifyEvents(eventsA[0], eventsA[1]);
         forTap(tapB).verifyEvents(eventsB[1]);
+
+        updateThenRefreshFlowsThenCheck(tapA);
+        writeEvents(eventsA[2], eventsB[2]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1], eventsA[2]);
+        forTap(tapB).verifyEvents(eventsB[1]);
+
+        updateThenRefreshFlowsThenCheck();
+        writeEvents(eventsA[3], eventsB[3]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1], eventsA[2]);
+        forTap(tapB).verifyEvents(eventsB[1]);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosNonQosTaps()
+    {
+        // [] -> tapA, tapB -> []
+        testRefreshFlowsCreateTwoTaps(tapA, tapB);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosQosTaps()
+    {
+        // [] -> qtapA, qtapB -> []
+        testRefreshFlowsCreateTwoTaps(qtapA, qtapB);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosNonQosTaps()
+    {
+        // [] -> qtapA, tapB -> []
+        testRefreshFlowsCreateTwoTaps(qtapA, tapB);
+    }
+
+    private void testRefreshFlowsCreateTwoTaps(ServiceDescriptor tapA, ServiceDescriptor tapB)
+    {
+        updateThenRefreshFlowsThenCheck(tapA, tapB);
+        writeEvents(eventsA[0], eventsB[0]);
+        forTap(tapA).verifyEvents(eventsA[0]);
+        forTap(tapB).verifyEvents(eventsB[0]);
+
+        updateThenRefreshFlowsThenCheck();
+        writeEvents(eventsA[1], eventsB[1]);
+        forTap(tapA).verifyEvents(eventsA[0]);
+        forTap(tapB).verifyEvents(eventsB[0]);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosNonQosSameTaps()
+    {
+        // [] -> tapA1, tapA2 -> []
+        testRefreshFlowsCreateTwoSameTaps(tapA1, tapA2);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosQosSameTaps()
+    {
+        // [] -> qtapA1, qtapA2 -> []
+        testRefreshFlowsCreateTwoSameTaps(qtapA1, qtapA2);
+    }
+
+    private void testRefreshFlowsCreateTwoSameTaps(ServiceDescriptor tapA1, ServiceDescriptor tapA2)
+    {
+        updateThenRefreshFlowsThenCheck(tapA1, tapA2);
+        writeEvents(eventsA[0], eventsB[0]);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forTap(tapA2).verifyEvents(eventsA[0]);
+
+        updateThenRefreshFlowsThenCheck();
+        writeEvents(eventsA[1], eventsB[1]);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forTap(tapA2).verifyEvents(eventsA[0]);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosNonQosTapsWithExistingTap()
+    {
+        // tapA -> tapA, tapB, tapC -> tapA
+        testRefreshFlowsCreateTwoTapsWithExistingTap(tapA, tapB, tapC);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosQosTapsWithExistingTap()
+    {
+        // tapA -> tapA, qtapB, qtapC -> tapA
+        testRefreshFlowsCreateTwoTapsWithExistingTap(tapA, qtapB, qtapC);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosNonQosTapsWithExistingTap()
+    {
+        // tapA -> tapA, qtapB, tapC -> tapA
+        testRefreshFlowsCreateTwoTapsWithExistingTap(tapA, qtapB, tapC);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosNonQosTapsWithExistingQosTap()
+    {
+        // qtapA -> tapA, tapB, tapC -> qtapA
+        testRefreshFlowsCreateTwoTapsWithExistingTap(qtapA, tapB, tapC);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosQosTapsWithExistingQosTap()
+    {
+        // qtapA -> tapA, qtapB, qtapC -> qtapA
+        testRefreshFlowsCreateTwoTapsWithExistingTap(qtapA, qtapB, qtapC);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosNonQosTapsWithExistingQosTap()
+    {
+        // qtapA -> tapA, qtapB, tapC -> qtapA
+        testRefreshFlowsCreateTwoTapsWithExistingTap(qtapA, qtapB, tapC);
+    }
+
+    private void testRefreshFlowsCreateTwoTapsWithExistingTap(ServiceDescriptor tapA, ServiceDescriptor tapB, ServiceDescriptor tapC)
+    {
+        // [q]tapA -> [q]tapX, [q]tapY, -> [q]tapA
+        updateThenRefreshFlowsThenCheck(tapA);
+        writeEvents(eventsA[0], eventsB[0], eventsC[0]);
+        forTap(tapA).verifyEvents(eventsA[0]);
+        forTap(tapB).verifyNoFlow();
+        forTap(tapC).verifyNoFlow();
+
+        updateThenRefreshFlowsThenCheck(tapA, tapB, tapC);
+        writeEvents(eventsA[1], eventsB[1], eventsC[1]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1]);
+        forTap(tapB).verifyEvents(eventsB[1]);
+        forTap(tapC).verifyEvents(eventsC[1]);
+
+        updateThenRefreshFlowsThenCheck(tapA);
+        writeEvents(eventsA[2], eventsB[2], eventsC[2]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1], eventsA[2]);
+        forTap(tapB).verifyEvents(eventsB[1]);
+        forTap(tapC).verifyEvents(eventsC[1]);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosNonQosSameTapsWithExistingTap()
+    {
+        // tapA -> tapA, tapB1, tapB2 -> tapA
+        testRefreshFlowsCreateTwoSameTapsWithExistingTap(tapA, tapB1, tapB2);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosQosSameTapsWithExistingTap()
+    {
+        // tapA -> qtapB1, qtapB2 -> tapA
+        testRefreshFlowsCreateTwoSameTapsWithExistingTap(tapA, qtapB1, qtapB2);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosNonQosSameTapsWithExistingQosTap()
+    {
+        // qtapA -> tapA, tapB1, tapB2 -> qtapA
+        testRefreshFlowsCreateTwoSameTapsWithExistingTap(qtapA, tapB1, tapB2);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosQosSameTapsWithExistingQosTap()
+    {
+        // qtapA -> qtapB1, qtapB2 -> qtapA
+        testRefreshFlowsCreateTwoSameTapsWithExistingTap(qtapA, qtapB1, qtapB2);
+    }
+
+    private void testRefreshFlowsCreateTwoSameTapsWithExistingTap(ServiceDescriptor tapA, ServiceDescriptor tapB1, ServiceDescriptor tapB2)
+    {
+        // tapA -> tapA, tapB, tapC -> tapA
+        updateThenRefreshFlowsThenCheck(tapA);
+        writeEvents(eventsA[0], eventsB[0]);
+        forTap(tapA).verifyEvents(eventsA[0]);
+        forTap(tapB1).verifyNoFlow();
+        forTap(tapB2).verifyNoFlow();
+
+        updateThenRefreshFlowsThenCheck(tapA, tapB1, tapB2);
+        writeEvents(eventsA[1], eventsB[1]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1]);
+        forTap(tapB1).verifyEvents(eventsB[1]);
+        forTap(tapB2).verifyEvents(eventsB[1]);
+
+        updateThenRefreshFlowsThenCheck(tapA);
+        writeEvents(eventsA[2], eventsB[2]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1], eventsA[2]);
+        forTap(tapB1).verifyEvents(eventsB[1]);
+        forTap(tapB2).verifyEvents(eventsB[1]);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosNonQosQos()
+    {
+        // [] -> tapA1, tapA2, qtapA3 -> []
+        testRefreshFlowsCreateThreeSameTaps(tapA1, tapA2, qtapA3);
+    }
+
+    public void testRefreshFlowsCreateThreeSameTaps(ServiceDescriptor tapA1, ServiceDescriptor tapA2, ServiceDescriptor tapA3)
+    {
+        updateThenRefreshFlowsThenCheck(tapA1, tapA2, tapA3);
+        writeEvents(eventsA[0]);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forTap(tapA2).verifyEvents(eventsA[0]);
+        forTap(tapA3).verifyEvents(eventsA[0]);
+
+        updateThenRefreshFlowsThenCheck();
+        writeEvents(eventsA[1]);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forTap(tapA2).verifyEvents(eventsA[0]);
+        forTap(tapA3).verifyEvents(eventsA[0]);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosTwoSameNonQos()
+    {
+        // [] -> tapA1, tapA2a, tapA2b -> []
+        testRefreshFlowsCreateThreeSameTapsWithTwoShared(tapA1, tapA2a, tapA2b);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosWithPromotedQos()
+    {
+        // [] -> tapA1, tapA2a, qtapA2b -> []
+        testRefreshFlowsCreateThreeSameTapsWithTwoShared(tapA1, tapA2a, qtapA2b);
+
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosWithPromotedQosSecond()
+    {
+        // [] -> tapA1, qtapA2a, tapA2b -> []
+        testRefreshFlowsCreateThreeSameTapsWithTwoShared(tapA1, qtapA2a, tapA2b);
+    }
+
+    public void testRefreshFlowsCreateThreeSameTapsWithTwoShared(ServiceDescriptor tapA1, ServiceDescriptor tapA2a, ServiceDescriptor tapA2b)
+    {
+        updateThenRefreshFlowsThenCheck(tapA1, tapA2a, tapA2b);
+        writeEvents(eventsA[0]);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forSharedTaps(tapA2a, tapA2b).verifyEvents(eventsA[0]);
+
+        updateThenRefreshFlowsThenCheck();
+        writeEvents(eventsA[1]);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forSharedTaps(tapA2a, tapA2b).verifyEvents(eventsA[0]);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosNonQosQosWithExistingTap()
+    {
+        // tapA -> tapB1, tapB2, qtapB3 -> tapA
+        testRefreshFlowsCreateThreeSameTapsWithExistingTap(tapA, tapB1, tapB2, qtapB3);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosNonQosQosWithExistingQosTap()
+    {
+        // tapA -> tapB1, tapB2, qtapB3 -> tapA
+        testRefreshFlowsCreateThreeSameTapsWithExistingTap(qtapA, tapB1, tapB2, qtapB3);
+    }
+
+    private void testRefreshFlowsCreateThreeSameTapsWithExistingTap(ServiceDescriptor tapA, ServiceDescriptor tapB1, ServiceDescriptor tapB2, ServiceDescriptor tapB3)
+    {
+        updateThenRefreshFlowsThenCheck(tapA);
+        writeEvents(eventsA[0], eventsB[0]);
+        forTap(tapA).verifyEvents(eventsA[0]);
+        forTap(tapB1).verifyNoFlow();
+        forTap(tapB2).verifyNoFlow();
+        forTap(tapB3).verifyNoFlow();
+
+        updateThenRefreshFlowsThenCheck(tapA, tapB1, tapB2, tapB3);
+        writeEvents(eventsA[1], eventsB[1]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1]);
+        forTap(tapB1).verifyEvents(eventsB[1]);
+        forTap(tapB2).verifyEvents(eventsB[1]);
+        forTap(tapB3).verifyEvents(eventsB[1]);
+
+        updateThenRefreshFlowsThenCheck(tapA);
+        writeEvents(eventsA[2], eventsB[2]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1], eventsA[2]);
+        forTap(tapB1).verifyEvents(eventsB[1]);
+        forTap(tapB2).verifyEvents(eventsB[1]);
+        forTap(tapB3).verifyEvents(eventsB[1]);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosWithSharedNonQosNonQosWithExistingTap()
+    {
+        // tapA -> tapA, tapB1, tapB2a, tapB2b -> tapA
+        testRefreshFlowsCreateThreeSameTapsWithTwoSharedWithExistingTap(tapA, tapB1, tapB2a, tapB2b);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosWithSharedNonQosQosWithExistingTap()
+    {
+        // tapA -> tapA, tapB1, tapB2a, qtapB2b -> tapA
+        testRefreshFlowsCreateThreeSameTapsWithTwoSharedWithExistingTap(tapA, tapB1, tapB2a, qtapB2b);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosWithSharedQosNonQosWithExistingTap()
+    {
+        // tapA -> tapA, tapB1, qtapB2a, tapB2b -> tapA
+        testRefreshFlowsCreateThreeSameTapsWithTwoSharedWithExistingTap(tapA, tapB1, qtapB2a, tapB2b);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosWithPromotedQosWithExistingTap()
+    {
+        // tapA -> tapA, tapB1, qtapB2a, qtapB2b -> tapA
+        testRefreshFlowsCreateThreeSameTapsWithTwoSharedWithExistingTap(tapA, tapB1, qtapB2a, qtapB2b);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosWithSharedNonQosNonQosWithExistingQosTap()
+    {
+        // qtapA -> qtapA, tapB1, tapB2a, tapB2b -> qtapA
+        testRefreshFlowsCreateThreeSameTapsWithTwoSharedWithExistingTap(qtapA, tapB1, tapB2a, tapB2b);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosWithSharedNonQosQosWithExistingQosTap()
+    {
+        // qtapA -> qtapA, tapB1, tapB2a, qtapB2b -> qtapA
+        testRefreshFlowsCreateThreeSameTapsWithTwoSharedWithExistingTap(qtapA, tapB1, tapB2a, qtapB2b);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateNonQosWithSharedQosNonQosWithExistingQosTap()
+    {
+        // qtapA -> qtapA, tapB1, qtapB2a, tapB2b -> qtapA
+        testRefreshFlowsCreateThreeSameTapsWithTwoSharedWithExistingTap(qtapA, tapB1, qtapB2a, tapB2b);
+    }
+
+    @Test
+    public void testRefreshFlowsCreateQosWithSharedNonQosQosWithExistingQosTap()
+    {
+        // qtapA -> qtapA, tapB1, qtapB2a, qtapB2b -> qtapA
+        testRefreshFlowsCreateThreeSameTapsWithTwoSharedWithExistingTap(qtapA, tapB1, qtapB2a, qtapB2b);
+    }
+
+    private void testRefreshFlowsCreateThreeSameTapsWithTwoSharedWithExistingTap(ServiceDescriptor tapA, ServiceDescriptor tapB1, ServiceDescriptor tapB2a, ServiceDescriptor tapB2b)
+    {
+        updateThenRefreshFlowsThenCheck(tapA);
+        writeEvents(eventsA[0], eventsB[0]);
+        forTap(tapA).verifyEvents(eventsA[0]);
+        forTap(tapB1).verifyNoFlow();
+        forSharedTaps(tapB2a, tapB2b).verifyNoFlow();
+
+        updateThenRefreshFlowsThenCheck(tapA, tapB1, tapB2a, tapB2b);
+        writeEvents(eventsA[1], eventsB[1]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1]);
+        forTap(tapB1).verifyEvents(eventsB[1]);
+        forSharedTaps(tapB2a, tapB2b).verifyEvents(eventsB[1]);
+
+        updateThenRefreshFlowsThenCheck(tapA);
+        writeEvents(eventsA[2], eventsB[2]);
+        forTap(tapA).verifyEvents(eventsA[0], eventsA[1], eventsA[2]);
+        forTap(tapB1).verifyEvents(eventsB[1]);
+        forSharedTaps(tapB2a, tapB2b).verifyEvents(eventsB[1]);
+    }
+
+    @Test
+    public void testRefreshFlowsSwapSameTaps()
+    {
+        // tapA1 -> tapA2
+        testRefreshFlowsSwapSameTaps(tapA1, tapA2);
+    }
+
+    @Test
+    public void testRefreshFlowsNonQosToSameQos()
+    {
+        // tapA1 -> qtapA2
+        testRefreshFlowsSwapSameTaps(tapA1, qtapA2);
+    }
+
+    @Test
+    public void testRefreshFlowsQosToIdenticalNonQos()
+    {
+        // qtapA1 -> tapA2
+        testRefreshFlowsSwapSameTaps(qtapA1, tapA2);
+    }
+
+    @Test
+    void testRefreshFlowsQosToSameNonQos()
+    {
+        // qtapA1 -> tapA2
+        testRefreshFlowsSwapSameTaps(qtapA1, tapA2);
+    }
+
+    private void testRefreshFlowsSwapSameTaps(ServiceDescriptor tapA1, ServiceDescriptor tapA2)
+    {
+        updateThenRefreshFlowsThenCheck(tapA1);
+        writeEvents(eventsA[0]);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forTap(tapA2).verifyNoFlow();
+
+        updateThenRefreshFlowsThenCheck(tapA2);
+        writeEvents(eventsA[1]);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forTap(tapA2).verifyEvents(eventsA[1]);
+    }
+
+    @Test
+    public void testRefreshFlowsNonQosToIdenticalQos()
+    {
+        // tapA1 -> qtapA1
+        updateThenRefreshFlowsThenCheck(tapA1);
+        writeEvents(eventsA[0]);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forTap(qtapA1).verifyNoFlow();
+
+        updateThenRefreshFlowsThenCheck(qtapA1);
+        writeEvents(eventsA[1]);
+        forTap(tapA1).verifyEvents(eventsA[0]);
+        forTap(qtapA1).verifyEvents(eventsA[1]);
+    }
+
+    @Test
+    public void testRefreshFlowsQosToIdenticalQos()
+    {
+        // tapA1a -> tapA1b
+        updateThenRefreshFlowsThenCheck(tapA1a);
+        writeEvents(eventsA[0]);
+        forTap(tapA1a).verifyEvents(eventsA[0]);
+
+        updateThenRefreshFlowsThenCheck(tapA1b);
+        writeEvents(eventsA[1]);
+        forTap(tapA1b).verifyEvents(eventsA[0], eventsA[1]);
     }
 
     @Test
@@ -359,11 +841,13 @@ public class TestEventTapWriter
         ImmutableSet.Builder<URI> urisBuilder = ImmutableSet.builder();
         String eventType = null;
         String flowId = null;
+        boolean qosEnabled = false;
 
         for (ServiceDescriptor tap : taps) {
             String thisEventType = tap.getProperties().get("eventType");
             String thisFlowId = tap.getProperties().get("tapId");
             String thisUri = tap.getProperties().get("http");
+            boolean thisQosEnabled = nullToEmpty(tap.getProperties().get("qos.delivery")).equalsIgnoreCase("retry");
 
             assertNotNull(thisEventType);
             assertNotNull(thisFlowId);
@@ -377,12 +861,15 @@ public class TestEventTapWriter
                 flowId = thisFlowId;
             }
             urisBuilder.add(URI.create(thisUri));
+            if (thisQosEnabled) {
+                qosEnabled = true;
+            }
         }
 
         assertNotNull(eventType, "No taps specified?");
         assertNotNull(flowId, "No taps specified?");
 
-        return new EventTapFlowVerifier(urisBuilder.build(), eventType, flowId);
+        return new EventTapFlowVerifier(urisBuilder.build(), eventType, flowId, qosEnabled);
     }
 
     private static void checkCounters(Map<String, CounterState> counters, String type, int received, int lost)
@@ -399,7 +886,13 @@ public class TestEventTapWriter
 
     private static String extractProcessorName(ServiceDescriptor tap)
     {
-        return nullToEmpty(tap.getProperties().get("eventType"));
+        if (nullToEmpty(tap.getProperties().get("qos.delivery")).equalsIgnoreCase("retry")) {
+            return format("%s{%s}", tap.getProperties().get("eventType"),
+                    tap.getProperties().get("tapId"));
+        }
+        else {
+            return tap.getProperties().get("eventType");
+        }
     }
 
     private static ServiceDescriptor createServiceDescriptor(String eventType, Map<String, String> properties)
@@ -431,12 +924,21 @@ public class TestEventTapWriter
                 ImmutableMap.of("tapId", flowId, "http", format("http://%s-%s.event.tap", eventType, instanceId)));
     }
 
+    private static ServiceDescriptor createQosServiceDescriptor(String eventType, String flowId, String instanceId)
+    {
+        return createServiceDescriptor(eventType,
+                ImmutableMap.of("qos.delivery", "retry",
+                        "tapId", flowId,
+                        "http", format("http://%s-%s.event.tap", eventType, instanceId)));
+    }
+
     private class MockBatchProcessorFactory implements BatchProcessorFactory
     {
         @Override
         @SuppressWarnings("unchecked")
         public <T> BatchProcessor<T> createBatchProcessor(String name, BatchHandler<T> batchHandler, BatchProcessor.Observer observer)
         {
+            Logger.get(EventTapWriter.class).error("Create Batch Processor %s", name);
             MockBatchProcessor batchProcessor = new MockBatchProcessor(name, batchHandler, observer);
             batchProcessors.put(name, batchProcessor);
             return batchProcessor;
@@ -449,7 +951,7 @@ public class TestEventTapWriter
         }
     }
 
-    private class MockBatchProcessor<T> implements BatchProcessor<T>
+    private static class MockBatchProcessor<T> implements BatchProcessor<T>
     {
         public int startCount = 0;
         public int stopCount = 0;
@@ -498,31 +1000,33 @@ public class TestEventTapWriter
         @Override
         public EventTapFlow createEventTapFlow(String eventType, String flowId, Set<URI> taps, Observer observer)
         {
-            List<String> key = ImmutableList.of(eventType, flowId);
-            MockEventTapFlow eventTapFlow = eventTapFlows.get(key);
-            if (eventTapFlow == null) {
-                eventTapFlow = new MockEventTapFlow(taps);
-                eventTapFlows.put(key, eventTapFlow);
-            }
-            return eventTapFlow;
+            return createEventTapFlow(nonQosEventTapFlows, eventType, flowId, taps, observer);
         }
 
         @Override
-        public EventTapFlow createEventTapFlow(@Assisted("eventType") String eventType, @Assisted("flowId") String flowId, Set<URI> taps)
+        public EventTapFlow createEventTapFlow(String eventType, String flowId, Set<URI> taps)
         {
             return createEventTapFlow(eventType, flowId, taps, EventTapFlow.NULL_OBSERVER);
         }
 
         @Override
-        public EventTapFlow createQosEventTapFlow(@Assisted("eventType") String eventType, @Assisted("flowId") String flowId, Set<URI> taps, Observer observer)
+        public EventTapFlow createQosEventTapFlow(String eventType, String flowId, Set<URI> taps, Observer observer)
         {
-            return createEventTapFlow(eventType, flowId, taps, observer);
+            return createEventTapFlow(qosEventTapFlows, eventType, flowId, taps, observer);
         }
 
         @Override
-        public EventTapFlow createQosEventTapFlow(@Assisted("eventType") String eventType, @Assisted("flowId") String flowId, Set<URI> taps)
+        public EventTapFlow createQosEventTapFlow(String eventType, String flowId, Set<URI> taps)
         {
             return createQosEventTapFlow(eventType, flowId, taps, EventTapFlow.NULL_OBSERVER);
+        }
+
+        private EventTapFlow createEventTapFlow(Multimap<List<String>, MockEventTapFlow> eventTapFlows, String eventType, String flowId, Set<URI> taps, Observer observer)
+        {
+            List<String> key = ImmutableList.of(eventType, flowId);
+            MockEventTapFlow eventTapFlow = new MockEventTapFlow(taps);
+            eventTapFlows.put(key, eventTapFlow);
+            return eventTapFlow;
         }
     }
 
@@ -567,23 +1071,27 @@ public class TestEventTapWriter
         private final String eventType;
         private final String flowId;
         private final List<String> key;
+        private final boolean qosEnabled;
 
-        public EventTapFlowVerifier(Set<URI> taps, String eventType, String flowId)
+        public EventTapFlowVerifier(Set<URI> taps, String eventType, String flowId, boolean qosEnabled)
         {
             this.taps = taps;
             this.eventType = eventType;
             this.flowId = flowId;
             this.key = ImmutableList.of(eventType, flowId);
+            this.qosEnabled = qosEnabled;
         }
 
         public EventTapFlowVerifier verifyEvents(Event... events)
         {
-            MockEventTapFlow eventTapFlow = eventTapFlows.get(key);
+            Collection<MockEventTapFlow> eventTapFlows = getEventTapFlows().get(key);
 
-            assertNotNull(eventTapFlow);
-            assertEquals(eventTapFlow.getTaps(), taps);
+            assertNotNull(eventTapFlows, context());
+            assertEquals(eventTapFlows.size(), 1, context());
 
-            assertEqualsNoOrder(eventTapFlow.getEvents().toArray(), ImmutableList.copyOf(events).toArray());
+            MockEventTapFlow eventTapFlow = eventTapFlows.iterator().next();
+            assertEquals(eventTapFlow.getTaps(), taps, context());
+            assertEqualsNoOrder(eventTapFlow.getEvents().toArray(), ImmutableList.copyOf(events).toArray(), context());
             return this;
         }
 
@@ -594,8 +1102,23 @@ public class TestEventTapWriter
 
         public EventTapFlowVerifier verifyNoFlow()
         {
-            assertNull(eventTapFlows.get(key));
+            assertTrue(getEventTapFlows().get(key).isEmpty(), context());
             return this;
+        }
+
+        private Multimap<List<String>, MockEventTapFlow> getEventTapFlows()
+        {
+            if (qosEnabled) {
+                return qosEventTapFlows;
+            }
+            else {
+                return nonQosEventTapFlows;
+            }
+        }
+
+        private String context()
+        {
+            return format("eventType=%s flowId=%s qos=%s uris=%s", eventType, flowId, qosEnabled ? "true" : "false", taps);
         }
     }
 }

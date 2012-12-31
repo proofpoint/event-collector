@@ -141,6 +141,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
 
         Map<String, EventTypePolicy> newPolicies = policiesBuilder.build();
         eventTypePolicies.set(newPolicies);
+        flows = newFlows;
 
         stopExistingPoliciesNoLongerInUse(existingPolicies, newPolicies);
     }

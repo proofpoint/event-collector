@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Objects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Strings.nullToEmpty;
+import static com.google.common.base.Strings.isNullOrEmpty;
 
 public class EventTapWriter implements EventWriter, EventTapStats
 {
@@ -189,26 +189,14 @@ public class EventTapWriter implements EventWriter, EventTapStats
         // First level is EventType, second is flowId
         Map<String, Map<String, FlowInfo.Builder>> flows = new HashMap<String, Map<String, FlowInfo.Builder>>();
 
-        log.debug("Processing %s service descriptors", descriptors.size());
         for (ServiceDescriptor descriptor : descriptors) {
-            log.debug("Processing descriptor %s", descriptor.getId());
             Map<String, String> properties = descriptor.getProperties();
             String eventType = properties.get("eventType");
-            if (nullToEmpty(eventType).isEmpty()) {
-                log.debug("Skipping descriptor %s: no event type", descriptor.getId());
-                continue;
-            }
             String flowId = properties.get("tapId");
-            if (nullToEmpty(flowId).isEmpty()) {
-                log.debug("Skipping descriptor %s: no flow ID", descriptor.getId());
-                continue;
-            }
-            URI uri;
-            try {
-                uri = URI.create(properties.get("http"));
-            }
-            catch (Exception e) {
-                log.debug("Skipping descriptor %s: invalid or missing destination", descriptor.getId());
+            URI uri = safeUriFromString(properties.get("http"));
+            String qosDelivery = properties.get("qos.delivery");
+
+            if (isNullOrEmpty(eventType) || isNullOrEmpty(flowId) || uri == null) {
                 continue;
             }
 
@@ -224,21 +212,25 @@ public class EventTapWriter implements EventWriter, EventTapStats
                 flowsForEventType.put(flowId, flowBuilder);
             }
 
-            String qosDelivery = properties.get("qos.delivery");
-            if (nullToEmpty(qosDelivery).equalsIgnoreCase("retry")) {
+            if ("retry".equalsIgnoreCase(qosDelivery)) {
                 flowBuilder.setQosEnabled(true);
             }
 
             flowBuilder.addDestination(uri);
         }
 
+        return constructFlowsFromBuilderMap(flows);
+    }
+
+    private Map<String, Map<String, FlowInfo>> constructFlowsFromBuilderMap(Map<String, Map<String, FlowInfo.Builder>> flows)
+    {
         ImmutableMap.Builder<String, Map<String, FlowInfo>> flowsBuilder = ImmutableMap.builder();
-        for (Map.Entry<String, Map<String, FlowInfo.Builder>> flowsEntry : flows.entrySet()) {
+        for (Entry<String, Map<String, FlowInfo.Builder>> flowsEntry : flows.entrySet()) {
             String eventType = flowsEntry.getKey();
             Map<String, FlowInfo.Builder> flowsForEventType = flowsEntry.getValue();
 
             ImmutableMap.Builder<String, FlowInfo> flowsBuilderForEventType = ImmutableMap.builder();
-            for (Map.Entry<String, FlowInfo.Builder> flowsForEventTypeEntry : flowsForEventType.entrySet()) {
+            for (Entry<String, FlowInfo.Builder> flowsForEventTypeEntry : flowsForEventType.entrySet()) {
                 String flowId = flowsForEventTypeEntry.getKey();
                 FlowInfo.Builder flowBuilder = flowsForEventTypeEntry.getValue();
                 flowsBuilderForEventType.put(flowId, flowBuilder.build());
@@ -423,12 +415,22 @@ public class EventTapWriter implements EventWriter, EventTapStats
         stopProcessor(createQosBatchProcessorName(eventType, flowId), processor);
     }
 
-    private String createNonQosBatchProcessorName(String eventType)
+    private static URI safeUriFromString(String uri)
+    {
+        try {
+            return URI.create(uri);
+        }
+        catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String createNonQosBatchProcessorName(String eventType)
     {
         return eventType;
     }
 
-    private String createQosBatchProcessorName(String eventType, String flowId)
+    private static String createQosBatchProcessorName(String eventType, String flowId)
     {
         return String.format("%s{%s}", eventType, flowId);
     }

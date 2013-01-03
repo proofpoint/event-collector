@@ -23,7 +23,7 @@ import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.EventCounters.CounterState;
-import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.QosPolicy;
+import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.FlowPolicy;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 import org.weakref.jmx.Managed;
@@ -62,7 +62,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
 
-    private final EventCounters<String> queueCounters = new EventCounters<String>();
+    private final EventCounters<List<String>> queueCounters = new EventCounters<List<String>>();
     private final EventCounters<List<String>> flowCounters = new EventCounters<List<String>>();
 
     @Inject
@@ -104,11 +104,10 @@ public class EventTapWriter implements EventWriter, EventTapStats
         for (Map.Entry<String, EventTypePolicy> entry : eventTypePolicies.get().entrySet()) {
             String eventType = entry.getKey();
             EventTypePolicy eventTypePolicy = entry.getValue();
-            stopNonQosBatchProcessor(eventType, eventTypePolicy.nonQosBatchProcessor);
-            for (Map.Entry<String, QosPolicy> qosEntry : eventTypePolicy.qosPolicies.entrySet()) {
-                String flowId = qosEntry.getKey();
-                QosPolicy qosPolicy = qosEntry.getValue();
-                stopQosBatchProcessor(eventType, flowId, qosPolicy.processor);
+            for (Map.Entry<String, FlowPolicy> flowPolicyEntry : eventTypePolicy.flowPolicies.entrySet()) {
+                String flowId = flowPolicyEntry.getKey();
+                FlowPolicy flowPolicy = flowPolicyEntry.getValue();
+                stopBatchProcessor(eventType, flowId, flowPolicy.processor);
             }
         }
         eventTypePolicies.set(ImmutableMap.<String, EventTypePolicy>of());
@@ -149,14 +148,8 @@ public class EventTapWriter implements EventWriter, EventTapStats
     @Override
     public void write(Event event)
     {
-        EventTypePolicy eventTypePolicy = this.eventTypePolicies.get().get(event.getType());
-        if (eventTypePolicy != null) {
-            if (eventTypePolicy.nonQosBatchProcessor != null) {
-                eventTypePolicy.nonQosBatchProcessor.put(event);
-            }
-            for (QosPolicy qosPolicy : eventTypePolicy.qosPolicies.values()) {
-                qosPolicy.processor.put(event);
-            }
+        for (FlowPolicy flowPolicy : getPolicyForEvent(event).flowPolicies.values()) {
+            flowPolicy.processor.put(event);
         }
     }
 
@@ -245,64 +238,31 @@ public class EventTapWriter implements EventWriter, EventTapStats
     private EventTypePolicy constructPolicyForFlows(EventTypePolicy existingPolicy, String eventType, Map<String, FlowInfo> flows)
     {
         EventTypePolicy.Builder policyBuilder = EventTypePolicy.builder();
-        BatchProcessor<Event> nonQosProcessor = existingPolicy.nonQosBatchProcessor;
-        BatchCloner<Event> nonQosCloner = existingPolicy.nonQosBatchCloner;
 
         for (Entry<String, FlowInfo> flowEntry : flows.entrySet()) {
             String flowId = flowEntry.getKey();
             FlowInfo flow = flowEntry.getValue();
             Set<URI> destinations = ImmutableSet.copyOf(flow.destinations);
+            FlowPolicy flowPolicy = existingPolicy.flowPolicies.get(flowId);
 
-            if (flow.qosEnabled) {
-                QosPolicy qosPolicy = existingPolicy.qosPolicies.get(flowId);
-                if (qosPolicy == null) {
-                    log.debug("New QoS event flow: id=%s destinations=%s", flowId, destinations);
-                    EventTapFlow eventTapFlow = createQosEventTapFlow(eventType, flowId, destinations);
-                    BatchProcessor<Event> batchProcessor = createQosBatchProcessor(eventType, flowId, eventTapFlow);
-                    policyBuilder.addQosPolicy(flowId, batchProcessor, eventTapFlow);
-                    log.debug("Starting processor for qos type %s (flowId %s)", eventType, flowId);
-                    batchProcessor.start();
-                }
-                else if (!destinations.equals(qosPolicy.eventTapFlow.getTaps())) {
-                    log.debug("Update QoS event flow: id=%s destinations=%s (was %s)",
-                            flowId, destinations, qosPolicy.eventTapFlow.getTaps());
-                    qosPolicy.eventTapFlow.setTaps(destinations);
-                    policyBuilder.addQosPolicy(flowId, qosPolicy.processor, qosPolicy.eventTapFlow);
+            if (flowPolicy == null || flowPolicy.qosEnabled != flow.qosEnabled) {
+                EventTapFlow eventTapFlow;
+                if (flow.qosEnabled) {
+                    eventTapFlow = createQosEventTapFlow(eventType, flowId, destinations);
                 }
                 else {
-                    policyBuilder.addQosPolicy(flowId, qosPolicy);
+                    eventTapFlow = createNonQosEventTapFlow(eventType, flowId, destinations);
                 }
+                BatchProcessor<Event> batchProcessor = createBatchProcessor(eventType, flowId, eventTapFlow);
+                policyBuilder.addFlowPolicy(flowId, batchProcessor, eventTapFlow, flow.qosEnabled);
+                batchProcessor.start();
+            }
+            else if (!destinations.equals(flowPolicy.eventTapFlow.getTaps())) {
+                flowPolicy.eventTapFlow.setTaps(destinations);
+                policyBuilder.addFlowPolicy(flowId, flowPolicy);
             }
             else {
-                if (nonQosCloner == null) {
-                    nonQosCloner = new BatchCloner<Event>();
-                }
-                if (nonQosProcessor == null) {
-                    nonQosProcessor = createNonQosBatchProcessor(eventType, nonQosCloner);
-                    log.debug("Starting non-QoS batch processor for type %s", eventType);
-                    nonQosProcessor.start();
-                }
-                policyBuilder.setNonQosBatchCloner(nonQosCloner);
-                policyBuilder.setNonQosBatchProcessor(nonQosProcessor);
-
-                EventTapFlow oldEventTapFlow = existingPolicy.nonQosEventTapFlows.get(flowId);
-
-                EventTapFlow newEventTapFlow;
-                if (oldEventTapFlow == null) {
-                    log.debug("New event flow: id=%s destinations=%s", flowId, destinations);
-                    newEventTapFlow = createNonQosEventTapFlow(eventType, flowId, destinations);
-                }
-                else if (!destinations.equals(oldEventTapFlow.getTaps())) {
-                    log.debug("Update event flow: id=%s destinations=%s (was %s)",
-                            flowId, destinations, oldEventTapFlow.getTaps());
-                    newEventTapFlow = oldEventTapFlow;
-                    newEventTapFlow.setTaps(destinations);
-                }
-                else {
-                    newEventTapFlow = oldEventTapFlow;
-                }
-
-                policyBuilder.addNonQosEventTapFlow(flowId, newEventTapFlow);
+                policyBuilder.addFlowPolicy(flowId, flowPolicy);
             }
         }
 
@@ -324,95 +284,83 @@ public class EventTapWriter implements EventWriter, EventTapStats
 
     private void stopExistingPolicyIfNoLongerInUse(String eventType, EventTypePolicy existingPolicy, EventTypePolicy newPolicy)
     {
-        if (existingPolicy.nonQosBatchProcessor != null && existingPolicy.nonQosBatchProcessor != newPolicy.nonQosBatchProcessor) {
-            stopNonQosBatchProcessor(eventType, existingPolicy.nonQosBatchProcessor);
-        }
+        for (Entry<String, FlowPolicy> flowPolicyEntry : existingPolicy.flowPolicies.entrySet()) {
+            String flowId = flowPolicyEntry.getKey();
+            FlowPolicy existingFlowPolicy = flowPolicyEntry.getValue();
+            FlowPolicy newFlowPolicy = newPolicy.flowPolicies.get(flowId);
 
-        for (Entry<String, QosPolicy> qosEntry : existingPolicy.qosPolicies.entrySet()) {
-            String flowId = qosEntry.getKey();
-            QosPolicy existingQosPolicy = qosEntry.getValue();
-            QosPolicy newQosPolicy = newPolicy.qosPolicies.get(flowId);
-
-            if (newQosPolicy == null || newQosPolicy.processor != existingQosPolicy.processor) {
-                stopQosBatchProcessor(eventType, flowId, existingQosPolicy.processor);
+            if (newFlowPolicy == null || newFlowPolicy.processor != existingFlowPolicy.processor) {
+                stopBatchProcessor(eventType, flowId, existingFlowPolicy.processor);
             }
         }
     }
 
-    private BatchProcessor<Event> createNonQosBatchProcessor(String eventType, BatchHandler<Event> batchHandler)
+    private EventTypePolicy getPolicyForEvent(Event event)
     {
-        return batchProcessorFactory.createBatchProcessor(createNonQosBatchProcessorName(eventType), batchHandler, createBatchProcessorObserver(eventType));
+        return firstNonNull(eventTypePolicies.get().get(event.getType()), NULL_EVENT_TYPE_POLICY);
     }
 
-    private BatchProcessor<Event> createQosBatchProcessor(String eventType, String flowId, BatchHandler<Event> batchHandler)
+    private BatchProcessor<Event> createBatchProcessor(String eventType, String flowId, BatchHandler<Event> batchHandler)
     {
-        return batchProcessorFactory.createBatchProcessor(createQosBatchProcessorName(eventType, flowId), batchHandler, createBatchProcessorObserver(eventType));
+        return batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), batchHandler, createBatchProcessorObserver(eventType, flowId));
     }
 
-    private BatchProcessor.Observer createBatchProcessorObserver(final String eventType)
+    private BatchProcessor.Observer createBatchProcessorObserver(String eventType, String flowId)
     {
+        final List<String> key = ImmutableList.of(eventType, flowId);
         return new BatchProcessor.Observer()
         {
             @Override
             public void onRecordsLost(int count)
             {
-                queueCounters.recordLost(eventType, count);
+                queueCounters.recordLost(key, count);
             }
 
             @Override
             public void onRecordsReceived(int count)
             {
-                queueCounters.recordReceived(eventType, count);
+                queueCounters.recordReceived(key, count);
             }
         };
     }
 
     private EventTapFlow createNonQosEventTapFlow(String eventType, String flowId, Set<URI> taps)
     {
-        log.debug("Create event tap flow: eventType=%s id=%s uris=%s", eventType, flowId, taps);
         return eventTapFlowFactory.createEventTapFlow(eventType, flowId, taps, createEventTapFlowObserver(eventType, flowId));
     }
 
     private EventTapFlow createQosEventTapFlow(String eventType, String flowId, Set<URI> taps)
     {
-        log.debug("Create QoS event tap flow: eventType=%s flowId=%s taps=%s", eventType, flowId, taps);
         return eventTapFlowFactory.createQosEventTapFlow(eventType, flowId, taps, createEventTapFlowObserver(eventType, flowId));
     }
 
-    private EventTapFlow.Observer createEventTapFlowObserver(String eventType, String flowId)
+    private EventTapFlow.Observer createEventTapFlowObserver(final String eventType, final String flowId)
     {
-        final List<String> key = ImmutableList.of(eventType, flowId);
-
         return new EventTapFlow.Observer()
         {
             @Override
             public void onRecordsSent(URI uri, int count)
             {
-                flowCounters.recordReceived(key, count);
+                flowCounters.recordReceived(createKey(uri), count);
             }
 
             @Override
             public void onRecordsLost(URI uri, int count)
             {
-                flowCounters.recordLost(key, count);
+                flowCounters.recordLost(createKey(uri), count);
+            }
+
+            private List<String> createKey(URI uri)
+            {
+                return ImmutableList.of(eventType, flowId, uri.toString());
             }
         };
     }
 
-    private void stopProcessor(String processorName, BatchProcessor<Event> processor)
+    private void stopBatchProcessor(String eventType, String flowId, BatchProcessor<Event> processor)
     {
-        log.debug("Stopping processor %s: no longer required", processorName);
+        log.debug("Stopping processor %s: no longer required", createBatchProcessorName(eventType, flowId));
         processor.stop();
-    }
-
-    private void stopNonQosBatchProcessor(String eventType, BatchProcessor<Event> processor)
-    {
-        stopProcessor(createNonQosBatchProcessorName(eventType), processor);
-    }
-
-    private void stopQosBatchProcessor(String eventType, String flowId, BatchProcessor<Event> processor)
-    {
-        stopProcessor(createQosBatchProcessorName(eventType, flowId), processor);
     }
 
     private static URI safeUriFromString(String uri)
@@ -425,12 +373,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
         }
     }
 
-    private static String createNonQosBatchProcessorName(String eventType)
-    {
-        return eventType;
-    }
-
-    private static String createQosBatchProcessorName(String eventType, String flowId)
+    private static String createBatchProcessorName(String eventType, String flowId)
     {
         return String.format("%s{%s}", eventType, flowId);
     }
@@ -477,21 +420,12 @@ public class EventTapWriter implements EventWriter, EventTapStats
 
     static class EventTypePolicy
     {
-        public final BatchProcessor<Event> nonQosBatchProcessor;
-        public final BatchCloner<Event> nonQosBatchCloner;
-        public final Map<String, EventTapFlow> nonQosEventTapFlows;
-        public final Map<String, QosPolicy> qosPolicies;
+        public final Map<String, FlowPolicy> flowPolicies;
 
         private EventTypePolicy(
-                BatchProcessor<Event> nonQosBatchProcessor,
-                BatchCloner<Event> nonQosBatchCloner,
-                Map<String, EventTapFlow> nonQosEventTapFlows,
-                Map<String, QosPolicy> qosPolicies)
+                Map<String, FlowPolicy> flowPolicies)
         {
-            this.nonQosBatchProcessor = nonQosBatchProcessor;
-            this.nonQosBatchCloner = nonQosBatchCloner;
-            this.nonQosEventTapFlows = nonQosEventTapFlows;
-            this.qosPolicies = qosPolicies;
+            this.flowPolicies = flowPolicies;
         }
 
         public static Builder builder()
@@ -499,62 +433,38 @@ public class EventTapWriter implements EventWriter, EventTapStats
             return new Builder();
         }
 
-        public static class QosPolicy
+        public static class FlowPolicy
         {
             public final BatchProcessor<Event> processor;
             public final EventTapFlow eventTapFlow;
+            public final boolean qosEnabled;
 
-            public QosPolicy(BatchProcessor<Event> processor, EventTapFlow eventTapFlow)
+            public FlowPolicy(BatchProcessor<Event> processor, EventTapFlow eventTapFlow, boolean qosEnabled)
             {
                 this.processor = processor;
                 this.eventTapFlow = eventTapFlow;
+                this.qosEnabled = qosEnabled;
             }
         }
 
         public static class Builder
         {
-            private BatchProcessor<Event> nonQosBatchProcessor = null;
-            private BatchCloner<Event> nonQosBatchCloner = null;
-            private ImmutableMap.Builder<String, EventTapFlow> nonQosEventTapFlows = ImmutableMap.builder();
-            private ImmutableMap.Builder<String, QosPolicy> qosPoliciesBuilder = ImmutableMap.builder();
+            private ImmutableMap.Builder<String, FlowPolicy> flowPoliciesBuilder = ImmutableMap.builder();
 
-            public Builder setNonQosBatchProcessor(BatchProcessor<Event> batchProcessor)
+            public Builder addFlowPolicy(String flowId, BatchProcessor<Event> processor, EventTapFlow eventTapFlow, boolean qosEnabled)
             {
-                this.nonQosBatchProcessor = batchProcessor;
-                return this;
+                return addFlowPolicy(flowId, new FlowPolicy(processor, eventTapFlow, qosEnabled));
             }
 
-            public Builder setNonQosBatchCloner(BatchCloner<Event> batchCloner)
+            public Builder addFlowPolicy(String flowId, FlowPolicy flowPolicy)
             {
-                this.nonQosBatchCloner = batchCloner;
-                return this;
-            }
-
-            public Builder addNonQosEventTapFlow(String flowId, EventTapFlow eventTapFlow)
-            {
-                nonQosEventTapFlows.put(flowId, eventTapFlow);
-                return this;
-            }
-
-            public Builder addQosPolicy(String flowId, BatchProcessor<Event> processor, EventTapFlow eventTapFlow)
-            {
-                return addQosPolicy(flowId, new QosPolicy(processor, eventTapFlow));
-            }
-
-            public Builder addQosPolicy(String flowId, QosPolicy qosPolicy)
-            {
-                qosPoliciesBuilder.put(flowId, qosPolicy);
+                flowPoliciesBuilder.put(flowId, flowPolicy);
                 return this;
             }
 
             public EventTypePolicy build()
             {
-                Map<String, EventTapFlow> nonQosEventTapFlows = this.nonQosEventTapFlows.build();
-                if (nonQosBatchCloner != null) {
-                    nonQosBatchCloner.setDestinations(ImmutableSet.copyOf(nonQosEventTapFlows.values()));
-                }
-                return new EventTypePolicy(nonQosBatchProcessor, nonQosBatchCloner,
-                        nonQosEventTapFlows, qosPoliciesBuilder.build());
+                return new EventTypePolicy(flowPoliciesBuilder.build());
             }
         }
     }

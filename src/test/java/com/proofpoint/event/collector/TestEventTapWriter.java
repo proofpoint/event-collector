@@ -19,6 +19,7 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.proofpoint.discovery.client.ServiceDescriptor;
@@ -36,6 +37,7 @@ import org.testng.annotations.Test;
 
 import java.net.URI;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +45,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import static com.google.common.base.Objects.firstNonNull;
 import static com.google.common.base.Strings.nullToEmpty;
 import static java.lang.String.format;
 import static java.util.UUID.randomUUID;
@@ -52,7 +55,6 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
-import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 
 public class TestEventTapWriter
@@ -114,9 +116,11 @@ public class TestEventTapWriter
     private static final ServiceDescriptor qtapC2b = createQosServiceDescriptor(typeC, flowId2, instanceB);
 
     private ServiceSelector serviceSelector;
+    private Map<String, Boolean> currentProcessors;
     private SerialScheduledExecutorService executorService;
     private BatchProcessorFactory batchProcessorFactory = new MockBatchProcessorFactory();
     private Multimap<String, MockBatchProcessor<Event>> batchProcessors;
+    private Map<String, Integer> expectedBatchProcessorDiscards;
     private EventTapFlowFactory eventTapFlowFactory = new MockEventTapFlowFactory();
     private Multimap<List<String>, MockEventTapFlow> nonQosEventTapFlows;
     private Multimap<List<String>, MockEventTapFlow> qosEventTapFlows;
@@ -127,10 +131,12 @@ public class TestEventTapWriter
     public void setup()
     {
         serviceSelector = new StaticServiceSelector(ImmutableSet.<ServiceDescriptor>of());
+        currentProcessors = ImmutableMap.of();
         executorService = new SerialScheduledExecutorService();
-        batchProcessors = HashMultimap.create();
-        nonQosEventTapFlows = HashMultimap.create();
-        qosEventTapFlows = HashMultimap.create();
+        batchProcessors = LinkedListMultimap.create();      // Insertion order per-key matters
+        expectedBatchProcessorDiscards = new HashMap<String, Integer>();
+        nonQosEventTapFlows = LinkedListMultimap.create();  // Insertion order per-key matters
+        qosEventTapFlows = LinkedListMultimap.create();     // Insertion order per-key matters
         eventTapConfig = new EventTapConfig();
         serviceSelector = mock(ServiceSelector.class);
         eventTapWriter = new EventTapWriter(
@@ -673,14 +679,17 @@ public class TestEventTapWriter
     @Test
     public void testRefreshFlowsIsCalledPeriodically()
     {
+        String batchProcessorNameA = extractProcessorName(tapA);
+        String batchProcessorNameB = extractProcessorName(tapB);
+        String batchProcessorNameC = extractProcessorName(tapC);
         updateTaps(tapA);
         executorService.elapseTime(
                 (long) eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
                 TimeUnit.MILLISECONDS);
-        assertFalse(batchProcessors.containsKey(typeA));
+        assertFalse(batchProcessors.containsKey(batchProcessorNameA));
         executorService.elapseTime(1, TimeUnit.MILLISECONDS);
-        assertTrue(batchProcessors.containsKey(typeA));
-        assertEquals(batchProcessors.get(typeA).size(), 1);
+        assertTrue(batchProcessors.containsKey(batchProcessorNameA));
+        assertEquals(batchProcessors.get(batchProcessorNameA).size(), 1);
 
         // If the refreshFlows() is called after the period, tapB should be
         // created to handle the new tap after one period.
@@ -688,20 +697,20 @@ public class TestEventTapWriter
         executorService.elapseTime(
                 (long) eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
                 TimeUnit.MILLISECONDS);
-        assertFalse(batchProcessors.containsKey(typeB));
+        assertFalse(batchProcessors.containsKey(batchProcessorNameB));
         executorService.elapseTime(1, TimeUnit.MILLISECONDS);
-        assertTrue(batchProcessors.containsKey(typeB));
-        assertEquals(batchProcessors.get(typeB).size(), 1);
+        assertTrue(batchProcessors.containsKey(batchProcessorNameB));
+        assertEquals(batchProcessors.get(batchProcessorNameB).size(), 1);
 
         // Same is true after the second period, but with tapC.
         updateTaps(tapC);
         executorService.elapseTime(
                 (long) eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
                 TimeUnit.MILLISECONDS);
-        assertFalse(batchProcessors.containsKey(typeC));
+        assertFalse(batchProcessors.containsKey(batchProcessorNameC));
         executorService.elapseTime(1, TimeUnit.MILLISECONDS);
-        assertTrue(batchProcessors.containsKey(typeC));
-        assertEquals(batchProcessors.get(typeC).size(), 1);
+        assertTrue(batchProcessors.containsKey(batchProcessorNameC));
+        assertEquals(batchProcessors.get(batchProcessorNameC).size(), 1);
     }
 
     @Test
@@ -744,23 +753,57 @@ public class TestEventTapWriter
     public void testQueueCounters()
     {
         updateThenRefreshFlowsThenCheck(tapA);
+        String batchProcessorName = extractProcessorName(tapA);
+        String queueCounterName = extractQueueCounterName(tapA);
 
-        MockBatchProcessor<Event> processors = batchProcessors.get(typeA).iterator().next();
+        MockBatchProcessor<Event> processors = batchProcessors.get(batchProcessorName).iterator().next();
         writeEvents(eventsA[0]);
-        checkCounters(eventTapWriter.getQueueCounters(), typeA, 1, 0);
-        assertCountersOnlyExistWithTheseNames(eventTapWriter.getQueueCounters(), typeA);
+        checkCounters(eventTapWriter.getQueueCounters(), queueCounterName, 1, 0);
+        assertCountersOnlyExistWithTheseNames(eventTapWriter.getQueueCounters(), queueCounterName);
 
         processors.succeed = false;
         writeEvents(eventsA[1]);
-        checkCounters(eventTapWriter.getQueueCounters(), typeA, 2, 1);
-        assertCountersOnlyExistWithTheseNames(eventTapWriter.getQueueCounters(), typeA);
+        checkCounters(eventTapWriter.getQueueCounters(), queueCounterName, 2, 1);
+        assertCountersOnlyExistWithTheseNames(eventTapWriter.getQueueCounters(), queueCounterName);
     }
 
     private void updateThenRefreshFlowsThenCheck(ServiceDescriptor... taps)
     {
+        // Figure out which of the processors should have been destroyed.
+        // This happens if: (a) The flow disappears, or (b) the flow switches
+        // between QoS and non-QoS.
+        Map<String, Boolean> newProcessors = createProcessorsForTaps(taps);
+        for (Map.Entry<String, Boolean> entry : currentProcessors.entrySet()) {
+            String processorName = entry.getKey();
+            boolean processorQos = entry.getValue();
+            Boolean currentProcessor = newProcessors.get(processorName);
+            if (currentProcessor == null || currentProcessor != processorQos) {
+                recordExpectedProcessorDiscards(processorName);
+            }
+        }
+        currentProcessors = newProcessors;
+
         updateTaps(taps);
         eventTapWriter.refreshFlows();
         checkActiveProcessors(taps);
+    }
+
+    private Map<String, Boolean> createProcessorsForTaps(ServiceDescriptor[] taps)
+    {
+        HashMap<String, Boolean> result = new HashMap<String, Boolean>();
+        for (ServiceDescriptor tap : taps) {
+            String processorName = extractProcessorName(tap);
+            boolean qos = nullToEmpty(tap.getProperties().get("qos.delivery")).equalsIgnoreCase("retry");
+            boolean existingQos = firstNonNull(result.get(processorName), Boolean.valueOf(false));
+            result.put(processorName, existingQos | qos);
+        }
+        return ImmutableMap.copyOf(result);
+    }
+
+    private void recordExpectedProcessorDiscards(String processorName)
+    {
+        int current = firstNonNull(expectedBatchProcessorDiscards.get(processorName), Integer.valueOf(0));
+        expectedBatchProcessorDiscards.put(processorName, current + 1);
     }
 
     private void updateTaps(ServiceDescriptor... taps)
@@ -795,21 +838,28 @@ public class TestEventTapWriter
 
         for (ServiceDescriptor tap : tapsAsList) {
             String processorName = extractProcessorName(tap);
+            int expectedDiscards = firstNonNull(expectedBatchProcessorDiscards.get(processorName), Integer.valueOf(0));
             assertTrue(batchProcessors.containsKey(processorName), format("no processor created for %s", processorName));
 
             List<MockBatchProcessor<Event>> processors = ImmutableList.copyOf(batchProcessors.get(processorName));
-            assertEquals(processors.size(), 1, format("wrong number of processors for %s", processorName));
+            assertEquals(processors.size(), expectedDiscards + 1, format("wrong number of processors for %s", processorName));
+            for (int i = 0; i < expectedDiscards; ++i) {
+                MockBatchProcessor<Event> processor = processors.get(i);
+                assertEquals(processor.startCount, 1, format("invalid start count for discarded processor %s[%d]", processorName, i));
+                assertEquals(processor.stopCount, 1, format("invalid stop count for discarded processor %s[%d]", processorName, i));
+            }
 
             // The batch processor should have been started, but not stopped
             // if it is still active.
-            MockBatchProcessor<Event> processor = processors.get(0);
-            assertEquals(processor.startCount, 1, format("invalid start count for processor %s", processorName));
-            assertEquals(processor.stopCount, 0, format("invalid stop count for processor %s", processorName));
+            MockBatchProcessor<Event> processor = processors.get(expectedDiscards);
+            assertEquals(processor.startCount, 1, format("invalid start count for processor %s[%d]", processorName, expectedDiscards));
+            assertEquals(processor.stopCount, 0, format("invalid stop count for processor %s[%d]", processorName, expectedDiscards));
         }
 
         // For all non-active processors, make sure they have been stopped.
         for (Entry<String, Collection<MockBatchProcessor<Event>>> entry : batchProcessors.asMap().entrySet()) {
             String processorName = entry.getKey();
+            int expectedDiscards = firstNonNull(expectedBatchProcessorDiscards.get(processorName), Integer.valueOf(0));
             ServiceDescriptor tap = null;
             for (ServiceDescriptor t : tapsAsList) {
                 if (processorName.equals(extractProcessorName(t))) {
@@ -822,12 +872,14 @@ public class TestEventTapWriter
             }
 
             List<MockBatchProcessor<Event>> processors = ImmutableList.copyOf(entry.getValue());
-            assertEquals(processors.size(), 1, format("wrong number of processors for %s", processorName));
+            assertEquals(processors.size(), expectedDiscards, format("wrong number of processors for %s", processorName));
 
             // The batch processor should have been started and stopped.
-            MockBatchProcessor<Event> processor = processors.get(0);
-            assertEquals(processor.startCount, 1, format("invalid start count for processor %s", processorName));
-            assertEquals(processor.stopCount, 1, format("invalid stop count for processor %s", processorName));
+            for (int i = 0; i < expectedDiscards; ++i) {
+                MockBatchProcessor<Event> processor = processors.get(i);
+                assertEquals(processor.startCount, 1, format("invalid start count for processor %s[%d]", processorName, i));
+                assertEquals(processor.stopCount, 1, format("invalid stop count for processor %s[%d]", processorName, i));
+            }
         }
     }
 
@@ -886,13 +938,14 @@ public class TestEventTapWriter
 
     private static String extractProcessorName(ServiceDescriptor tap)
     {
-        if (nullToEmpty(tap.getProperties().get("qos.delivery")).equalsIgnoreCase("retry")) {
-            return format("%s{%s}", tap.getProperties().get("eventType"),
-                    tap.getProperties().get("tapId"));
-        }
-        else {
-            return tap.getProperties().get("eventType");
-        }
+        return format("%s{%s}", tap.getProperties().get("eventType"),
+                tap.getProperties().get("tapId"));
+    }
+
+    private static String extractQueueCounterName(ServiceDescriptor tap)
+    {
+        return format("[%s, %s]", tap.getProperties().get("eventType"),
+                tap.getProperties().get("tapId"));
     }
 
     private static ServiceDescriptor createServiceDescriptor(String eventType, Map<String, String> properties)

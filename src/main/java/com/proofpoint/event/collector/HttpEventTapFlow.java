@@ -15,10 +15,9 @@
  */
 package com.proofpoint.event.collector;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.inject.assistedinject.Assisted;
-import com.google.inject.assistedinject.AssistedInject;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.http.client.RequestBuilder;
@@ -27,7 +26,6 @@ import com.proofpoint.http.client.ResponseHandler;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
 
-import javax.inject.Inject;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import java.net.URI;
@@ -52,10 +50,8 @@ class HttpEventTapFlow implements EventTapFlow
     private final AtomicReference<List<URI>> taps = new AtomicReference<List<URI>>();
     private final Observer observer;
 
-    @AssistedInject
-    public HttpEventTapFlow(@EventTap HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
-            @Assisted("eventType") String eventType, @Assisted("flowId") String flowId, @Assisted Set<URI> taps,
-            @Assisted Observer observer)
+    public HttpEventTapFlow(HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
+            String eventType, String flowId, Set<URI> taps, Observer observer)
     {
         this.httpClient = checkNotNull(httpClient, "httpClient is null");
         this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
@@ -63,14 +59,6 @@ class HttpEventTapFlow implements EventTapFlow
         this.flowId = checkNotNull(flowId, "flowId is null");
         this.observer = checkNotNull(observer, "observer is null");
         setTaps(taps);
-    }
-
-    @AssistedInject
-    public HttpEventTapFlow(@EventTap HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
-            @Assisted("eventType") String eventType, @Assisted("flowId") String flowId,
-            @Assisted Set<URI> taps)
-    {
-        this(httpClient, eventsCodec, eventType, flowId, taps, NULL_OBSERVER);
     }
 
     @Override
@@ -137,4 +125,15 @@ class HttpEventTapFlow implements EventTapFlow
         });
     }
 
+    @VisibleForTesting
+    String getEventType()
+    {
+        return eventType;
+    }
+
+    @VisibleForTesting
+    String getFlowId()
+    {
+        return flowId;
+    }
 }

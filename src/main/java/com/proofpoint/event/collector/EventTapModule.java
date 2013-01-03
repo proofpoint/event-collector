@@ -20,13 +20,11 @@ import com.google.inject.Binder;
 import com.google.inject.Key;
 import com.google.inject.Module;
 import com.google.inject.Provides;
-import com.google.inject.Scopes;
-import com.google.inject.assistedinject.FactoryModuleBuilder;
-import com.google.inject.name.Names;
 import org.weakref.jmx.guice.MBeanModule;
 
 import java.util.concurrent.ScheduledExecutorService;
 
+import static com.google.inject.Scopes.SINGLETON;
 import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
@@ -44,21 +42,17 @@ public class EventTapModule implements Module
 
         bindConfig(binder).to(BatchProcessorConfig.class);
         binder.bind(BatchProcessorFactory.class).to(BatchProcessorFactoryImpl.class);
-        binder.bind(BatchProcessorFactoryImpl.class).in(Scopes.SINGLETON);
+        binder.bind(BatchProcessorFactoryImpl.class).in(SINGLETON);
 
-        binder.install(
-                new FactoryModuleBuilder()
-                        .implement(EventTapFlow.class, Names.named("nonQos"), HttpEventTapFlow.class)
-                        .implement(EventTapFlow.class, Names.named("qos"), HttpEventTapFlow.class)
-                        .build(EventTapFlowFactory.class));
-
-        binder.bind(EventTapWriter.class).in(Scopes.SINGLETON);
+        binder.bind(EventTapFlowFactory.class).to(HttpEventTapFlowFactory.class);
+        binder.bind(HttpEventTapFlowFactory.class).in(SINGLETON);
+        binder.bind(EventTapWriter.class).in(SINGLETON);
         binder.bind(EventTapStats.class).to(EventTapWriter.class);
 
         MBeanModule.newExporter(binder).export(EventTapWriter.class).withGeneratedName();
-        newSetBinder(binder, EventWriter.class).addBinding().to(Key.get(EventTapWriter.class)).in(Scopes.SINGLETON);
+        newSetBinder(binder, EventWriter.class).addBinding().to(Key.get(EventTapWriter.class)).in(SINGLETON);
 
-        binder.bind(EventTapStatsResource.class).in(Scopes.SINGLETON);
+        binder.bind(EventTapStatsResource.class).in(SINGLETON);
     }
 
     @Provides

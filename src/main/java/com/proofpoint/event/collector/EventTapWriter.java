@@ -241,28 +241,28 @@ public class EventTapWriter implements EventWriter, EventTapStats
 
         for (Entry<String, FlowInfo> flowEntry : flows.entrySet()) {
             String flowId = flowEntry.getKey();
-            FlowInfo flow = flowEntry.getValue();
-            Set<URI> destinations = ImmutableSet.copyOf(flow.destinations);
-            FlowPolicy flowPolicy = existingPolicy.flowPolicies.get(flowId);
+            FlowInfo updatedFlowInfo = flowEntry.getValue();
+            Set<URI> destinations = ImmutableSet.copyOf(updatedFlowInfo.destinations);
+            FlowPolicy existingFlowPolicy = existingPolicy.flowPolicies.get(flowId);
 
-            if (flowPolicy == null || flowPolicy.qosEnabled != flow.qosEnabled) {
+            if (existingFlowPolicy == null || existingFlowPolicy.qosEnabled != updatedFlowInfo.qosEnabled) {
                 EventTapFlow eventTapFlow;
-                if (flow.qosEnabled) {
+                if (updatedFlowInfo.qosEnabled) {
                     eventTapFlow = createQosEventTapFlow(eventType, flowId, destinations);
                 }
                 else {
                     eventTapFlow = createNonQosEventTapFlow(eventType, flowId, destinations);
                 }
                 BatchProcessor<Event> batchProcessor = createBatchProcessor(eventType, flowId, eventTapFlow);
-                policyBuilder.addFlowPolicy(flowId, batchProcessor, eventTapFlow, flow.qosEnabled);
+                policyBuilder.addFlowPolicy(flowId, batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled);
                 batchProcessor.start();
             }
-            else if (!destinations.equals(flowPolicy.eventTapFlow.getTaps())) {
-                flowPolicy.eventTapFlow.setTaps(destinations);
-                policyBuilder.addFlowPolicy(flowId, flowPolicy);
+            else if (!destinations.equals(existingFlowPolicy.eventTapFlow.getTaps())) {
+                existingFlowPolicy.eventTapFlow.setTaps(destinations);
+                policyBuilder.addFlowPolicy(flowId, existingFlowPolicy);
             }
             else {
-                policyBuilder.addFlowPolicy(flowId, flowPolicy);
+                policyBuilder.addFlowPolicy(flowId, existingFlowPolicy);
             }
         }
 

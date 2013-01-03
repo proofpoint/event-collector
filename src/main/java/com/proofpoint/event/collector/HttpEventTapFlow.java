@@ -34,6 +34,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -48,7 +49,7 @@ class HttpEventTapFlow implements EventTapFlow
     private final JsonCodec<List<Event>> eventsCodec;
     private final String eventType;
     private final String flowId;
-    private final List<URI> taps;
+    private final AtomicReference<List<URI>> taps = new AtomicReference<List<URI>>();
     private final Observer observer;
 
     @AssistedInject
@@ -60,9 +61,8 @@ class HttpEventTapFlow implements EventTapFlow
         this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
         this.eventType = checkNotNull(eventType, "eventType is null");
         this.flowId = checkNotNull(flowId, "flowId is null");
-        this.taps = ImmutableList.copyOf(checkNotNull(taps, "taps is null"));
-        checkArgument(!taps.isEmpty(), "taps is empty");
         this.observer = checkNotNull(observer, "observer is null");
+        setTaps(taps);
     }
 
     @AssistedInject
@@ -87,12 +87,21 @@ class HttpEventTapFlow implements EventTapFlow
     @Override
     public Set<URI> getTaps()
     {
-        return ImmutableSet.copyOf(taps);
+        return ImmutableSet.copyOf(taps.get());
+    }
+
+    @Override
+    public void setTaps(Set<URI> taps)
+    {
+        checkNotNull(taps, "taps is null");
+        checkArgument(!taps.isEmpty(), "taps is empty");
+        this.taps.set(ImmutableList.copyOf(taps));
     }
 
     private void sendEvents(final List<Event> entries)
             throws Exception
     {
+        List<URI> taps = this.taps.get();
         final URI uri = taps.get(RANDOM.nextInt(taps.size()));
 
         Request request = RequestBuilder.preparePost()

@@ -15,17 +15,15 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableListMultimap;
-import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Multimap;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.EventCounters.CounterState;
+import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.FlowPolicy;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 import org.weakref.jmx.Managed;
@@ -34,36 +32,37 @@ import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import java.net.URI;
-import java.util.Collection;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.google.common.base.Objects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Strings.isNullOrEmpty;
 
-public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTapStats
+public class EventTapWriter implements EventWriter, EventTapStats
 {
     private static final Logger log = Logger.get(EventTapWriter.class);
+    private static final EventTypePolicy NULL_EVENT_TYPE_POLICY = new EventTypePolicy.Builder().build();
     private final ServiceSelector selector;
     private final ScheduledExecutorService executorService;
     private final BatchProcessorFactory batchProcessorFactory;
     private final EventTapFlowFactory eventTapFlowFactory;
 
-    private final AtomicReference<Multimap<String, EventTapFlow>> eventFlows = new AtomicReference<Multimap<String, EventTapFlow>>(ImmutableMultimap.<String, EventTapFlow>of());
+    private final AtomicReference<Map<String, EventTypePolicy>> eventTypePolicies = new AtomicReference<Map<String, EventTypePolicy>>(
+            ImmutableMap.<String, EventTypePolicy>of());
+    private Map<String, Map<String, FlowInfo>> flows = ImmutableMap.of();
+
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
 
-    private final ConcurrentMap<String, BatchProcessor<Event>> processors = new ConcurrentHashMap<String, BatchProcessor<Event>>();
-
-    private final EventCounters<String> queueCounters = new EventCounters<String>();
+    private final EventCounters<List<String>> queueCounters = new EventCounters<List<String>>();
     private final EventCounters<List<String>> flowCounters = new EventCounters<List<String>>();
 
     @Inject
@@ -102,10 +101,16 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @PreDestroy
     public synchronized void stop()
     {
-        for (BatchProcessor<Event> processor : processors.values()) {
-            processor.stop();
+        for (Map.Entry<String, EventTypePolicy> entry : eventTypePolicies.get().entrySet()) {
+            String eventType = entry.getKey();
+            EventTypePolicy eventTypePolicy = entry.getValue();
+            for (Map.Entry<String, FlowPolicy> flowPolicyEntry : eventTypePolicy.flowPolicies.entrySet()) {
+                String flowId = flowPolicyEntry.getKey();
+                FlowPolicy flowPolicy = flowPolicyEntry.getValue();
+                stopBatchProcessor(eventType, flowId, flowPolicy.processor);
+            }
         }
-        processors.clear();
+        eventTypePolicies.set(ImmutableMap.<String, EventTypePolicy>of());
 
         if (refreshJob != null) {
             refreshJob.cancel(false);
@@ -116,128 +121,38 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     @Managed
     public void refreshFlows()
     {
-        Multimap<List<String>, URI> flows = ArrayListMultimap.create();
-        List<ServiceDescriptor> descriptors = selector.selectAllServices();
-        Set<String> eventTypes = new HashSet<String>();         // Event types that have listeners
+        Map<String, EventTypePolicy> existingPolicies = eventTypePolicies.get();
+        Map<String, Map<String, FlowInfo>> existingFlows = flows;
+        ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.<String, EventTypePolicy>builder();
 
-        for (ServiceDescriptor descriptor : descriptors) {
-            String eventType = descriptor.getProperties().get("eventType");
-            if (eventType == null) {
-                continue;
-            }
-            String flowId = descriptor.getProperties().get("tapId");
-            if (flowId == null) {
-                continue;
-            }
-            URI uri;
-            try {
-                uri = URI.create(descriptor.getProperties().get("http"));
-            }
-            catch (Exception e) {
-                continue;
-            }
-            flows.put(ImmutableList.of(eventType, flowId), uri);
-            // Save the event types for later to avoid accessing the (concurrent)
-            // processors map more than once per event type.
-            eventTypes.add(eventType);
+        Map<String, Map<String, FlowInfo>> newFlows = constructFlowInfoFromDiscovery();
+        if (existingFlows.equals(newFlows)) {
+            return;
         }
 
-        // By removing the processors that are no longer required first, the
-        // existing flows in eventFlow will stop being used before they are
-        // destroyed (because any event received for a non-existing processor
-        // will be dropped).
-        Set<String> oldEventTypes = new HashSet<String>();
-        for (String eventType : processors.keySet()) {
-            if (!eventTypes.contains(eventType)) {
-                oldEventTypes.add(eventType);
-            }
-        }
-        for (String eventType : oldEventTypes) {
-            log.debug("Cleaning up resources for event type '%s': no more event taps for type", eventType);
-            BatchProcessor<Event> processor = processors.remove(eventType);
-            processor.stop();
+        for (Map.Entry<String, Map<String, FlowInfo>> flowsForEventTypeEntry : newFlows.entrySet()) {
+            String eventType = flowsForEventTypeEntry.getKey();
+            Map<String, FlowInfo> flowsForEventType = flowsForEventTypeEntry.getValue();
+            EventTypePolicy existingPolicy = firstNonNull(existingPolicies.get(eventType), NULL_EVENT_TYPE_POLICY);
+
+            policiesBuilder.put(eventType, constructPolicyForFlows(existingPolicy, eventType, flowsForEventType));
         }
 
-        ImmutableListMultimap.Builder<String, EventTapFlow> builder = ImmutableListMultimap.builder();
-        for (Entry<List<String>, Collection<URI>> entry : flows.asMap().entrySet()) {
-            final String eventType = entry.getKey().get(0);
-            final String flowId = entry.getKey().get(1);
-            Set<URI> taps = ImmutableSet.copyOf(entry.getValue());
+        Map<String, EventTypePolicy> newPolicies = policiesBuilder.build();
+        eventTypePolicies.set(newPolicies);
+        flows = newFlows;
 
-            EventTapFlow eventTapFlow = eventTapFlowFactory.createEventTapFlow(eventType, flowId, taps,
-                    new EventTapFlow.Observer()
-                    {
-                        @Override
-                        public void onRecordsSent(URI uri, int count)
-                        {
-                            flowCounters.recordReceived(createCounterKey(uri), count);
-                        }
-
-                        @Override
-                        public void onRecordsLost(URI uri, int count)
-                        {
-                            flowCounters.recordLost(createCounterKey(uri), count);
-                        }
-
-                        private List<String> createCounterKey(URI uri)
-                        {
-                            return ImmutableList.of(eventType, flowId, uri.toString());
-                        }
-                    });
-            builder.put(eventType, eventTapFlow);
-        }
-        eventFlows.set(builder.build());
-
-        // By creating new processors after the event flows have been updated,
-        // the new flow will be available for the processor when it needs it.
-        for (final String eventType : eventTypes) {
-            if (!processors.containsKey(eventType)) {
-                log.debug("Creating resources for event type '%s': new event taps for type", eventType);
-                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(eventType, this,
-                        new BatchProcessor.Observer() {
-
-                            @Override
-                            public void onRecordsLost(int count)
-                            {
-                                queueCounters.recordLost(eventType, count);
-                            }
-
-                            @Override
-                            public void onRecordsReceived(int count)
-                            {
-                                queueCounters.recordReceived(eventType, count);
-                            }
-                        });
-                processors.put(eventType, batchProcessor);
-                batchProcessor.start();
-            }
-        }
+        stopExistingPoliciesNoLongerInUse(existingPolicies, newPolicies);
     }
 
     @Override
     public void write(Event event)
     {
-        BatchProcessor<Event> processor = processors.get(event.getType());
-        if (processor != null) {
-            processor.put(event);
+        for (FlowPolicy flowPolicy : getPolicyForEvent(event).flowPolicies.values()) {
+            flowPolicy.processor.put(event);
         }
     }
 
-    @Override
-    public void processBatch(List<Event> events)
-    {
-        Multimap<String, EventTapFlow> eventFlows = this.eventFlows.get();
-        if (eventFlows.isEmpty()) {
-            return;
-        }
-
-        Collection<EventTapFlow> currentFlows = eventFlows.get(events.iterator().next().getType());
-        for (EventTapFlow flow : currentFlows) {
-            flow.processBatch(ImmutableList.copyOf(events));
-        }
-    }
-
-    @Override
     public Map<String, CounterState> getQueueCounters()
     {
         return queueCounters.getCounts();
@@ -259,5 +174,298 @@ public class EventTapWriter implements EventWriter, BatchHandler<Event>, EventTa
     public void resetFlowCounters()
     {
         flowCounters.resetCounts();
+    }
+
+    private Map<String, Map<String, FlowInfo>> constructFlowInfoFromDiscovery()
+    {
+        List<ServiceDescriptor> descriptors = selector.selectAllServices();
+        // First level is EventType, second is flowId
+        Map<String, Map<String, FlowInfo.Builder>> flows = new HashMap<String, Map<String, FlowInfo.Builder>>();
+
+        for (ServiceDescriptor descriptor : descriptors) {
+            Map<String, String> properties = descriptor.getProperties();
+            String eventType = properties.get("eventType");
+            String flowId = properties.get("tapId");
+            URI uri = safeUriFromString(properties.get("http"));
+            String qosDelivery = properties.get("qos.delivery");
+
+            if (isNullOrEmpty(eventType) || isNullOrEmpty(flowId) || uri == null) {
+                continue;
+            }
+
+            Map<String, FlowInfo.Builder> flowsForEventType = flows.get(eventType);
+            if (flowsForEventType == null) {
+                flowsForEventType = new HashMap<String, FlowInfo.Builder>();
+                flows.put(eventType, flowsForEventType);
+            }
+
+            FlowInfo.Builder flowBuilder = flowsForEventType.get(flowId);
+            if (flowBuilder == null) {
+                flowBuilder = FlowInfo.builder();
+                flowsForEventType.put(flowId, flowBuilder);
+            }
+
+            if ("retry".equalsIgnoreCase(qosDelivery)) {
+                flowBuilder.setQosEnabled(true);
+            }
+
+            flowBuilder.addDestination(uri);
+        }
+
+        return constructFlowsFromBuilderMap(flows);
+    }
+
+    private Map<String, Map<String, FlowInfo>> constructFlowsFromBuilderMap(Map<String, Map<String, FlowInfo.Builder>> flows)
+    {
+        ImmutableMap.Builder<String, Map<String, FlowInfo>> flowsBuilder = ImmutableMap.builder();
+        for (Entry<String, Map<String, FlowInfo.Builder>> flowsEntry : flows.entrySet()) {
+            String eventType = flowsEntry.getKey();
+            Map<String, FlowInfo.Builder> flowsForEventType = flowsEntry.getValue();
+
+            ImmutableMap.Builder<String, FlowInfo> flowsBuilderForEventType = ImmutableMap.builder();
+            for (Entry<String, FlowInfo.Builder> flowsForEventTypeEntry : flowsForEventType.entrySet()) {
+                String flowId = flowsForEventTypeEntry.getKey();
+                FlowInfo.Builder flowBuilder = flowsForEventTypeEntry.getValue();
+                flowsBuilderForEventType.put(flowId, flowBuilder.build());
+            }
+
+            flowsBuilder.put(eventType, flowsBuilderForEventType.build());
+        }
+
+        return flowsBuilder.build();
+    }
+
+    private EventTypePolicy constructPolicyForFlows(EventTypePolicy existingPolicy, String eventType, Map<String, FlowInfo> flows)
+    {
+        EventTypePolicy.Builder policyBuilder = EventTypePolicy.builder();
+
+        for (Entry<String, FlowInfo> flowEntry : flows.entrySet()) {
+            String flowId = flowEntry.getKey();
+            FlowInfo updatedFlowInfo = flowEntry.getValue();
+            Set<URI> destinations = ImmutableSet.copyOf(updatedFlowInfo.destinations);
+            FlowPolicy existingFlowPolicy = existingPolicy.flowPolicies.get(flowId);
+
+            if (existingFlowPolicy == null || existingFlowPolicy.qosEnabled != updatedFlowInfo.qosEnabled) {
+                EventTapFlow eventTapFlow;
+                if (updatedFlowInfo.qosEnabled) {
+                    eventTapFlow = createQosEventTapFlow(eventType, flowId, destinations);
+                }
+                else {
+                    eventTapFlow = createNonQosEventTapFlow(eventType, flowId, destinations);
+                }
+                BatchProcessor<Event> batchProcessor = createBatchProcessor(eventType, flowId, eventTapFlow);
+                policyBuilder.addFlowPolicy(flowId, batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled);
+                batchProcessor.start();
+            }
+            else if (!destinations.equals(existingFlowPolicy.eventTapFlow.getTaps())) {
+                existingFlowPolicy.eventTapFlow.setTaps(destinations);
+                policyBuilder.addFlowPolicy(flowId, existingFlowPolicy);
+            }
+            else {
+                policyBuilder.addFlowPolicy(flowId, existingFlowPolicy);
+            }
+        }
+
+        return policyBuilder.build();
+    }
+
+    private void stopExistingPoliciesNoLongerInUse(Map<String, EventTypePolicy> existingPolicies, Map<String, EventTypePolicy> newPolicies)
+    {
+        // NOTE: If a flowId moved from QoS to non-QoS (or vice versa) a new EventTapFlow
+        //       is created.
+        log.debug("Cleaning up processors that are no longer required");
+        for (Entry<String, EventTypePolicy> policyEntry : existingPolicies.entrySet()) {
+            String eventType = policyEntry.getKey();
+            stopExistingPolicyIfNoLongerInUse(eventType,
+                    policyEntry.getValue(),
+                    firstNonNull(newPolicies.get(eventType), NULL_EVENT_TYPE_POLICY));
+        }
+    }
+
+    private void stopExistingPolicyIfNoLongerInUse(String eventType, EventTypePolicy existingPolicy, EventTypePolicy newPolicy)
+    {
+        for (Entry<String, FlowPolicy> flowPolicyEntry : existingPolicy.flowPolicies.entrySet()) {
+            String flowId = flowPolicyEntry.getKey();
+            FlowPolicy existingFlowPolicy = flowPolicyEntry.getValue();
+            FlowPolicy newFlowPolicy = newPolicy.flowPolicies.get(flowId);
+
+            if (newFlowPolicy == null || newFlowPolicy.processor != existingFlowPolicy.processor) {
+                stopBatchProcessor(eventType, flowId, existingFlowPolicy.processor);
+            }
+        }
+    }
+
+    private EventTypePolicy getPolicyForEvent(Event event)
+    {
+        return firstNonNull(eventTypePolicies.get().get(event.getType()), NULL_EVENT_TYPE_POLICY);
+    }
+
+    private BatchProcessor<Event> createBatchProcessor(String eventType, String flowId, BatchHandler<Event> batchHandler)
+    {
+        return batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), batchHandler, createBatchProcessorObserver(eventType, flowId));
+    }
+
+    private BatchProcessor.Observer createBatchProcessorObserver(String eventType, String flowId)
+    {
+        final List<String> key = ImmutableList.of(eventType, flowId);
+        return new BatchProcessor.Observer()
+        {
+            @Override
+            public void onRecordsLost(int count)
+            {
+                queueCounters.recordLost(key, count);
+            }
+
+            @Override
+            public void onRecordsReceived(int count)
+            {
+                queueCounters.recordReceived(key, count);
+            }
+        };
+    }
+
+    private EventTapFlow createNonQosEventTapFlow(String eventType, String flowId, Set<URI> taps)
+    {
+        return eventTapFlowFactory.createEventTapFlow(eventType, flowId, taps, createEventTapFlowObserver(eventType, flowId));
+    }
+
+    private EventTapFlow createQosEventTapFlow(String eventType, String flowId, Set<URI> taps)
+    {
+        return eventTapFlowFactory.createQosEventTapFlow(eventType, flowId, taps, createEventTapFlowObserver(eventType, flowId));
+    }
+
+    private EventTapFlow.Observer createEventTapFlowObserver(final String eventType, final String flowId)
+    {
+        return new EventTapFlow.Observer()
+        {
+            @Override
+            public void onRecordsSent(URI uri, int count)
+            {
+                flowCounters.recordReceived(createKey(uri), count);
+            }
+
+            @Override
+            public void onRecordsLost(URI uri, int count)
+            {
+                flowCounters.recordLost(createKey(uri), count);
+            }
+
+            private List<String> createKey(URI uri)
+            {
+                return ImmutableList.of(eventType, flowId, uri.toString());
+            }
+        };
+    }
+
+    private void stopBatchProcessor(String eventType, String flowId, BatchProcessor<Event> processor)
+    {
+        log.debug("Stopping processor %s: no longer required", createBatchProcessorName(eventType, flowId));
+        processor.stop();
+    }
+
+    private static URI safeUriFromString(String uri)
+    {
+        try {
+            return URI.create(uri);
+        }
+        catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String createBatchProcessorName(String eventType, String flowId)
+    {
+        return String.format("%s{%s}", eventType, flowId);
+    }
+
+    static class FlowInfo
+    {
+        private final boolean qosEnabled;
+        private final Set<URI> destinations;
+
+        private FlowInfo(boolean qosEnabled, Set<URI> destinations)
+        {
+            this.qosEnabled = qosEnabled;
+            this.destinations = ImmutableSet.copyOf(destinations);
+        }
+
+        static Builder builder()
+        {
+            return new Builder();
+        }
+
+        static class Builder
+        {
+            private boolean qosEnabled = false;
+            private ImmutableSet.Builder<URI> destinations = ImmutableSet.builder();
+
+            public Builder setQosEnabled(boolean enabled)
+            {
+                qosEnabled = enabled;
+                return this;
+            }
+
+            public Builder addDestination(URI destination)
+            {
+                destinations.add(destination);
+                return this;
+            }
+
+            public FlowInfo build()
+            {
+                return new FlowInfo(qosEnabled, destinations.build());
+            }
+        }
+    }
+
+    static class EventTypePolicy
+    {
+        public final Map<String, FlowPolicy> flowPolicies;
+
+        private EventTypePolicy(
+                Map<String, FlowPolicy> flowPolicies)
+        {
+            this.flowPolicies = flowPolicies;
+        }
+
+        public static Builder builder()
+        {
+            return new Builder();
+        }
+
+        public static class FlowPolicy
+        {
+            public final BatchProcessor<Event> processor;
+            public final EventTapFlow eventTapFlow;
+            public final boolean qosEnabled;
+
+            public FlowPolicy(BatchProcessor<Event> processor, EventTapFlow eventTapFlow, boolean qosEnabled)
+            {
+                this.processor = processor;
+                this.eventTapFlow = eventTapFlow;
+                this.qosEnabled = qosEnabled;
+            }
+        }
+
+        public static class Builder
+        {
+            private ImmutableMap.Builder<String, FlowPolicy> flowPoliciesBuilder = ImmutableMap.builder();
+
+            public Builder addFlowPolicy(String flowId, BatchProcessor<Event> processor, EventTapFlow eventTapFlow, boolean qosEnabled)
+            {
+                return addFlowPolicy(flowId, new FlowPolicy(processor, eventTapFlow, qosEnabled));
+            }
+
+            public Builder addFlowPolicy(String flowId, FlowPolicy flowPolicy)
+            {
+                flowPoliciesBuilder.put(flowId, flowPolicy);
+                return this;
+            }
+
+            public EventTypePolicy build()
+            {
+                return new EventTypePolicy(flowPoliciesBuilder.build());
+            }
+        }
     }
 }

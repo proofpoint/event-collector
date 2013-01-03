@@ -18,14 +18,25 @@ package com.proofpoint.event.collector;
 import com.google.inject.assistedinject.Assisted;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
 
+import javax.inject.Named;
 import java.net.URI;
 import java.util.Set;
 
 public interface EventTapFlowFactory
 {
+    @Named("nonQos")
     public EventTapFlow createEventTapFlow(@Assisted("eventType") String eventType,
             @Assisted("flowId") String flowId, Set<URI> taps, Observer observer);
 
+    @Named("nonQos")
     public EventTapFlow createEventTapFlow(@Assisted("eventType") String eventType,
+            @Assisted("flowId") String flowId, Set<URI> taps);
+
+    @Named("qos")
+    public EventTapFlow createQosEventTapFlow(@Assisted("eventType") String eventType,
+            @Assisted("flowId") String flowId, Set<URI> taps, Observer observer);
+
+    @Named("qos")
+    public EventTapFlow createQosEventTapFlow(@Assisted("eventType") String eventType,
             @Assisted("flowId") String flowId, Set<URI> taps);
 }

@@ -25,6 +25,7 @@ import com.proofpoint.http.client.Response;
 import com.proofpoint.http.client.ResponseHandler;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
+import org.eclipse.jetty.util.ConcurrentHashSet;
 
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
@@ -32,6 +33,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -40,15 +42,20 @@ import static com.proofpoint.http.client.JsonBodyGenerator.jsonBodyGenerator;
 
 class HttpEventTapFlow implements EventTapFlow
 {
-    private static final Random RANDOM = new Random();
     private static final Logger log = Logger.get(HttpEventTapFlow.class);
+    private static final Random RANDOM = new Random();
+    private static final String QOS_HEADER = "X-Proofpoint-QoS";
+    private static final String QOS_HEADER_FIRST_BATCH = "firstBatch";
+    private static final String QOS_HEADER_DROPPED_ENTRIES = "droppedMessages=%d";
 
     private final HttpClient httpClient;
     private final JsonCodec<List<Event>> eventsCodec;
     private final String eventType;
     private final String flowId;
-    private final AtomicReference<List<URI>> taps = new AtomicReference<List<URI>>();
+    private final AtomicReference<List<URI>> taps = new AtomicReference<List<URI>>(ImmutableList.<URI>of());
     private final Observer observer;
+    private final Set<URI> firstBatch = new ConcurrentHashSet<URI>();
+    private final AtomicLong droppedEntries = new AtomicLong(0);
 
     public HttpEventTapFlow(HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
             String eventType, String flowId, Set<URI> taps, Observer observer)
@@ -73,6 +80,12 @@ class HttpEventTapFlow implements EventTapFlow
     }
 
     @Override
+    public void notifyEntriesDropped(int count)
+    {
+        droppedEntries.getAndAdd(count);
+    }
+
+    @Override
     public Set<URI> getTaps()
     {
         return ImmutableSet.copyOf(taps.get());
@@ -83,7 +96,14 @@ class HttpEventTapFlow implements EventTapFlow
     {
         checkNotNull(taps, "taps is null");
         checkArgument(!taps.isEmpty(), "taps is empty");
-        this.taps.set(ImmutableList.copyOf(taps));
+
+        List<URI> existingTaps = this.taps.getAndSet(ImmutableList.copyOf(taps));
+
+        for (URI tap : taps) {
+            if (!existingTaps.contains(tap)) {
+                firstBatch.add(tap);
+            }
+        }
     }
 
     private void sendEvents(final List<Event> entries)
@@ -92,18 +112,30 @@ class HttpEventTapFlow implements EventTapFlow
         List<URI> taps = this.taps.get();
         final URI uri = taps.get(RANDOM.nextInt(taps.size()));
 
-        Request request = RequestBuilder.preparePost()
+        RequestBuilder requestBuilder = RequestBuilder.preparePost()
                 .setUri(uri)
                 .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
-                .setBodyGenerator(jsonBodyGenerator(eventsCodec, entries))
-                .build();
+                .setBodyGenerator(jsonBodyGenerator(eventsCodec, entries));
 
-        httpClient.execute(request, new ResponseHandler<Void, Exception>()
+        if (firstBatch.remove(uri)) {
+            requestBuilder.addHeader(QOS_HEADER, QOS_HEADER_FIRST_BATCH);
+        }
+
+        // If there are multiple taps sharing the same flow that cares about
+        // dropped messages, they must coordinate what events were received
+        // anyway, so only one (the first) needs to get the dropped count.
+        final long count = droppedEntries.getAndSet(0);
+        if (count > 0) {
+            requestBuilder.addHeader(QOS_HEADER, String.format(QOS_HEADER_DROPPED_ENTRIES, count));
+        }
+
+        httpClient.execute(requestBuilder.build(), new ResponseHandler<Void, Exception>()
         {
             @Override
             public Exception handleException(Request request, Exception exception)
             {
                 log.warn(exception, "Error posting %s events to flow %s at %s ", eventType, flowId, uri);
+                droppedEntries.getAndAdd(entries.size());
                 observer.onRecordsLost(uri, entries.size());
                 return exception;
             }
@@ -114,6 +146,9 @@ class HttpEventTapFlow implements EventTapFlow
             {
                 if (response.getStatusCode() / 100 != 2) {
                     log.warn("Error posting %s events to flow %s at %s: got response %s %s ", eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
+                    // If we got a response back, it MUST have received the message and
+                    // it saw the headers. As a result, don't put these dropped entries
+                    // and the dropped count back into droppedEntries.
                     observer.onRecordsLost(uri, entries.size());
                 }
                 else {

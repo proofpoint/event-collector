@@ -16,6 +16,7 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.proofpoint.log.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +33,7 @@ import static java.lang.String.format;
 
 public class AsyncBatchProcessor<T> implements BatchProcessor<T>
 {
+    private static final Logger log = Logger.get(AsyncBatchProcessor.class);
     private final BatchHandler<T> handler;
     private final int maxBatchSize;
     private final BlockingQueue<T> queue;
@@ -73,6 +75,9 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
                     catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
+                    catch (Exception e) {
+                        log.error(e, "error occurred during batch processing");
+                    }
                 }
             }
         }));
@@ -91,12 +96,11 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
         checkState(future.get() != null && !future.get().isCancelled(), "Processor is not running");
         checkNotNull(entry, "entry is null");
 
-        while (!queue.offer(entry)) {
-            // throw away oldest and try again
-            queue.poll();
+        if (!queue.offer(entry)) {
+            // queue is full: drop current message
+            handler.notifyEntriesDropped(1);
             observer.onRecordsLost(1);
         }
-
         observer.onRecordsReceived(1);
     }
 }

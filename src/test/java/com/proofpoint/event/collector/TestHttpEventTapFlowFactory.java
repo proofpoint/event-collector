@@ -60,9 +60,7 @@ public class TestHttpEventTapFlowFactory
     public void setup()
     {
         httpClient = mock(HttpClient.class);
-        jsonCodec = JsonCodec.jsonCodec(new TypeLiteral<List<Event>>()
-        {
-        });
+        jsonCodec = JsonCodec.listJsonCodec(Event.class);
         factory = new HttpEventTapFlowFactory(httpClient, jsonCodec);
         observer = mock(Observer.class);
     }

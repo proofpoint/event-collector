@@ -27,16 +27,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static org.mockito.Matchers.anyListOf;
 import static org.mockito.Mockito.atLeast;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
@@ -156,7 +152,7 @@ public class TestAsyncBatchProcessor
             blockingHandler.unlock();
         }
 
-        // When the processor unblocks, an exception (in it's thread) will be thrown.
+        // When the processor unblocks, an exception (in its thread) will be thrown.
         // This should not affect the processor.
         blockingHandler.lock();
         try {
@@ -205,17 +201,35 @@ public class TestAsyncBatchProcessor
 
     @Test
     public void testIgnoresExceptionsInHandler()
+            throws InterruptedException
     {
-        doThrow(new NullPointerException()).when(handler).processBatch(anyListOf(Event.class));
+        BlockingBatchHandler blockingHandler = blockingHandlerThatThrowsException(new NullPointerException());
         BatchProcessor<Event> processor = new AsyncBatchProcessor<Event>(
-                "foo", handler, new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100), observer
+                "foo", blockingHandler, new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100), observer
         );
-
         processor.start();
-        processor.put(event("foo"));
-        verify(handler, times(1)).processBatch(anyListOf(Event.class));
-        processor.put(event("foo"));
-        verify(handler, times(2)).processBatch(anyListOf(Event.class));
+
+        blockingHandler.lock();
+        try {
+            processor.put(event("foo"));
+            assertTrue(blockingHandler.waitForProcessor(10));
+            blockingHandler.resumeProcessor();
+        }
+        finally {
+            blockingHandler.unlock();
+        }
+        assertEquals(blockingHandler.getCallsToProcessBatch(), 1);
+
+        blockingHandler.lock();
+        try {
+            processor.put(event("foo"));
+            assertTrue(blockingHandler.waitForProcessor(10));
+            blockingHandler.resumeProcessor();
+        }
+        finally {
+            blockingHandler.unlock();
+        }
+        assertEquals(blockingHandler.getCallsToProcessBatch(), 2);
     }
 
     private void assertCounterValues(long transferred, long lost)

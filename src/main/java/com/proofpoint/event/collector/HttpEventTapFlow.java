@@ -18,6 +18,8 @@ package com.proofpoint.event.collector;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.MapMaker;
+import com.google.common.collect.Sets;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.http.client.RequestBuilder;
@@ -25,10 +27,10 @@ import com.proofpoint.http.client.Response;
 import com.proofpoint.http.client.ResponseHandler;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
-import org.eclipse.jetty.util.ConcurrentHashSet;
 
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response.Status.Family;
 import java.net.URI;
 import java.util.List;
 import java.util.Random;
@@ -39,6 +41,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.proofpoint.http.client.JsonBodyGenerator.jsonBodyGenerator;
+import static javax.ws.rs.core.Response.Status.Family.SUCCESSFUL;
+import static javax.ws.rs.core.Response.Status.fromStatusCode;
 
 class HttpEventTapFlow implements EventTapFlow
 {
@@ -54,7 +58,7 @@ class HttpEventTapFlow implements EventTapFlow
     private final String flowId;
     private final AtomicReference<List<URI>> taps = new AtomicReference<List<URI>>(ImmutableList.<URI>of());
     private final Observer observer;
-    private final Set<URI> firstBatch = new ConcurrentHashSet<URI>();
+    private final Set<URI> unestablishedTaps = Sets.newSetFromMap(new MapMaker().<URI, Boolean>makeMap());
     private final AtomicLong droppedEntries = new AtomicLong(0);
 
     public HttpEventTapFlow(HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
@@ -101,7 +105,7 @@ class HttpEventTapFlow implements EventTapFlow
 
         for (URI tap : taps) {
             if (!existingTaps.contains(tap)) {
-                firstBatch.add(tap);
+                unestablishedTaps.add(tap);
             }
         }
     }
@@ -117,7 +121,7 @@ class HttpEventTapFlow implements EventTapFlow
                 .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
                 .setBodyGenerator(jsonBodyGenerator(eventsCodec, entries));
 
-        if (firstBatch.remove(uri)) {
+        if (unestablishedTaps.remove(uri)) {
             requestBuilder.addHeader(QOS_HEADER, QOS_HEADER_FIRST_BATCH);
         }
 
@@ -135,7 +139,7 @@ class HttpEventTapFlow implements EventTapFlow
             public Exception handleException(Request request, Exception exception)
             {
                 log.warn(exception, "Error posting %s events to flow %s at %s ", eventType, flowId, uri);
-                droppedEntries.getAndAdd(entries.size());
+                droppedEntries.getAndAdd(count + entries.size());
                 observer.onRecordsLost(uri, entries.size());
                 return exception;
             }
@@ -144,11 +148,9 @@ class HttpEventTapFlow implements EventTapFlow
             public Void handle(Request request, Response response)
                     throws Exception
             {
-                if (response.getStatusCode() / 100 != 2) {
+                if (fromStatusCode(response.getStatusCode()).getFamily() != SUCCESSFUL) {
                     log.warn("Error posting %s events to flow %s at %s: got response %s %s ", eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
-                    // If we got a response back, it MUST have received the message and
-                    // it saw the headers. As a result, don't put these dropped entries
-                    // and the dropped count back into droppedEntries.
+                    droppedEntries.getAndAdd(count + entries.size());
                     observer.onRecordsLost(uri, entries.size());
                 }
                 else {

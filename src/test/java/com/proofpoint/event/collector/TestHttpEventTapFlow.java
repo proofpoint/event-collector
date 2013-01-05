@@ -256,14 +256,14 @@ public class TestHttpEventTapFlow
         Request request = requests.get(0);
         assertEqualsNoOrder(request.getHeaders().get(X_PROOFPOINT_QOS).toArray(), new String[]{"droppedMessages=10", "firstBatch"});
 
-        // The records lost will *NOT* be reported in the next message,
-        // because they were successfully reported in the rejected message.
+        // The records lost will be reported in the next message, because they
+        // are considers to *NOT* have been successfully reported in the rejected message.
         singleEventTapFlow.processBatch(events);
         requests = captureRequests();
         assertEquals(requests.size(), 2);
 
         request = requests.get(1);
-        assertEqualsNoOrder(request.getHeaders().get(X_PROOFPOINT_QOS).toArray(), new String[]{});
+        assertEqualsNoOrder(request.getHeaders().get(X_PROOFPOINT_QOS).toArray(), new String[]{format("droppedMessages=%d", 10 + events.size())});
     }
 
     @Test

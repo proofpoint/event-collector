@@ -16,6 +16,7 @@
 package com.proofpoint.event.collector;
 
 import com.proofpoint.configuration.Config;
+import com.proofpoint.configuration.ConfigDescription;
 import com.proofpoint.units.Duration;
 
 import javax.validation.constraints.Min;
@@ -26,6 +27,8 @@ public class EventTapConfig
 {
     private int eventTapThreads = 20;
     private Duration eventTapRefreshDuration = new Duration(10, TimeUnit.SECONDS);
+    private int eventTapQosRetryCount = 10;
+    private Duration eventTapQosRetryDelay = new Duration(30, TimeUnit.SECONDS);
 
     @Deprecated
     @Min(1)
@@ -49,9 +52,38 @@ public class EventTapConfig
     }
 
     @Config("collector.event-tap.refresh")
+    @ConfigDescription("The interval between updates to event tap configuration from published discovery information.")
     public EventTapConfig setEventTapRefreshDuration(Duration eventTapRefreshDuration)
     {
         this.eventTapRefreshDuration = eventTapRefreshDuration;
+        return this;
+    }
+
+    @Min(0)
+    public int getEventTapQosRetryCount()
+    {
+        return eventTapQosRetryCount;
+    }
+
+    @Config("collector.event-tap.qos-retry-count")
+    @ConfigDescription("The number of times to retry failed messages for QoS taps.")
+    public EventTapConfig setEventTapQosRetryCount(int eventTapQosRetryCount)
+    {
+        this.eventTapQosRetryCount = eventTapQosRetryCount;
+        return this;
+    }
+
+    @NotNull
+    public Duration getEventTapQosRetryDelay()
+    {
+        return eventTapQosRetryDelay;
+    }
+
+    @Config("collector.event-tap.qos-retry-delay")
+    @ConfigDescription("The interval between attempts to resend failed messages for QoS taps.")
+    public EventTapConfig setEventTapQosRetryDelay(Duration eventTapQosRetryDelay)
+    {
+        this.eventTapQosRetryDelay = eventTapQosRetryDelay;
         return this;
     }
 }

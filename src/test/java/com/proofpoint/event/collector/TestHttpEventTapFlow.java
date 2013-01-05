@@ -20,24 +20,25 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
 import com.proofpoint.http.client.BodyGenerator;
-import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
-import com.proofpoint.http.client.Response;
-import com.proofpoint.http.client.ResponseHandler;
 import com.proofpoint.json.JsonCodec;
+import com.proofpoint.units.Duration;
 import org.joda.time.DateTime;
 import org.mockito.ArgumentCaptor;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
-import javax.ws.rs.core.MediaType;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
+import static com.google.common.base.Objects.firstNonNull;
 import static java.lang.String.format;
 import static java.net.URI.create;
 import static java.util.UUID.randomUUID;
@@ -45,13 +46,10 @@ import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.atLeast;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertNotEquals;
@@ -64,65 +62,74 @@ public class TestHttpEventTapFlow
     private static final Set<URI> singleTap = ImmutableSet.of(create("http://n1.event.tap/post"));
     private static final Set<URI> multipleTaps = ImmutableSet.of(create("http://n2.event.tap/post"), create("http://n3.event.tap/post"));
     private static final Set<URI> taps = multipleTaps;
+    private static final int retryCount = 10;
     private final List<Event> events = ImmutableList.of(
             new Event("EventType", randomUUID().toString(), "foo.com", DateTime.now(), ImmutableMap.<String, Object>of()),
             new Event("EventTYpe", randomUUID().toString(), "foo.com", DateTime.now(), ImmutableMap.<String, Object>of()));
-    private HttpClient httpClient;
+    private MockHttpClient httpClient;
     private Observer observer;
     private HttpEventTapFlow singleEventTapFlow;
     private HttpEventTapFlow multipleEventTapFlow;
+    private HttpEventTapFlow multipleEventTapFlowWithRetry;
     private HttpEventTapFlow eventTapFlow;              // Tests that don't care if they are single or multiple.
 
     @BeforeMethod
     private void setup()
     {
-        httpClient = mock(HttpClient.class);
+        httpClient = new MockHttpClient();
         observer = mock(Observer.class);
-        singleEventTapFlow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", singleTap, observer);
-        multipleEventTapFlow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventTYpe", "FlowID", multipleTaps, observer);
+        singleEventTapFlow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowId", singleTap, 0, null, observer);
+        multipleEventTapFlow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowId", multipleTaps, 0, null, observer);
+        multipleEventTapFlowWithRetry = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowId", multipleTaps, retryCount, new Duration(1, TimeUnit.MILLISECONDS), observer);
         eventTapFlow = multipleEventTapFlow;
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "httpClient is null")
     public void testConstructorNullHttpClient()
     {
-        new HttpEventTapFlow(null, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, observer);
+        new HttpEventTapFlow(null, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, 0, null, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventsCodec is null")
     public void testConstructorNullEventsCodec()
     {
-        new HttpEventTapFlow(httpClient, null, "EventType", "FlowID", taps, observer);
+        new HttpEventTapFlow(httpClient, null, "EventType", "FlowID", taps, 0, null, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventType is null")
     public void testConstructorNullEventType()
     {
-        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, null, "FlowID", taps, observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, null, "FlowID", taps, 0, null, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "flowId is null")
     public void testConstructorNullFlowId()
     {
-        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", null, taps, observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", null, taps, 0, null, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "taps is null")
     public void testConstructorNullTaps()
     {
-        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", null, observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", null, 0, null, observer);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "taps is empty")
-    public void testCustructorEmptyTaps()
+    public void testConstructorEmptyTaps()
     {
-        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", ImmutableSet.<URI>of(), observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", ImmutableSet.<URI>of(), 0, null, observer);
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "retryDelay is null")
+    public void testConstructorNullRetryDelay()
+    {
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", ImmutableSet.<URI>of(), 1, null, observer);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "observer is null")
     public void testConstructorNullObserver()
     {
-        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, null);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, 0, null, null);
     }
 
     @Test
@@ -132,7 +139,7 @@ public class TestHttpEventTapFlow
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
         eventTapFlow.processBatch(events);
-        List<Request> requests = captureRequests();
+        List<Request> requests = httpClient.getRequests();
         assertEquals(requests.size(), 1);
 
         Request request = requests.get(0);
@@ -158,17 +165,17 @@ public class TestHttpEventTapFlow
         for (int i = 0; !remainingSecondTaps.isEmpty(); ++i) {
             assertTrue(i < 10000);
             multipleEventTapFlow.processBatch(events);
-            List<Request> requests = captureRequests();
+            List<Request> requests = httpClient.getRequests();
             assertEquals(requests.size(), i + 1);
             Request request = requests.get(i);
             URI uri = request.getUri();
 
             assertTrue(multipleTaps.contains(uri));
             if (remainingFirstTaps.remove(uri)) {
-                assertEquals(request.getHeaders().get(X_PROOFPOINT_QOS), ImmutableList.of("firstBatch"));
+                assertQosHeadersFirstBatch(request);
             }
             else if (remainingSecondTaps.remove(uri)) {
-                assertEquals(request.getHeaders().get(X_PROOFPOINT_QOS), ImmutableList.<String>of());
+                assertNoQosHeaders(request);
             }
         }
     }
@@ -179,12 +186,13 @@ public class TestHttpEventTapFlow
     {
         singleEventTapFlow.processBatch(events);
         singleEventTapFlow.notifyEntriesDropped(10);
+        httpClient.clearRequests();
         singleEventTapFlow.processBatch(events);
-        List<Request> requests = captureRequests();
-        assertEquals(requests.size(), 2);
-        Request request = requests.get(1);
+        List<Request> requests = httpClient.getRequests();
+        assertEquals(requests.size(), 1);
+        Request request = requests.get(0);
 
-        assertEquals(request.getHeaders().get(X_PROOFPOINT_QOS), ImmutableList.of("droppedMessages=10"));
+        assertQosHeadersDroppedEntries(request, 10);
     }
 
     @Test
@@ -195,7 +203,7 @@ public class TestHttpEventTapFlow
 
         singleEventTapFlow.notifyEntriesDropped(10);
         singleEventTapFlow.processBatch(events);
-        List<Request> requests = captureRequests();
+        List<Request> requests = httpClient.getRequests();
         assertEquals(requests.size(), 1);
 
         Request request = requests.get(0);
@@ -206,7 +214,7 @@ public class TestHttpEventTapFlow
         assertEquals(byteArrayOutputStream.toString(), EVENT_LIST_JSON_CODEC.toJson(events));
 
         assertEquals(request.getHeaders().get(CONTENT_TYPE), ImmutableList.of("application/json"));
-        assertEqualsNoOrder(request.getHeaders().get(X_PROOFPOINT_QOS).toArray(), new String[]{"firstBatch", "droppedMessages=10"});
+        assertQosHeaders(request, true, 10);
     }
 
     @Test
@@ -214,15 +222,60 @@ public class TestHttpEventTapFlow
             throws Exception
     {
         singleEventTapFlow.processBatch(events);
-        respondWithOK();
 
-        // The no records lost will be reported in the next message.
+        // The number of records lost will be reported in the next message.
+        httpClient.clearRequests();
         singleEventTapFlow.processBatch(events);
-        List<Request> requests = captureRequests();
-        assertEquals(requests.size(), 2);
+        List<Request> requests = httpClient.getRequests();
+        assertEquals(requests.size(), 1);
+        Request request = requests.get(0);
+        assertNoQosHeaders(request);
+    }
 
-        Request request = requests.get(1);
-        assertEqualsNoOrder(request.getHeaders().get(X_PROOFPOINT_QOS).toArray(), new String[]{});
+    @Test
+    public void testNoDroppedMessagesOnRetrySuccess()
+    {
+        clearFirstBatchHeaders(multipleEventTapFlow, multipleTaps);
+        httpClient.respondWithException(new Exception(), multipleTaps.size() - 1);
+
+        multipleEventTapFlow.processBatch(events);
+        List<Request> requests = httpClient.getRequests();
+        assertEquals(requests.size(), multipleTaps.size());
+        assertEquals(extractUris(requests).keySet(), multipleTaps);
+        for (Request request : requests) {
+            assertNoQosHeaders(request);
+        }
+
+        // Since the LAST request was successful, there should be no dropped requests.
+        httpClient.clearRequests();
+        multipleEventTapFlow.processBatch(events);
+        requests = httpClient.getRequests();
+        assertEquals(requests.size(), 1);
+        assertNoQosHeaders(requests.get(0));
+    }
+
+    @Test
+    public void testRetries()
+    {
+        httpClient.respondWithException();
+
+        // The number of requests should be equal to retryCount for each tap destination.
+        multipleEventTapFlowWithRetry.processBatch(events);
+        List<Request> requests = httpClient.getRequests();
+        assertEquals(requests.size(), multipleTaps.size() * (retryCount + 1));
+        Map<URI, Integer> uris = extractUris(requests);
+        assertEquals(uris.keySet(), multipleTaps);
+        for (Map.Entry<URI, Integer> entry : uris.entrySet()) {
+            assertEquals(entry.getValue().intValue(), retryCount + 1, format("retry count wrong for URI %s", entry.getKey()));
+        }
+
+        // And even though multiple attempts were made, the events should only be counted once.
+        httpClient.respondWithOk();
+        httpClient.clearRequests();
+        multipleEventTapFlowWithRetry.processBatch(events);
+        requests = httpClient.getRequests();
+        assertEquals(requests.size(), 1);
+        assertQosHeaders(requests.get(0), true, events.size());
     }
 
     @Test
@@ -231,39 +284,40 @@ public class TestHttpEventTapFlow
     {
         // This these requires at least 2 events, to make sure the HttpEventTapFlow
         // sets dropped messages to the number of events dropped.
+        httpClient.respondWithException();
         assertTrue(events.size() > 1);
         singleEventTapFlow.processBatch(events);
-        respondWithException();
 
         // The records lost will be reported in the next message.
         singleEventTapFlow.processBatch(events);
-        List<Request> requests = captureRequests();
+        List<Request> requests = httpClient.getRequests();
         assertEquals(requests.size(), 2);
 
         Request request = requests.get(1);
-        assertEqualsNoOrder(request.getHeaders().get(X_PROOFPOINT_QOS).toArray(), new String[]{format("droppedMessages=%d", events.size())});
+        assertQosHeaders(request, true, events.size());
     }
 
     @Test
-    public void testNoDroppedMessagesOnNon200Error()
+    public void testDroppedMessagesOnNon200Error()
             throws Exception
     {
+        httpClient.respondWithError();
         singleEventTapFlow.notifyEntriesDropped(10);
         singleEventTapFlow.processBatch(events);
-        respondWithError();
-        List<Request> requests = captureRequests();
+
+        List<Request> requests = httpClient.getRequests();
         assertEquals(requests.size(), 1);
         Request request = requests.get(0);
-        assertEqualsNoOrder(request.getHeaders().get(X_PROOFPOINT_QOS).toArray(), new String[]{"droppedMessages=10", "firstBatch"});
+        assertQosHeaders(request, true, 10);
 
         // The records lost will be reported in the next message, because they
         // are considers to *NOT* have been successfully reported in the rejected message.
+        httpClient.clearRequests();
         singleEventTapFlow.processBatch(events);
-        requests = captureRequests();
-        assertEquals(requests.size(), 2);
-
-        request = requests.get(1);
-        assertEqualsNoOrder(request.getHeaders().get(X_PROOFPOINT_QOS).toArray(), new String[]{format("droppedMessages=%d", 10 + events.size())});
+        requests = httpClient.getRequests();
+        assertEquals(requests.size(), 1);
+        request = requests.get(0);
+        assertQosHeaders(request, true, 10 + events.size());
     }
 
     @Test
@@ -293,7 +347,6 @@ public class TestHttpEventTapFlow
             throws Exception
     {
         eventTapFlow.processBatch(events);
-        respondWithOK();
 
         ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
         verify(observer, times(1)).onRecordsSent(uriArgumentCaptor.capture(), eq(events.size()));
@@ -305,8 +358,8 @@ public class TestHttpEventTapFlow
     public void testObserverOnFailure()
             throws Exception
     {
+        httpClient.respondWithException();
         eventTapFlow.processBatch(events);
-        respondWithException();
 
         ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
         verify(observer, times(1)).onRecordsLost(any(URI.class), eq(events.size()));
@@ -317,8 +370,8 @@ public class TestHttpEventTapFlow
     public void testObserverOnNon200Error()
             throws Exception
     {
+        httpClient.respondWithError();
         eventTapFlow.processBatch(events);
-        respondWithError();
 
         ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
         verify(observer, times(1)).onRecordsLost(uriArgumentCaptor.capture(), eq(events.size()));
@@ -326,55 +379,59 @@ public class TestHttpEventTapFlow
         verifyNoMoreInteractions(observer);
     }
 
-    private void respondWithOK()
-            throws Exception
+    private void clearFirstBatchHeaders(HttpEventTapFlow eventTapFlow, Set<URI> taps)
     {
-        Response response = mock(Response.class);
-        when(response.getStatusCode()).thenReturn(200);
-        when(response.getStatusMessage()).thenReturn("OK");
-        respondWith(response);
+        // Keep sending events until each tap receives a message.
+        Set<URI> remainingTaps = new HashSet<URI>(taps);
+        httpClient.clearRequests();
+        for (int i = 0; !remainingTaps.isEmpty(); ++i) {
+            assertTrue(i < 10000);
+            eventTapFlow.processBatch(events);
+            List<Request> requests = httpClient.getRequests();
+            httpClient.clearRequests();
+            for (Request request:requests) {
+                remainingTaps.remove(request.getUri());
+            }
+        }
     }
 
-    private void respondWithError()
-            throws Exception
+    private static Map<URI, Integer> extractUris(Collection<Request> requests)
     {
-        Response response = mock(Response.class);
-        when(response.getStatusCode()).thenReturn(500);
-        when(response.getStatusMessage()).thenReturn("Server Error");
-        respondWith(response);
+        Map<URI, Integer> results = new HashMap<URI, Integer>();
+        for (Request request : requests) {
+            URI uri = request.getUri();
+            results.put(uri, firstNonNull(results.get(uri), Integer.valueOf(0)) + 1);
+        }
+        return ImmutableMap.copyOf(results);
     }
 
-    private void respondWith(Response response)
-            throws Exception
+    private void assertNoQosHeaders(Request request)
     {
-        // Process the events in order to get the EventTapFlow to provide us
-        // with a request and response handler that we can use to feed
-        // it responses.
-        ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
-        ArgumentCaptor<ResponseHandler> responseHandlerArgumentCaptor = ArgumentCaptor.forClass(ResponseHandler.class);
-        verify(httpClient, atLeastOnce()).execute(requestArgumentCaptor.capture(), responseHandlerArgumentCaptor.capture());
-        ResponseHandler<Void, Exception> responseHandler = responseHandlerArgumentCaptor.getValue();
-        Request request = requestArgumentCaptor.getValue();
-        responseHandler.handle(request, response);
+        assertQosHeaders(request, false, -1);
     }
 
-    private void respondWithException()
-            throws Exception
+    private void assertQosHeadersFirstBatch(Request request)
     {
-        ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
-        ArgumentCaptor<ResponseHandler> responseHandlerArgumentCaptor = ArgumentCaptor.forClass(ResponseHandler.class);
-        verify(httpClient, atLeastOnce()).execute(requestArgumentCaptor.capture(), responseHandlerArgumentCaptor.capture());
-
-        Request request = requestArgumentCaptor.getValue();
-        ResponseHandler<Void, Exception> responseHandler = responseHandlerArgumentCaptor.getValue();
-        responseHandler.handleException(request, new Exception());
+        assertQosHeaders(request, true, -1);
     }
 
-    private List<Request> captureRequests()
-            throws Exception
+    private void assertQosHeadersDroppedEntries(Request request, int droppedEntries)
     {
-        ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
-        verify(httpClient, atLeast(0)).execute(requestArgumentCaptor.capture(), any(ResponseHandler.class));
-        return ImmutableList.copyOf(requestArgumentCaptor.getAllValues());
+        assertTrue(droppedEntries >= 0);
+        assertQosHeaders(request, false, droppedEntries);
     }
+
+    private void assertQosHeaders(Request request, boolean firstBatch, int droppedEntries)
+    {
+        ImmutableList.Builder<String> headerBuilder = ImmutableList.builder();
+        if (firstBatch) {
+            headerBuilder.add("firstBatch");
+        }
+        if (droppedEntries >= 0) {
+            headerBuilder.add(format("droppedMessages=%d", droppedEntries));
+        }
+
+        assertEqualsNoOrder(request.getHeaders().get(X_PROOFPOINT_QOS).toArray(), headerBuilder.build().toArray());
+    }
+
 }

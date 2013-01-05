@@ -24,6 +24,7 @@ import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.http.client.ResponseHandler;
 import com.proofpoint.json.JsonCodec;
+import com.proofpoint.units.Duration;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.mockito.ArgumentCaptor;
@@ -33,6 +34,7 @@ import org.testng.annotations.Test;
 import java.net.URI;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static com.proofpoint.event.collector.EventTapFlow.NULL_OBSERVER;
 import static java.util.UUID.randomUUID;
@@ -40,6 +42,7 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.testng.Assert.assertEquals;
 
 public class TestHttpEventTapFlowFactory
@@ -50,8 +53,10 @@ public class TestHttpEventTapFlowFactory
     private final String eventTypeB = "eventTypeB";
     private final String flowIdB = "flowIdB";
     private final Set<URI> tapsB = ImmutableSet.of(URI.create("http://erehw.on"), URI.create("http://aol.com"));
+    private final int qosRetryCount = 2;
 
-    private HttpClient httpClient;
+    private final EventTapConfig config = new EventTapConfig().setEventTapQosRetryCount(qosRetryCount).setEventTapQosRetryDelay(new Duration(1, TimeUnit.MILLISECONDS));
+    private MockHttpClient httpClient;
     private JsonCodec<List<Event>> jsonCodec;
     private HttpEventTapFlowFactory factory;
     private Observer observer;
@@ -59,10 +64,28 @@ public class TestHttpEventTapFlowFactory
     @BeforeMethod
     public void setup()
     {
-        httpClient = mock(HttpClient.class);
+        httpClient = new MockHttpClient();
         jsonCodec = JsonCodec.listJsonCodec(Event.class);
-        factory = new HttpEventTapFlowFactory(httpClient, jsonCodec);
+        factory = new HttpEventTapFlowFactory(httpClient, jsonCodec, config);
         observer = mock(Observer.class);
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "httpClient is null")
+    public void testConsturctorNullHttpClient()
+    {
+        new HttpEventTapFlowFactory(null, jsonCodec, config);
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventCodec is null")
+    public void testConstructorNullEventCodec()
+    {
+        new HttpEventTapFlowFactory(httpClient, null, config);
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
+    public void testConstructorNullConfig()
+    {
+        new HttpEventTapFlowFactory(httpClient, jsonCodec, null);
     }
 
     @Test
@@ -70,7 +93,7 @@ public class TestHttpEventTapFlowFactory
             throws Exception
     {
         testCreatedEventTapFlow(factory.createEventTapFlow(eventTypeA, flowIdA, tapsA, observer),
-                eventTypeA, flowIdA, tapsA, observer);
+                eventTypeA, flowIdA, tapsA, 0, observer);
     }
 
     @Test
@@ -78,7 +101,7 @@ public class TestHttpEventTapFlowFactory
             throws Exception
     {
         testCreatedEventTapFlow(factory.createEventTapFlow(eventTypeB, flowIdB, tapsB),
-                eventTypeB, flowIdB, tapsB, NULL_OBSERVER);
+                eventTypeB, flowIdB, tapsB, 0, NULL_OBSERVER);
     }
 
     @Test
@@ -86,7 +109,7 @@ public class TestHttpEventTapFlowFactory
             throws Exception
     {
         testCreatedEventTapFlow(factory.createQosEventTapFlow(eventTypeA, flowIdA, tapsA, observer),
-                eventTypeA, flowIdA, tapsA, observer);
+                eventTypeA, flowIdA, tapsA,  qosRetryCount, observer);
     }
 
     @Test
@@ -94,14 +117,13 @@ public class TestHttpEventTapFlowFactory
             throws Exception
     {
         testCreatedEventTapFlow(factory.createQosEventTapFlow(eventTypeB, flowIdB, tapsB),
-                eventTypeB, flowIdB, tapsB, NULL_OBSERVER);
+                eventTypeB, flowIdB, tapsB, qosRetryCount, NULL_OBSERVER);
     }
 
-    private void testCreatedEventTapFlow(EventTapFlow eventTapFlow, String eventType, String flowId, Set<URI> taps, Observer observer)
+    private void testCreatedEventTapFlow(EventTapFlow eventTapFlow, String eventType, String flowId, Set<URI> taps, int retryCount, Observer observer)
             throws Exception
     {
-        ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
-        ArgumentCaptor<ResponseHandler> responseHandleArgumentCaptor = ArgumentCaptor.forClass(ResponseHandler.class);
+        List<Event> events = ImmutableList.of(createEvent(eventType));
         assertEquals(eventTapFlow.getClass(), HttpEventTapFlow.class);
         HttpEventTapFlow httpEventTapFlow = (HttpEventTapFlow) eventTapFlow;
 
@@ -109,12 +131,24 @@ public class TestHttpEventTapFlowFactory
         assertEquals(httpEventTapFlow.getFlowId(), flowId);
         assertEquals(httpEventTapFlow.getTaps(), taps);
 
-        eventTapFlow.processBatch(ImmutableList.of(createEvent(eventType)));
-        verify(httpClient).execute(requestArgumentCaptor.capture(), responseHandleArgumentCaptor.capture());
-        responseHandleArgumentCaptor.getValue().handleException(requestArgumentCaptor.getValue(), new Exception());
+        eventTapFlow.processBatch(events);
+        List<Request> requests = httpClient.getRequests();
+        assertEquals(requests.size(), 1);
+        if (observer == this.observer) {
+            verify(observer).onRecordsSent(any(URI.class), anyInt());
+            verifyNoMoreInteractions(observer);
+        }
+
+        httpClient.clearRequests();
+        httpClient.respondWithException();
+        eventTapFlow.processBatch(events);
+
+        requests = httpClient.getRequests();
+        assertEquals(requests.size(), taps.size() * (retryCount + 1));
 
         if (observer == this.observer) {
             verify(observer).onRecordsLost(any(URI.class), anyInt());
+            verifyNoMoreInteractions(observer);
         }
     }
 

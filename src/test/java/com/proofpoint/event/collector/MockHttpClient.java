@@ -22,9 +22,12 @@ import com.proofpoint.http.client.RequestStats;
 import com.proofpoint.http.client.Response;
 import com.proofpoint.http.client.ResponseHandler;
 
+import javax.ws.rs.core.Response.Status;
 import java.util.LinkedList;
 import java.util.List;
 
+import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
+import static javax.ws.rs.core.Response.Status.SERVICE_UNAVAILABLE;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -91,9 +94,14 @@ class MockHttpClient implements HttpClient
         respondWith(createOkResponse());
     }
 
-    public void respondWithError()
+    public void respondWithServerError()
     {
-        respondWith(createErrorResponse());
+        respondWith(createServerErrorResponse());
+    }
+
+    public void respondWithClientError()
+    {
+        respondWith(createClientErrorResponse());
     }
 
     public void respondWith(Response response)
@@ -110,11 +118,19 @@ class MockHttpClient implements HttpClient
         return response;
     }
 
-    private static Response createErrorResponse()
+    private static Response createClientErrorResponse()
     {
         Response response = mock(Response.class);
-        when(response.getStatusCode()).thenReturn(500);
-        when(response.getStatusMessage()).thenReturn("Server Error");
+        when(response.getStatusCode()).thenReturn(BAD_REQUEST.getStatusCode());
+        when(response.getStatusMessage()).thenReturn(BAD_REQUEST.getReasonPhrase());
+        return response;
+    }
+
+    private static Response createServerErrorResponse()
+    {
+        Response response = mock(Response.class);
+        when(response.getStatusCode()).thenReturn(SERVICE_UNAVAILABLE.getStatusCode());
+        when(response.getStatusMessage()).thenReturn(SERVICE_UNAVAILABLE.getReasonPhrase());
         return response;
     }
 }

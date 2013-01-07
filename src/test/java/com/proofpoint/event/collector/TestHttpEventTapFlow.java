@@ -298,13 +298,42 @@ public class TestHttpEventTapFlow
     }
 
     @Test
-    public void testDroppedMessagesOnNon200Error()
+    public void testDroppedMessagesOnServerError()
             throws Exception
     {
-        httpClient.respondWithError();
-        singleEventTapFlow.notifyEntriesDropped(10);
-        singleEventTapFlow.processBatch(events);
+        httpClient.respondWithServerError();
+        multipleEventTapFlowWithRetry.notifyEntriesDropped(10);
+        multipleEventTapFlowWithRetry.processBatch(events);
 
+        // A server error triggers a retry; retryCount retries
+        // per tap.
+        List<Request> requests = httpClient.getRequests();
+        assertEquals(requests.size(), multipleTaps.size() * (retryCount + 1));
+        for (Request request : requests) {
+            assertQosHeaders(request, true, 10);
+        }
+
+        // The records lost will be reported in the next message, because they
+        // are considers to *NOT* have been successfully reported in the rejected message.
+        httpClient.respondWithOk();
+        httpClient.clearRequests();
+        multipleEventTapFlowWithRetry.processBatch(events);
+        requests = httpClient.getRequests();
+        assertEquals(requests.size(), 1);
+        Request request = requests.get(0);
+        assertQosHeaders(request, true, 10 + events.size());
+    }
+
+    @Test
+    public void testDroppedMessagesOnClientError()
+            throws Exception
+    {
+        httpClient.respondWithClientError();
+        multipleEventTapFlowWithRetry.notifyEntriesDropped(10);
+        multipleEventTapFlowWithRetry.processBatch(events);
+
+        // A client error does not trigger a retry, the first such error
+        // will cause the requests to be immediately dropped.
         List<Request> requests = httpClient.getRequests();
         assertEquals(requests.size(), 1);
         Request request = requests.get(0);
@@ -312,8 +341,9 @@ public class TestHttpEventTapFlow
 
         // The records lost will be reported in the next message, because they
         // are considers to *NOT* have been successfully reported in the rejected message.
+        httpClient.respondWithOk();
         httpClient.clearRequests();
-        singleEventTapFlow.processBatch(events);
+        multipleEventTapFlowWithRetry.processBatch(events);
         requests = httpClient.getRequests();
         assertEquals(requests.size(), 1);
         request = requests.get(0);
@@ -367,10 +397,22 @@ public class TestHttpEventTapFlow
     }
 
     @Test
-    public void testObserverOnNon200Error()
+    public void testObserverOnServerError()
             throws Exception
     {
-        httpClient.respondWithError();
+        httpClient.respondWithServerError();
+        eventTapFlow.processBatch(events);
+
+        ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
+        verify(observer, times(1)).onRecordsLost(uriArgumentCaptor.capture(), eq(events.size()));
+        assertTrue(taps.contains(uriArgumentCaptor.getValue()));
+        verifyNoMoreInteractions(observer);
+    }
+
+    @Test
+    public void testObserverOnClientError()
+    {
+        httpClient.respondWithClientError();
         eventTapFlow.processBatch(events);
 
         ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
@@ -389,7 +431,7 @@ public class TestHttpEventTapFlow
             eventTapFlow.processBatch(events);
             List<Request> requests = httpClient.getRequests();
             httpClient.clearRequests();
-            for (Request request:requests) {
+            for (Request request : requests) {
                 remainingTaps.remove(request.getUri());
             }
         }

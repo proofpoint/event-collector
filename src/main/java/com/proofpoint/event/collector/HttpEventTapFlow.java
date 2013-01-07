@@ -42,7 +42,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.proofpoint.http.client.JsonBodyGenerator.jsonBodyGenerator;
+import static java.lang.String.format;
 import static java.lang.Thread.sleep;
+import static javax.ws.rs.core.Response.Status.Family.CLIENT_ERROR;
 import static javax.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static javax.ws.rs.core.Response.Status.fromStatusCode;
 
@@ -93,7 +95,6 @@ class HttpEventTapFlow implements EventTapFlow
             if (sendEvents(taps, entries)) {
                 return;
             }
-
             if (retryDelayMillis > 0) {
                 try {
                     sleep(retryDelayMillis);
@@ -109,8 +110,7 @@ class HttpEventTapFlow implements EventTapFlow
         // The events were not sent, track them.
         // NOTE: Since attempts to all destinations failed, it doesn't matter which
         //       destination the failure is assigned to. Just pick a random one.
-        droppedEntries.getAndAdd(entries.size());
-        observer.onRecordsLost(taps.get(RANDOM.nextInt(taps.size())), entries.size());
+        onRecordsLost(taps.get(RANDOM.nextInt(taps.size())), entries.size());
     }
 
     @Override
@@ -147,7 +147,8 @@ class HttpEventTapFlow implements EventTapFlow
         if (taps.size() > 1) {
             int startUriPos = RANDOM.nextInt(taps.size());
             randomizedTaps = Iterables.concat(taps.subList(startUriPos, taps.size()), taps.subList(0, startUriPos));
-        } else {
+        }
+        else {
             randomizedTaps = taps;
         }
 
@@ -183,7 +184,7 @@ class HttpEventTapFlow implements EventTapFlow
         // anyway, so only one (the first) needs to get the dropped count.
         final long count = droppedEntries.getAndSet(0);
         if (count > 0) {
-            requestBuilder.addHeader(QOS_HEADER, String.format(QOS_HEADER_DROPPED_ENTRIES, count));
+            requestBuilder.addHeader(QOS_HEADER, format(QOS_HEADER_DROPPED_ENTRIES, count));
         }
 
         return httpClient.execute(requestBuilder.build(), new ResponseHandler<Boolean, Exception>()
@@ -198,15 +199,23 @@ class HttpEventTapFlow implements EventTapFlow
             @Override
             public Boolean handle(Request request, Response response)
             {
-                if (fromStatusCode(response.getStatusCode()).getFamily() != SUCCESSFUL) {
-                    log.warn("Error posting %s events to flow %s at %s: got response %s %s ", eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
+                if (fromStatusCode(response.getStatusCode()).getFamily() == SUCCESSFUL) {
+                    log.debug("Posted %s events", entries.size());
+                    onRecordsSent(uri, entries.size());
+                    return true;
+                }
+                else if (fromStatusCode(response.getStatusCode()).getFamily() == CLIENT_ERROR) {
+                    // Retrying will only result in the same error, give up completely.
+                    log.error("Rejected %s events by flow %s at %s: response %d %s", eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
                     restoreStateAfterError();
-                    return false;
+                    onRecordsRejected(uri, entries.size());
+                    return true;
                 }
                 else {
-                    log.debug("Posted %s events", entries.size());
-                    observer.onRecordsSent(uri, entries.size());
-                    return true;
+                    log.warn("Error posting %s events to flow %s at %s: got response %s %s",
+                            eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
+                    restoreStateAfterError();
+                    return false;
                 }
             }
 
@@ -218,6 +227,23 @@ class HttpEventTapFlow implements EventTapFlow
                 droppedEntries.getAndAdd(count);
             }
         });
+    }
+
+    private void onRecordsSent(URI tap, int eventCount)
+    {
+        observer.onRecordsSent(tap, eventCount);
+    }
+
+    private void onRecordsLost(URI tap, int eventCount)
+    {
+        droppedEntries.getAndAdd(eventCount);
+        observer.onRecordsLost(tap, eventCount);
+    }
+
+    private void onRecordsRejected(URI tap, int eventCount)
+    {
+        droppedEntries.getAndAdd(eventCount);
+        observer.onRecordsLost(tap, eventCount);
     }
 
     @VisibleForTesting

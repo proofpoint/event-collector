@@ -94,11 +94,15 @@ class HttpEventTapFlow implements EventTapFlow
                 return;
             }
 
-            try {
-                sleep(retryDelayMillis);
-            }
-            catch (InterruptedException ignored) {
-                break;
+            if (retryDelayMillis > 0) {
+                try {
+                    sleep(retryDelayMillis);
+                }
+                catch (InterruptedException ignored) {
+                    // Give up on this batch
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
         }
 
@@ -138,18 +142,23 @@ class HttpEventTapFlow implements EventTapFlow
 
     private boolean sendEvents(List<URI> taps, List<Event> entries)
     {
-        // In the event that we fail to send to *all* of the taps, assign the loss to the last tap
-        // to be attempted.
-        int startUriPos = RANDOM.nextInt(taps.size());
+        Iterable<URI> randomizedTaps;
 
-        for (URI tap : Iterables.concat(taps.subList(startUriPos, taps.size()), taps.subList(0, startUriPos))) {
+        if (taps.size() > 1) {
+            int startUriPos = RANDOM.nextInt(taps.size());
+            randomizedTaps = Iterables.concat(taps.subList(startUriPos, taps.size()), taps.subList(0, startUriPos));
+        } else {
+            randomizedTaps = taps;
+        }
+
+        for (URI tap : randomizedTaps) {
             try {
                 if (sendEvents(tap, entries)) {
                     return true;
                 }
             }
             catch (Exception ex) {
-                // failed, try the next one (already logged)
+                // failed, try the next one (if any).
                 log.warn(ex, "Error posting %s events to flow %s at %s ", eventType, flowId, tap);
             }
         }
@@ -182,10 +191,7 @@ class HttpEventTapFlow implements EventTapFlow
             @Override
             public Exception handleException(Request request, Exception exception)
             {
-                if (firstBatch) {
-                    unestablishedTaps.add(uri);
-                }
-                droppedEntries.getAndAdd(count);
+                restoreStateAfterError();
                 return exception;
             }
 
@@ -194,17 +200,22 @@ class HttpEventTapFlow implements EventTapFlow
             {
                 if (fromStatusCode(response.getStatusCode()).getFamily() != SUCCESSFUL) {
                     log.warn("Error posting %s events to flow %s at %s: got response %s %s ", eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
-                    if (firstBatch) {
-                        unestablishedTaps.add(uri);
-                    }
-                    droppedEntries.getAndAdd(count);
-                    return Boolean.FALSE;
+                    restoreStateAfterError();
+                    return false;
                 }
                 else {
                     log.debug("Posted %s events", entries.size());
                     observer.onRecordsSent(uri, entries.size());
-                    return Boolean.TRUE;
+                    return true;
                 }
+            }
+
+            private void restoreStateAfterError()
+            {
+                if (firstBatch) {
+                    unestablishedTaps.add(uri);
+                }
+                droppedEntries.getAndAdd(count);
             }
         });
     }

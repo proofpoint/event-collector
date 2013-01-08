@@ -15,10 +15,12 @@
  */
 package com.proofpoint.event.collector;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.inject.assistedinject.Assisted;
-import com.google.inject.assistedinject.AssistedInject;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.MapMaker;
+import com.google.common.collect.Sets;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.http.client.RequestBuilder;
@@ -26,62 +28,95 @@ import com.proofpoint.http.client.Response;
 import com.proofpoint.http.client.ResponseHandler;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
+import com.proofpoint.units.Duration;
 
-import javax.inject.Inject;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import java.net.URI;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.proofpoint.http.client.JsonBodyGenerator.jsonBodyGenerator;
+import static java.lang.String.format;
+import static java.lang.Thread.sleep;
+import static javax.ws.rs.core.Response.Status.Family.CLIENT_ERROR;
+import static javax.ws.rs.core.Response.Status.Family.SUCCESSFUL;
+import static javax.ws.rs.core.Response.Status.fromStatusCode;
 
 class HttpEventTapFlow implements EventTapFlow
 {
-    private static final Random RANDOM = new Random();
     private static final Logger log = Logger.get(HttpEventTapFlow.class);
+    private static final Random RANDOM = new Random();
+    private static final String QOS_HEADER = "X-Proofpoint-QoS";
+    private static final String QOS_HEADER_FIRST_BATCH = "firstBatch";
+    private static final String QOS_HEADER_DROPPED_ENTRIES = "droppedMessages=%d";
 
     private final HttpClient httpClient;
     private final JsonCodec<List<Event>> eventsCodec;
+    private final long retryDelayMillis;
+    private final int retryCount;
     private final String eventType;
     private final String flowId;
-    private final AtomicReference<List<URI>> taps = new AtomicReference<List<URI>>();
+    private final AtomicReference<List<URI>> taps = new AtomicReference<List<URI>>(ImmutableList.<URI>of());
     private final Observer observer;
+    private final Set<URI> unestablishedTaps = Sets.newSetFromMap(new MapMaker().<URI, Boolean>makeMap());
+    private final AtomicLong droppedEntries = new AtomicLong(0);
 
-    @AssistedInject
-    public HttpEventTapFlow(@EventTap HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
-            @Assisted("eventType") String eventType, @Assisted("flowId") String flowId, @Assisted Set<URI> taps,
-            @Assisted Observer observer)
+    public HttpEventTapFlow(HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
+            String eventType, String flowId, Set<URI> taps, int retryCount, Duration retryDelay, Observer observer)
     {
         this.httpClient = checkNotNull(httpClient, "httpClient is null");
         this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
         this.eventType = checkNotNull(eventType, "eventType is null");
         this.flowId = checkNotNull(flowId, "flowId is null");
         this.observer = checkNotNull(observer, "observer is null");
+        this.retryCount = retryCount;
+        if (this.retryCount > 0) {
+            this.retryDelayMillis = (long) checkNotNull(retryDelay, "retryDelay is null").toMillis();
+        }
+        else {
+            this.retryDelayMillis = 0;
+        }
         setTaps(taps);
-    }
-
-    @AssistedInject
-    public HttpEventTapFlow(@EventTap HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
-            @Assisted("eventType") String eventType, @Assisted("flowId") String flowId,
-            @Assisted Set<URI> taps)
-    {
-        this(httpClient, eventsCodec, eventType, flowId, taps, NULL_OBSERVER);
     }
 
     @Override
     public void processBatch(List<Event> entries)
     {
-        try {
-            sendEvents(entries);
+        List<URI> taps = null;
+
+        for (int i = 0; i <= retryCount; ++i) {
+            taps = this.taps.get();
+            if (sendEvents(taps, entries)) {
+                return;
+            }
+            if (retryDelayMillis > 0) {
+                try {
+                    sleep(retryDelayMillis);
+                }
+                catch (InterruptedException ignored) {
+                    // Give up on this batch
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
         }
-        catch (Exception ignored) {
-            // already logged
-        }
+
+        // The events were not sent, track them.
+        // NOTE: Since attempts to all destinations failed, it doesn't matter which
+        //       destination the failure is assigned to. Just pick a random one.
+        onRecordsLost(taps.get(RANDOM.nextInt(taps.size())), entries.size());
+    }
+
+    @Override
+    public void notifyEntriesDropped(int count)
+    {
+        droppedEntries.getAndAdd(count);
     }
 
     @Override
@@ -95,46 +130,131 @@ class HttpEventTapFlow implements EventTapFlow
     {
         checkNotNull(taps, "taps is null");
         checkArgument(!taps.isEmpty(), "taps is empty");
-        this.taps.set(ImmutableList.copyOf(taps));
+
+        List<URI> existingTaps = this.taps.getAndSet(ImmutableList.copyOf(taps));
+
+        for (URI tap : taps) {
+            if (!existingTaps.contains(tap)) {
+                unestablishedTaps.add(tap);
+            }
+        }
     }
 
-    private void sendEvents(final List<Event> entries)
+    private boolean sendEvents(List<URI> taps, List<Event> entries)
+    {
+        Iterable<URI> randomizedTaps;
+
+        if (taps.size() > 1) {
+            int startPosition = RANDOM.nextInt(taps.size());
+            randomizedTaps = Iterables.concat(taps.subList(startPosition, taps.size()), taps.subList(0, startPosition));
+        }
+        else {
+            randomizedTaps = taps;
+        }
+
+        for (URI tap : randomizedTaps) {
+            try {
+                if (sendEvents(tap, entries)) {
+                    return true;
+                }
+            }
+            catch (Exception ex) {
+                // failed, try the next one (if any).
+                log.warn(ex, "Error posting %s events to flow %s at %s ", eventType, flowId, tap);
+            }
+        }
+        return false;
+    }
+
+    private boolean sendEvents(final URI uri, final List<Event> entries)
             throws Exception
     {
-        List<URI> taps = this.taps.get();
-        final URI uri = taps.get(RANDOM.nextInt(taps.size()));
-
-        Request request = RequestBuilder.preparePost()
+        RequestBuilder requestBuilder = RequestBuilder.preparePost()
                 .setUri(uri)
                 .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
-                .setBodyGenerator(jsonBodyGenerator(eventsCodec, entries))
-                .build();
+                .setBodyGenerator(jsonBodyGenerator(eventsCodec, entries));
 
-        httpClient.execute(request, new ResponseHandler<Void, Exception>()
+        final boolean firstBatch = unestablishedTaps.remove(uri);
+        if (firstBatch) {
+            requestBuilder.addHeader(QOS_HEADER, QOS_HEADER_FIRST_BATCH);
+        }
+
+        // If there are multiple taps sharing the same flow that cares about
+        // dropped messages, they must coordinate what events were received
+        // anyway, so only one (the first) needs to get the dropped count.
+        final long count = droppedEntries.getAndSet(0);
+        if (count > 0) {
+            requestBuilder.addHeader(QOS_HEADER, format(QOS_HEADER_DROPPED_ENTRIES, count));
+        }
+
+        return httpClient.execute(requestBuilder.build(), new ResponseHandler<Boolean, Exception>()
         {
             @Override
             public Exception handleException(Request request, Exception exception)
             {
-                log.warn(exception, "Error posting %s events to flow %s at %s ", eventType, flowId, uri);
-                observer.onRecordsLost(uri, entries.size());
+                restoreStateAfterError();
                 return exception;
             }
 
             @Override
-            public Void handle(Request request, Response response)
-                    throws Exception
+            public Boolean handle(Request request, Response response)
             {
-                if (response.getStatusCode() / 100 != 2) {
-                    log.warn("Error posting %s events to flow %s at %s: got response %s %s ", eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
-                    observer.onRecordsLost(uri, entries.size());
+                if (fromStatusCode(response.getStatusCode()).getFamily() == SUCCESSFUL) {
+                    log.debug("Posted %s events", entries.size());
+                    onRecordsSent(uri, entries.size());
+                    return true;
+                }
+                else if (fromStatusCode(response.getStatusCode()).getFamily() == CLIENT_ERROR) {
+                    // Retrying will only result in the same error, give up completely.
+                    log.error("Rejected %s events by flow %s at %s: response %d %s", eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
+                    restoreStateAfterError();
+                    onRecordsRejected(uri, entries.size());
+                    return true;
                 }
                 else {
-                    log.debug("Posted %s events", entries.size());
-                    observer.onRecordsSent(uri, entries.size());
+                    log.warn("Error posting %s events to flow %s at %s: got response %s %s",
+                            eventType, flowId, uri, response.getStatusCode(), response.getStatusMessage());
+                    restoreStateAfterError();
+                    return false;
                 }
-                return null;
+            }
+
+            private void restoreStateAfterError()
+            {
+                if (firstBatch) {
+                    unestablishedTaps.add(uri);
+                }
+                droppedEntries.getAndAdd(count);
             }
         });
     }
 
+    private void onRecordsSent(URI tap, int eventCount)
+    {
+        observer.onRecordsSent(tap, eventCount);
+    }
+
+    private void onRecordsLost(URI tap, int eventCount)
+    {
+        droppedEntries.getAndAdd(eventCount);
+        observer.onRecordsLost(tap, eventCount);
+    }
+
+    private void onRecordsRejected(URI tap, int eventCount)
+    {
+        droppedEntries.getAndAdd(eventCount);
+        observer.onRecordsLost(tap, eventCount);
+    }
+
+    @VisibleForTesting
+    String getEventType()
+    {
+        return eventType;
+    }
+
+    @VisibleForTesting
+    String getFlowId()
+    {
+        return flowId;
+    }
 }

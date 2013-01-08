@@ -1087,6 +1087,7 @@ public class TestEventTapWriter
     {
         private Set<URI> taps;
         private List<Event> events;
+        private long droppedEntries = 0;
 
         public MockEventTapFlow(Set<URI> taps)
         {
@@ -1112,9 +1113,20 @@ public class TestEventTapWriter
             events.addAll(entries);
         }
 
+        @Override
+        public void notifyEntriesDropped(int count)
+        {
+            droppedEntries += count;
+        }
+
         public List<Event> getEvents()
         {
             return ImmutableList.copyOf(events);
+        }
+
+        public long getDroppedEntries()
+        {
+            return droppedEntries;
         }
     }
 

@@ -145,8 +145,8 @@ class HttpEventTapFlow implements EventTapFlow
         Iterable<URI> randomizedTaps;
 
         if (taps.size() > 1) {
-            int startUriPos = RANDOM.nextInt(taps.size());
-            randomizedTaps = Iterables.concat(taps.subList(startUriPos, taps.size()), taps.subList(0, startUriPos));
+            int startPosition = RANDOM.nextInt(taps.size());
+            randomizedTaps = Iterables.concat(taps.subList(startPosition, taps.size()), taps.subList(0, startPosition));
         }
         else {
             randomizedTaps = taps;

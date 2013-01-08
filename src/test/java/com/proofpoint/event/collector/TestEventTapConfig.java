@@ -26,15 +26,21 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.proofpoint.experimental.testing.ValidationAssertions.assertFailsValidation;
+import static com.proofpoint.experimental.testing.ValidationAssertions.assertValidates;
 
 public class TestEventTapConfig
 {
     @Test
     public void testDefaults()
     {
-        ConfigAssertions.assertRecordedDefaults(ConfigAssertions.recordDefaults(EventTapConfig.class)
+        @SuppressWarnings("deprecation")
+        EventTapConfig recordedDefaults = ConfigAssertions.recordDefaults(EventTapConfig.class)
                 .setEventTapThreads(20)
-                .setEventTapRefreshDuration(new Duration(10, TimeUnit.SECONDS)));
+                .setEventTapRefreshDuration(new Duration(10, TimeUnit.SECONDS))
+                .setEventTapQosRetryCount(10)
+                .setEventTapQosRetryDelay(new Duration(30, TimeUnit.SECONDS));
+
+        ConfigAssertions.assertRecordedDefaults(recordedDefaults);
     }
 
     @Test
@@ -43,24 +49,37 @@ public class TestEventTapConfig
         Map<String, String> properties = new ImmutableMap.Builder<String, String>()
                 .put("collector.event-tap.threads", "3")
                 .put("collector.event-tap.refresh", "30m")
+                .put("collector.event-tap.qos-retry-count", "17")
+                .put("collector.event-tap.qos-retry-delay", "1h")
                 .build();
 
+        @SuppressWarnings("deprecation")
         EventTapConfig expected = new EventTapConfig()
                 .setEventTapThreads(3)
+                .setEventTapQosRetryDelay(new Duration(1, TimeUnit.HOURS))
+                .setEventTapQosRetryCount(17)
                 .setEventTapRefreshDuration(new Duration(30, TimeUnit.MINUTES));
 
         ConfigAssertions.assertFullMapping(properties, expected);
     }
 
     @Test
-    public void testEventTapThreadsValidation()
+    public void testValidation()
     {
-        assertFailsValidation(new EventTapConfig().setEventTapThreads(0), "eventTapThreads", "must be greater than or equal to 1", Min.class);
-    }
+        @SuppressWarnings("deprecation")
+        EventTapConfig config = new EventTapConfig()
+                .setEventTapThreads(0)
+                .setEventTapRefreshDuration(null)
+                .setEventTapQosRetryCount(-1)
+                .setEventTapQosRetryDelay(null);
 
-    @Test
-    void testEventTapRefreshDurationValidation()
-    {
-        assertFailsValidation(new EventTapConfig().setEventTapRefreshDuration(null), "eventTapRefreshDuration", "may not be null", NotNull.class);
+        assertFailsValidation(config, "eventTapThreads", "must be greater than or equal to 1", Min.class);
+        assertFailsValidation(config, "eventTapRefreshDuration", "may not be null", NotNull.class);
+        assertFailsValidation(config, "eventTapQosRetryCount", "must be greater than or equal to 0", Min.class);
+        assertFailsValidation(config, "eventTapQosRetryDelay", "may not be null", NotNull.class);
+        assertValidates(new EventTapConfig()
+                .setEventTapRefreshDuration(new Duration(1, TimeUnit.SECONDS))
+                .setEventTapQosRetryCount(0)
+                .setEventTapQosRetryDelay(new Duration(1, TimeUnit.DAYS)));
     }
 }

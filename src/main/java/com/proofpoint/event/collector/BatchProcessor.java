@@ -41,6 +41,8 @@ public interface BatchProcessor<T>
     interface BatchHandler<T>
     {
         void processBatch(List<T> entries);
+
+        void notifyEntriesDropped(int count);
     }
 
     interface Observer

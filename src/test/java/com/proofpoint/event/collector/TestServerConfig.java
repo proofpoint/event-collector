@@ -22,6 +22,8 @@ import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.units.Duration;
 import org.testng.annotations.Test;
 
+import javax.validation.constraints.AssertTrue;
+import javax.validation.constraints.Min;
 import javax.validation.constraints.Pattern;
 import java.io.File;
 import java.util.Map;
@@ -48,7 +50,9 @@ public class TestServerConfig
                 .setS3DataLocation(null)
                 .setS3MetadataLocation(null)
                 .setCombinerEnabled(false)
-                .setCombinerMaxDaysBack(14)
+                .setCombinerStartDaysAgo(14)
+                .setCombinerEndDaysAgo(-1)
+                .setCombinerStartEndDaysAgoDisabled(false)
                 .setRetryPeriod(new Duration(5, TimeUnit.MINUTES))
                 .setRetryDelay(new Duration(0, TimeUnit.MINUTES))
         );
@@ -70,7 +74,9 @@ public class TestServerConfig
                 .put("collector.s3-data-location", "s3://example-data/")
                 .put("collector.s3-metadata-location", "s3://example-metadata/")
                 .put("collector.combiner.enabled", "true")
-                .put("collector.combiner.max-days-back", "10")
+                .put("collector.combiner.days-ago-to-start", "10")
+                .put("collector.combiner.days-ago-to-end", "1")
+                .put("collector.combiner.days-ago-disabled", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
                 .build();
@@ -88,11 +94,66 @@ public class TestServerConfig
                 .setS3DataLocation("s3://example-data/")
                 .setS3MetadataLocation("s3://example-metadata/")
                 .setCombinerEnabled(true)
-                .setCombinerMaxDaysBack(10)
+                .setCombinerStartDaysAgo(10)
+                .setCombinerEndDaysAgo(1)
+                .setCombinerStartEndDaysAgoDisabled(true)
                 .setRetryPeriod(new Duration(10, TimeUnit.MINUTES))
                 .setRetryDelay(new Duration(4, TimeUnit.MINUTES));
 
         ConfigAssertions.assertFullMapping(properties, expected);
+    }
+
+    @Test
+    public void testDeprecatedProperties()
+    {
+        Map<String, String> currentProperties = new ImmutableMap.Builder<String, String>()
+                .put("collector.accepted-event-types", "Foo,Bar")
+                .put("collector.max-buffer-time", "2h")
+                .put("collector.target-file-size", "768MB")
+                .put("collector.local-staging-directory", "testdir")
+                .put("collector.combiner.metadata-directory", "test-combiner")
+                .put("collector.max-upload-threads", "42")
+                .put("collector.aws-access-key", "my-access-key")
+                .put("collector.aws-secret-key", "my-secret-key")
+                .put("collector.s3-staging-location", "s3://example-staging/")
+                .put("collector.s3-data-location", "s3://example-data/")
+                .put("collector.s3-metadata-location", "s3://example-metadata/")
+                .put("collector.combiner.enabled", "true")
+                .put("collector.combiner.days-ago-to-start", "10")
+                .put("collector.combiner.days-ago-to-end", "1")
+                .put("collector.combiner.days-ago-disabled", "true")
+                .put("collector.retry-period", "10m")
+                .put("collector.retry-delay", "4m")
+                .build();
+
+        Map<String, String> oldProperties = new ImmutableMap.Builder<String, String>()
+                .put("collector.accepted-event-types", "Foo,Bar")
+                .put("collector.max-buffer-time", "2h")
+                .put("collector.target-file-size", "768MB")
+                .put("collector.local-staging-directory", "testdir")
+                .put("collector.combiner.metadata-directory", "test-combiner")
+                .put("collector.max-upload-threads", "42")
+                .put("collector.aws-access-key", "my-access-key")
+                .put("collector.aws-secret-key", "my-secret-key")
+                .put("collector.s3-staging-location", "s3://example-staging/")
+                .put("collector.s3-data-location", "s3://example-data/")
+                .put("collector.s3-metadata-location", "s3://example-metadata/")
+                .put("collector.combiner.enabled", "true")
+                .put("collector.combiner.max-days-back", "10")
+                .put("collector.combiner.days-ago-to-end", "1")
+                .put("collector.combiner.days-ago-disabled", "true")
+                .put("collector.retry-period", "10m")
+                .put("collector.retry-delay", "4m")
+                .build();
+
+        ConfigAssertions.assertDeprecatedEquivalence(ServerConfig.class, currentProperties, oldProperties);
+    }
+
+    @Test
+    public void testValidations()
+    {
+        ServerConfig bad = new ServerConfig();
+        assertFailsValidation(bad.setCombinerStartDaysAgo(1).setCombinerEndDaysAgo(1), "combinerStartEndDaysSane", "must be true", AssertTrue.class);
     }
 
     @Test

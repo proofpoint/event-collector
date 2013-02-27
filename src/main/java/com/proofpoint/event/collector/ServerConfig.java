@@ -20,9 +20,11 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableSet;
 import com.proofpoint.configuration.Config;
 import com.proofpoint.configuration.ConfigDescription;
+import com.proofpoint.configuration.LegacyConfig;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.units.Duration;
 
+import javax.validation.constraints.AssertTrue;
 import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
@@ -46,7 +48,9 @@ public class ServerConfig
     private String s3DataLocation;
     private String s3MetadataLocation;
     private boolean combinerEnabled = false;
-    private int combinerMaxDaysBack = 14;
+    private boolean combinerStartEndDaysAgoDisabled = false;
+    private int combinerStartDaysAgo = 14;
+    private int combinerEndDaysAgo = -1;
     private Set<String> acceptedEventTypes = ImmutableSet.of();
     private Duration retryPeriod = new Duration(5, TimeUnit.MINUTES);
     private Duration retryDelay = new Duration(0, TimeUnit.MINUTES);
@@ -232,18 +236,60 @@ public class ServerConfig
         return combinerEnabled;
     }
 
-    @Config("collector.combiner.max-days-back")
-    @ConfigDescription("maximum number of days back from today to combine data")
-    public ServerConfig setCombinerMaxDaysBack(int combinerMaxDaysBack)
+    @Config("collector.combiner.days-ago-to-start")
+    @ConfigDescription("Combiner will combine data greater than or equal to X days ago")
+    public ServerConfig setCombinerStartDaysAgo(int combinerStartDaysAgo)
     {
-        this.combinerMaxDaysBack = combinerMaxDaysBack;
+        this.combinerStartDaysAgo = combinerStartDaysAgo;
         return this;
     }
 
-    @Min(0)
-    public int getCombinerMaxDaysBack()
+    public int getCombinerStartDaysAgo()
     {
-        return combinerMaxDaysBack;
+        return combinerStartDaysAgo;
+    }
+
+    @Deprecated
+    @LegacyConfig(value = "collector.combiner.max-days-back", replacedBy = "collector.combiner.days-ago-to-start")
+    public ServerConfig setCombinerMaxDaysBack(int combinerMaxDaysBack)
+    {
+        return setCombinerStartDaysAgo(combinerMaxDaysBack);
+    }
+
+    @Config("collector.combiner.days-ago-to-end")
+    @ConfigDescription("Combiner will combine data before from less than X days ago")
+    public ServerConfig setCombinerEndDaysAgo(int combinerEndDaysAgo)
+    {
+        this.combinerEndDaysAgo = combinerEndDaysAgo;
+        return this;
+    }
+
+    public int getCombinerEndDaysAgo()
+    {
+        return combinerEndDaysAgo;
+    }
+
+    @AssertTrue
+    public boolean isCombinerStartEndDaysSane()
+    {
+        if (combinerStartDaysAgo > combinerEndDaysAgo) {
+            return true;
+        }
+
+        return false;
+    }
+
+    @Config("collector.combiner.days-ago-disabled")
+    @ConfigDescription("Disable combiner filtering by the days-ago start and end arguments")
+    public ServerConfig setCombinerStartEndDaysAgoDisabled(boolean combinerStartEndDaysAgoDisabled)
+    {
+        this.combinerStartEndDaysAgoDisabled = combinerStartEndDaysAgoDisabled;
+        return this;
+    }
+
+    public boolean isCombinerStartEndDaysAgoDisabled()
+    {
+        return this.combinerStartEndDaysAgoDisabled;
     }
 
     @Config("collector.retry-period")

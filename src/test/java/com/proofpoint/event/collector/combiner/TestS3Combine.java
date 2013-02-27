@@ -107,7 +107,8 @@ public class TestS3Combine
                 stagingBaseUri,
                 targetBaseUri,
                 new DataSize(512, DataSize.Unit.MEGABYTE),
-                14);
+                14,
+                0);
     }
 
     @Test

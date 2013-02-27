@@ -47,6 +47,7 @@ public class ServerConfig
     private String s3MetadataLocation;
     private boolean combinerEnabled = false;
     private int combinerMaxDaysBack = 14;
+    private int combinerMinDaysBack = 0;
     private Set<String> acceptedEventTypes = ImmutableSet.of();
     private Duration retryPeriod = new Duration(5, TimeUnit.MINUTES);
     private Duration retryDelay = new Duration(0, TimeUnit.MINUTES);
@@ -233,7 +234,7 @@ public class ServerConfig
     }
 
     @Config("collector.combiner.max-days-back")
-    @ConfigDescription("maximum number of days back from today to combine data")
+    @ConfigDescription("maximum number of days back from today to combine data (inclusive)")
     public ServerConfig setCombinerMaxDaysBack(int combinerMaxDaysBack)
     {
         this.combinerMaxDaysBack = combinerMaxDaysBack;
@@ -244,6 +245,20 @@ public class ServerConfig
     public int getCombinerMaxDaysBack()
     {
         return combinerMaxDaysBack;
+    }
+
+    @Config("collector.combiner.min-days-back")
+    @ConfigDescription("minimum number of days back from today to combine data (inclusive)")
+    public ServerConfig setCombinerMinDaysBack(int combinerMinDaysBack)
+    {
+        this.combinerMinDaysBack = combinerMinDaysBack;
+        return this;
+    }
+
+    @Min(0)
+    public int getCombinerMinDaysBack()
+    {
+        return combinerMinDaysBack;
     }
 
     @Config("collector.retry-period")

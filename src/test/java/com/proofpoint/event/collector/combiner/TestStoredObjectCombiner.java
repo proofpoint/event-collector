@@ -43,6 +43,7 @@ public class TestStoredObjectCombiner
     private static final DateTimeFormatter DATE_FORMAT = ISODateTimeFormat.date().withZone(DateTimeZone.UTC);
     private static final DateTimeFormatter HOUR_FORMAT = ISODateTimeFormat.hour().withZone(DateTimeZone.UTC);
     private static final int maxDaysBack = 14;
+    private static final int minDaysBack = 0;
 
     @Test
     public void testSmall()
@@ -56,7 +57,7 @@ public class TestStoredObjectCombiner
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack, minDaysBack);
 
         // create initial set of objects
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), UUID.randomUUID().toString(), 1000, 0);
@@ -109,7 +110,7 @@ public class TestStoredObjectCombiner
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack, minDaysBack);
 
         // create initial set of objects
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), randomUUID(), megabytes(400), 0);
@@ -180,7 +181,7 @@ public class TestStoredObjectCombiner
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack, minDaysBack);
 
         // create initial set of objects
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), UUID.randomUUID().toString(), 1000, 0);
@@ -234,7 +235,7 @@ public class TestStoredObjectCombiner
         storageSystem.addObjects(group);
 
         // combine
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack);
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, maxDaysBack, minDaysBack);
         combiner.combineAllObjects();
 
         // validate manifest

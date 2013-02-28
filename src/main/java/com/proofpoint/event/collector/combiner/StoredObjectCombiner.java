@@ -27,10 +27,10 @@ import com.proofpoint.event.collector.ServerConfig;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.log.Logger;
 import com.proofpoint.node.NodeInfo;
-import org.joda.time.format.ISODateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.DateMidnight;
 import org.joda.time.DateTimeZone;
+import org.joda.time.format.DateTimeFormatter;
+import org.joda.time.format.ISODateTimeFormat;
 import org.weakref.jmx.Managed;
 
 import javax.inject.Inject;
@@ -69,8 +69,8 @@ public class StoredObjectCombiner
     private final URI targetBaseUri;
     private final long targetFileSize;
     private final boolean ignoreErrors;
-    private final int maxDaysBack;
-    private final int minDaysBack;
+    private final int startDaysAgo;
+    private final int endDaysAgo;
 
     @Inject
     public StoredObjectCombiner(
@@ -85,6 +85,7 @@ public class StoredObjectCombiner
         Preconditions.checkNotNull(storageSystem, "storageSystem is null");
         Preconditions.checkNotNull(eventClient, "eventClient is null");
         Preconditions.checkNotNull(config, "config is null");
+        Preconditions.checkArgument(config.isCombinerStartEndDaysSane(), "combinerStartDaysAgo must be greater than endDaysAgo");
 
         this.nodeId = nodeInfo.getNodeId();
         this.metadataStore = metadataStore;
@@ -94,8 +95,8 @@ public class StoredObjectCombiner
         this.targetBaseUri = URI.create(config.getS3DataLocation());
         this.targetFileSize = config.getTargetFileSize().toBytes();
         this.ignoreErrors = true;
-        this.maxDaysBack = config.getCombinerMaxDaysBack();
-        this.minDaysBack = config.getCombinerMinDaysBack();
+        this.startDaysAgo = config.getCombinerStartDaysAgo();
+        this.endDaysAgo = config.getCombinerEndDaysAgo();
     }
 
     public StoredObjectCombiner(
@@ -106,8 +107,8 @@ public class StoredObjectCombiner
             URI stagingBaseUri,
             URI targetBaseUri,
             DataSize targetFileSize,
-            int maxDaysBack,
-            int minDaysBack)
+            int startDaysAgo,
+            int endDaysAgo)
     {
         Preconditions.checkNotNull(nodeId, "nodeId is null");
         Preconditions.checkNotNull(metadataStore, "metadataStore is null");
@@ -116,6 +117,7 @@ public class StoredObjectCombiner
         Preconditions.checkNotNull(stagingBaseUri, "stagingBaseUri is null");
         Preconditions.checkNotNull(targetBaseUri, "targetBaseUri is null");
         Preconditions.checkNotNull(targetFileSize, "targetFileSize is null");
+        Preconditions.checkArgument(startDaysAgo > endDaysAgo, "startDaysAgo must be greater than endDaysAgo");
 
         this.nodeId = nodeId;
         this.metadataStore = metadataStore;
@@ -125,8 +127,8 @@ public class StoredObjectCombiner
         this.targetBaseUri = targetBaseUri;
         this.targetFileSize = targetFileSize.toBytes();
         this.ignoreErrors = false;
-        this.maxDaysBack = maxDaysBack;
-        this.minDaysBack = minDaysBack;
+        this.startDaysAgo = startDaysAgo;
+        this.endDaysAgo = endDaysAgo;
     }
 
     @Managed
@@ -141,17 +143,14 @@ public class StoredObjectCombiner
      */
     public void combineAllObjects()
     {
-        String minThresholdDate = DATE_FORMAT.print(new DateMidnight().minusDays(minDaysBack));
-        String maxThresholdDate = DATE_FORMAT.print(new DateMidnight().minusDays(maxDaysBack));
+        String startDate = DATE_FORMAT.print(new DateMidnight().minusDays(startDaysAgo));
+        String endDate = DATE_FORMAT.print(new DateMidnight().minusDays(endDaysAgo));
         log.info("starting combining objects");
         for (URI eventBaseUri : storageSystem.listDirectories(stagingBaseUri)) {
             String eventType = getS3FileName(eventBaseUri);
             for (URI timeSliceBaseUri : storageSystem.listDirectories(eventBaseUri)) {
                 String dateBucket = getS3FileName(timeSliceBaseUri);
-                if (minDaysBack > 0 && newerThanThreshold(dateBucket, minThresholdDate)) {
-                    continue;
-                }
-                if (olderThanThreshold(dateBucket, maxThresholdDate)) {
+                if (olderThanThreshold(dateBucket, startDate) || newerThanOrEqualToThreshold(dateBucket, endDate)) {
                     continue;
                 }
                 for (URI hourBaseUri : storageSystem.listDirectories(timeSliceBaseUri)) {
@@ -370,7 +369,8 @@ public class StoredObjectCombiner
         return dateBucket.compareTo(thresholdDate) < 0;
     }
 
-    private static boolean newerThanThreshold(String dateBucket, String thresholdDate) {
-        return dateBucket.compareTo(thresholdDate) > 0;
+    private static boolean newerThanOrEqualToThreshold(String dateBucket, String thresholdDate)
+    {
+        return dateBucket.compareTo(thresholdDate) >= 0;
     }
 }

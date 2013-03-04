@@ -69,6 +69,7 @@ public class StoredObjectCombiner
     private final URI targetBaseUri;
     private final long targetFileSize;
     private final boolean ignoreErrors;
+    private final boolean disableStartEndFiltering;
     private final int startDaysAgo;
     private final int endDaysAgo;
 
@@ -95,6 +96,7 @@ public class StoredObjectCombiner
         this.targetBaseUri = URI.create(config.getS3DataLocation());
         this.targetFileSize = config.getTargetFileSize().toBytes();
         this.ignoreErrors = true;
+        this.disableStartEndFiltering = config.isCombinerStartEndDaysAgoDisabled();
         this.startDaysAgo = config.getCombinerStartDaysAgo();
         this.endDaysAgo = config.getCombinerEndDaysAgo();
     }
@@ -129,6 +131,7 @@ public class StoredObjectCombiner
         this.ignoreErrors = false;
         this.startDaysAgo = startDaysAgo;
         this.endDaysAgo = endDaysAgo;
+        this.disableStartEndFiltering = false;
     }
 
     @Managed
@@ -150,8 +153,10 @@ public class StoredObjectCombiner
             String eventType = getS3FileName(eventBaseUri);
             for (URI timeSliceBaseUri : storageSystem.listDirectories(eventBaseUri)) {
                 String dateBucket = getS3FileName(timeSliceBaseUri);
-                if (olderThanThreshold(dateBucket, startDate) || newerThanOrEqualToThreshold(dateBucket, endDate)) {
-                    continue;
+                if (!disableStartEndFiltering) {
+                    if (olderThanThreshold(dateBucket, startDate) || newerThanOrEqualToThreshold(dateBucket, endDate)) {
+                        continue;
+                    }
                 }
                 for (URI hourBaseUri : storageSystem.listDirectories(timeSliceBaseUri)) {
                     log.info("combining staging bucket: %s", hourBaseUri);

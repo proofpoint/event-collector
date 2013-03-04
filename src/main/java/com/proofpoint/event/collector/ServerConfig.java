@@ -48,6 +48,7 @@ public class ServerConfig
     private String s3DataLocation;
     private String s3MetadataLocation;
     private boolean combinerEnabled = false;
+    private boolean combinerStartEndDaysAgoDisabled = false;
     private int combinerStartDaysAgo = 14;
     private int combinerEndDaysAgo = -1;
     private Set<String> acceptedEventTypes = ImmutableSet.of();
@@ -257,7 +258,8 @@ public class ServerConfig
 
     @Config("collector.combiner.days-ago-to-end")
     @ConfigDescription("Combiner will combine data before from less than X days ago")
-    public ServerConfig setCombinerEndDaysAgo(int combinerEndDaysAgo) {
+    public ServerConfig setCombinerEndDaysAgo(int combinerEndDaysAgo)
+    {
         this.combinerEndDaysAgo = combinerEndDaysAgo;
         return this;
     }
@@ -270,12 +272,24 @@ public class ServerConfig
     @AssertTrue
     public boolean isCombinerStartEndDaysSane()
     {
-        if(combinerStartDaysAgo > combinerEndDaysAgo)
-        {
+        if (combinerStartDaysAgo > combinerEndDaysAgo) {
             return true;
         }
 
         return false;
+    }
+
+    @Config("collector.combiner.days-ago-disabled")
+    @ConfigDescription("Disable combiner filtering by the days-ago start and end arguments")
+    public ServerConfig setCombinerStartEndDaysAgoDisabled(boolean combinerStartEndDaysAgoDisabled)
+    {
+        this.combinerStartEndDaysAgoDisabled = combinerStartEndDaysAgoDisabled;
+        return this;
+    }
+
+    public boolean isCombinerStartEndDaysAgoDisabled()
+    {
+        return this.combinerStartEndDaysAgoDisabled;
     }
 
     @Config("collector.retry-period")

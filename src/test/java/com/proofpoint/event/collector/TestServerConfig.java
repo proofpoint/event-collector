@@ -52,6 +52,7 @@ public class TestServerConfig
                 .setCombinerEnabled(false)
                 .setCombinerStartDaysAgo(14)
                 .setCombinerEndDaysAgo(-1)
+                .setCombinerStartEndDaysAgoDisabled(false)
                 .setRetryPeriod(new Duration(5, TimeUnit.MINUTES))
                 .setRetryDelay(new Duration(0, TimeUnit.MINUTES))
         );
@@ -75,6 +76,7 @@ public class TestServerConfig
                 .put("collector.combiner.enabled", "true")
                 .put("collector.combiner.days-ago-to-start", "10")
                 .put("collector.combiner.days-ago-to-end", "1")
+                .put("collector.combiner.days-ago-disabled", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
                 .build();
@@ -94,6 +96,7 @@ public class TestServerConfig
                 .setCombinerEnabled(true)
                 .setCombinerStartDaysAgo(10)
                 .setCombinerEndDaysAgo(1)
+                .setCombinerStartEndDaysAgoDisabled(true)
                 .setRetryPeriod(new Duration(10, TimeUnit.MINUTES))
                 .setRetryDelay(new Duration(4, TimeUnit.MINUTES));
 

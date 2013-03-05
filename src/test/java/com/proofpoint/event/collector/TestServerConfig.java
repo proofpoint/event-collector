@@ -121,6 +121,7 @@ public class TestServerConfig
                 .put("collector.combiner.enabled", "true")
                 .put("collector.combiner.days-ago-to-start", "10")
                 .put("collector.combiner.days-ago-to-end", "1")
+                .put("collector.combiner.days-ago-disabled", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
                 .build();
@@ -140,6 +141,7 @@ public class TestServerConfig
                 .put("collector.combiner.enabled", "true")
                 .put("collector.combiner.max-days-back", "10")
                 .put("collector.combiner.days-ago-to-end", "1")
+                .put("collector.combiner.days-ago-disabled", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
                 .build();

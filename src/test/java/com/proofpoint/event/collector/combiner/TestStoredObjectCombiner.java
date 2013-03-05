@@ -267,11 +267,11 @@ public class TestStoredObjectCombiner
         StoredObject objectB = new StoredObject(buildS3Location(allowedHourLocation, "b"), randomUUID(), 1000, 0);
         EventPartition allowedEventPartition = new EventPartition("event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
 
-        DateTime olderDate = new DateTime().plusDays(combineDaysAgoEnd + 1);
-        URI olderHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(olderDate), HOUR_FORMAT.print(olderDate));
-        StoredObject objectC = new StoredObject(buildS3Location(olderHourLocation, "c"), randomUUID(), 1000, 0);
-        StoredObject objectD = new StoredObject(buildS3Location(olderHourLocation, "d"), randomUUID(), 1000, 0);
-        EventPartition olderEventPartition = new EventPartition("event", DATE_FORMAT.print(olderDate), HOUR_FORMAT.print(olderDate));
+        DateTime newerDate = new DateTime().plusDays(combineDaysAgoEnd + 1);
+        URI newerHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(newerDate), HOUR_FORMAT.print(newerDate));
+        StoredObject objectC = new StoredObject(buildS3Location(newerHourLocation, "c"), randomUUID(), 1000, 0);
+        StoredObject objectD = new StoredObject(buildS3Location(newerHourLocation, "d"), randomUUID(), 1000, 0);
+        EventPartition newerEventPartition = new EventPartition("event", DATE_FORMAT.print(newerDate), HOUR_FORMAT.print(newerDate));
 
         // create single test group
         List<StoredObject> group = newArrayList(objectA, objectB, objectC, objectD);
@@ -290,7 +290,7 @@ public class TestStoredObjectCombiner
         assertEquals(combinedObjects.size(), 1);
         assertEquals(combinedObjects.get(0).getSourceParts(), newArrayList(objectA, objectB));
 
-        assertNull(metadataStore.getCombinedGroupManifest(olderEventPartition, "small"));
+        assertNull(metadataStore.getCombinedGroupManifest(newerEventPartition, "small"));
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class)

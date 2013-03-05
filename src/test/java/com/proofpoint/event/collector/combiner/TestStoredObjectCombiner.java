@@ -267,7 +267,7 @@ public class TestStoredObjectCombiner
         StoredObject objectB = new StoredObject(buildS3Location(allowedHourLocation, "b"), randomUUID(), 1000, 0);
         EventPartition allowedEventPartition = new EventPartition("event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
 
-        DateTime olderDate = new DateTime().plusDays(combineDaysAgoEnd + 2);
+        DateTime olderDate = new DateTime().plusDays(combineDaysAgoEnd + 1);
         URI olderHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(olderDate), HOUR_FORMAT.print(olderDate));
         StoredObject objectC = new StoredObject(buildS3Location(olderHourLocation, "c"), randomUUID(), 1000, 0);
         StoredObject objectD = new StoredObject(buildS3Location(olderHourLocation, "d"), randomUUID(), 1000, 0);

@@ -96,7 +96,7 @@ public class StoredObjectCombiner
         this.targetBaseUri = URI.create(config.getS3DataLocation());
         this.targetFileSize = config.getTargetFileSize().toBytes();
         this.ignoreErrors = true;
-        this.disableStartEndFiltering = config.isCombinerStartEndDaysAgoDisabled();
+        this.disableStartEndFiltering = config.isCombinerDateRangeLimitDisabled();
         this.startDaysAgo = config.getCombinerStartDaysAgo();
         this.endDaysAgo = config.getCombinerEndDaysAgo();
     }

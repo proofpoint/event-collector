@@ -23,7 +23,6 @@ import com.proofpoint.units.Duration;
 import org.testng.annotations.Test;
 
 import javax.validation.constraints.AssertTrue;
-import javax.validation.constraints.Min;
 import javax.validation.constraints.Pattern;
 import java.io.File;
 import java.util.Map;
@@ -52,7 +51,7 @@ public class TestServerConfig
                 .setCombinerEnabled(false)
                 .setCombinerStartDaysAgo(14)
                 .setCombinerEndDaysAgo(-1)
-                .setCombinerStartEndDaysAgoDisabled(false)
+                .setCombinerDateRangeLimitDisabled(false)
                 .setRetryPeriod(new Duration(5, TimeUnit.MINUTES))
                 .setRetryDelay(new Duration(0, TimeUnit.MINUTES))
         );
@@ -76,7 +75,7 @@ public class TestServerConfig
                 .put("collector.combiner.enabled", "true")
                 .put("collector.combiner.days-ago-to-start", "10")
                 .put("collector.combiner.days-ago-to-end", "1")
-                .put("collector.combiner.days-ago-disabled", "true")
+                .put("collector.combiner.disable-date-range-limit", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
                 .build();
@@ -96,7 +95,7 @@ public class TestServerConfig
                 .setCombinerEnabled(true)
                 .setCombinerStartDaysAgo(10)
                 .setCombinerEndDaysAgo(1)
-                .setCombinerStartEndDaysAgoDisabled(true)
+                .setCombinerDateRangeLimitDisabled(true)
                 .setRetryPeriod(new Duration(10, TimeUnit.MINUTES))
                 .setRetryDelay(new Duration(4, TimeUnit.MINUTES));
 
@@ -121,7 +120,7 @@ public class TestServerConfig
                 .put("collector.combiner.enabled", "true")
                 .put("collector.combiner.days-ago-to-start", "10")
                 .put("collector.combiner.days-ago-to-end", "1")
-                .put("collector.combiner.days-ago-disabled", "true")
+                .put("collector.combiner.disable-date-range-limit", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
                 .build();
@@ -141,7 +140,7 @@ public class TestServerConfig
                 .put("collector.combiner.enabled", "true")
                 .put("collector.combiner.max-days-back", "10")
                 .put("collector.combiner.days-ago-to-end", "1")
-                .put("collector.combiner.days-ago-disabled", "true")
+                .put("collector.combiner.disable-date-range-limit", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
                 .build();

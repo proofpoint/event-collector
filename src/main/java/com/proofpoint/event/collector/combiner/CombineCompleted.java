@@ -21,10 +21,16 @@ import com.proofpoint.event.client.EventType;
 @EventType("CombineCompleted")
 public class CombineCompleted
 {
-    @EventField
-    public String getDummy()
+    private final String groupId;
+
+    public CombineCompleted(String groupId)
     {
-        // events are required to have at least one field
-        return null;
+        this.groupId = groupId;
+    }
+
+    @EventField
+    public String getGroupId()
+    {
+        return groupId;
     }
 }

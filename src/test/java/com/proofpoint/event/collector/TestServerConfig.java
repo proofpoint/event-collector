@@ -81,7 +81,7 @@ public class TestServerConfig
                 .put("collector.combiner.disable-date-range-limit", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
-                .put("combiner.group-id", "someGroupId")
+                .put("collector.combiner.group-id", "someGroupId")
                 .build();
 
         ServerConfig expected = new ServerConfig()
@@ -128,7 +128,7 @@ public class TestServerConfig
                 .put("collector.combiner.disable-date-range-limit", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
-                .put("combiner.group-id", "someGroupId")
+                .put("collector.combiner.group-id", "someGroupId")
                 .build();
 
         Map<String, String> oldProperties = new ImmutableMap.Builder<String, String>()
@@ -149,7 +149,7 @@ public class TestServerConfig
                 .put("collector.combiner.disable-date-range-limit", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
-                .put("combiner.group-id", "someGroupId")
+                .put("collector.combiner.group-id", "someGroupId")
                 .build();
 
         ConfigAssertions.assertDeprecatedEquivalence(ServerConfig.class, currentProperties, oldProperties);

@@ -320,7 +320,7 @@ public class ServerConfig
         return retryDelay;
     }
 
-    @Config("combiner.group-id")
+    @Config("collector.combiner.group-id")
     @ConfigDescription("Group id for combiner installation")
     public ServerConfig setCombinerGroupId(String combinerGroupId)
     {

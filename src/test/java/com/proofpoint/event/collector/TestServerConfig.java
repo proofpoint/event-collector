@@ -162,14 +162,14 @@ public class TestServerConfig
         assertFailsValidation(new ServerConfig().setCombinerGroupId(null), "combinerGroupId", "may not be null", NotNull.class);
         assertFailsValidation(new ServerConfig().setCombinerGroupId(""), "combinerGroupId", "must be non-empty", Size.class);
 
-        ServerConfig expectedBaseline = new ServerConfig()
+        assertValidates(new ServerConfig()
                 .setLocalStagingDirectory(new File("testdir"))
                 .setAwsAccessKey("my-access-key")
                 .setAwsSecretKey("my-secret-key")
                 .setS3StagingLocation("s3://example-staging/")
                 .setS3DataLocation("s3://example-data/")
-                .setS3MetadataLocation("s3://example-metadata/");
-        assertValidates(expectedBaseline.setCombinerGroupId("someGroupId"));
+                .setS3MetadataLocation("s3://example-metadata/")
+                .setCombinerGroupId("someGroupId"));
     }
 
     @Test

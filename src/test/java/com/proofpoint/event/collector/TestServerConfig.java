@@ -23,7 +23,9 @@ import com.proofpoint.units.Duration;
 import org.testng.annotations.Test;
 
 import javax.validation.constraints.AssertTrue;
+import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Pattern;
+import javax.validation.constraints.Size;
 import java.io.File;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -54,6 +56,7 @@ public class TestServerConfig
                 .setCombinerDateRangeLimitDisabled(false)
                 .setRetryPeriod(new Duration(5, TimeUnit.MINUTES))
                 .setRetryDelay(new Duration(0, TimeUnit.MINUTES))
+                .setCombinerGroupId("default")
         );
     }
 
@@ -78,6 +81,7 @@ public class TestServerConfig
                 .put("collector.combiner.disable-date-range-limit", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
+                .put("collector.combiner.group-id", "someGroupId")
                 .build();
 
         ServerConfig expected = new ServerConfig()
@@ -97,7 +101,8 @@ public class TestServerConfig
                 .setCombinerEndDaysAgo(1)
                 .setCombinerDateRangeLimitDisabled(true)
                 .setRetryPeriod(new Duration(10, TimeUnit.MINUTES))
-                .setRetryDelay(new Duration(4, TimeUnit.MINUTES));
+                .setRetryDelay(new Duration(4, TimeUnit.MINUTES))
+                .setCombinerGroupId("someGroupId");
 
         ConfigAssertions.assertFullMapping(properties, expected);
     }
@@ -123,6 +128,7 @@ public class TestServerConfig
                 .put("collector.combiner.disable-date-range-limit", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
+                .put("collector.combiner.group-id", "someGroupId")
                 .build();
 
         Map<String, String> oldProperties = new ImmutableMap.Builder<String, String>()
@@ -143,6 +149,7 @@ public class TestServerConfig
                 .put("collector.combiner.disable-date-range-limit", "true")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
+                .put("collector.combiner.group-id", "someGroupId")
                 .build();
 
         ConfigAssertions.assertDeprecatedEquivalence(ServerConfig.class, currentProperties, oldProperties);
@@ -151,8 +158,18 @@ public class TestServerConfig
     @Test
     public void testValidations()
     {
-        ServerConfig bad = new ServerConfig();
-        assertFailsValidation(bad.setCombinerStartDaysAgo(1).setCombinerEndDaysAgo(1), "combinerStartEndDaysSane", "must be true", AssertTrue.class);
+        assertFailsValidation(new ServerConfig().setCombinerStartDaysAgo(1).setCombinerEndDaysAgo(1), "combinerStartEndDaysSane", "must be true", AssertTrue.class);
+        assertFailsValidation(new ServerConfig().setCombinerGroupId(null), "combinerGroupId", "may not be null", NotNull.class);
+        assertFailsValidation(new ServerConfig().setCombinerGroupId(""), "combinerGroupId", "must be non-empty", Size.class);
+
+        assertValidates(new ServerConfig()
+                .setLocalStagingDirectory(new File("testdir"))
+                .setAwsAccessKey("my-access-key")
+                .setAwsSecretKey("my-secret-key")
+                .setS3StagingLocation("s3://example-staging/")
+                .setS3DataLocation("s3://example-data/")
+                .setS3MetadataLocation("s3://example-metadata/")
+                .setCombinerGroupId("someGroupId"));
     }
 
     @Test

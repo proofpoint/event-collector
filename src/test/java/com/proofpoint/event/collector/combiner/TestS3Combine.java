@@ -108,7 +108,8 @@ public class TestS3Combine
                 targetBaseUri,
                 new DataSize(512, DataSize.Unit.MEGABYTE),
                 14,
-                0);
+                0,
+                "testGroup");
     }
 
     @Test

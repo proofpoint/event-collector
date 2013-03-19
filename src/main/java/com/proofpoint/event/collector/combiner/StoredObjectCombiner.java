@@ -72,6 +72,7 @@ public class StoredObjectCombiner
     private final boolean disableStartEndFiltering;
     private final int startDaysAgo;
     private final int endDaysAgo;
+    private final String groupId;
 
     @Inject
     public StoredObjectCombiner(
@@ -99,6 +100,7 @@ public class StoredObjectCombiner
         this.disableStartEndFiltering = config.isCombinerDateRangeLimitDisabled();
         this.startDaysAgo = config.getCombinerStartDaysAgo();
         this.endDaysAgo = config.getCombinerEndDaysAgo();
+        this.groupId = config.getCombinerGroupId();
     }
 
     public StoredObjectCombiner(
@@ -110,7 +112,8 @@ public class StoredObjectCombiner
             URI targetBaseUri,
             DataSize targetFileSize,
             int startDaysAgo,
-            int endDaysAgo)
+            int endDaysAgo,
+            String groupId)
     {
         Preconditions.checkNotNull(nodeId, "nodeId is null");
         Preconditions.checkNotNull(metadataStore, "metadataStore is null");
@@ -132,6 +135,7 @@ public class StoredObjectCombiner
         this.startDaysAgo = startDaysAgo;
         this.endDaysAgo = endDaysAgo;
         this.disableStartEndFiltering = false;
+        this.groupId = groupId;
     }
 
     @Managed
@@ -172,7 +176,7 @@ public class StoredObjectCombiner
             }
         }
         log.info("finished combining objects");
-        eventClient.post(new CombineCompleted());
+        eventClient.post(new CombineCompleted(groupId));
     }
 
     /**

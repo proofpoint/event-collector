@@ -22,7 +22,7 @@ import com.google.common.collect.Sets;
 import com.proofpoint.configuration.Config;
 import com.proofpoint.configuration.ConfigDescription;
 import com.proofpoint.configuration.LegacyConfig;
-import com.proofpoint.experimental.units.DataSize;
+import com.proofpoint.units.DataSize;
 import com.proofpoint.units.Duration;
 
 import javax.validation.constraints.AssertTrue;

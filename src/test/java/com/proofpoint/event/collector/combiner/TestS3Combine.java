@@ -34,7 +34,7 @@ import com.google.common.io.Files;
 import com.google.common.io.InputSupplier;
 import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
-import com.proofpoint.experimental.units.DataSize;
+import com.proofpoint.units.DataSize;
 import com.proofpoint.json.JsonCodec;
 import org.joda.time.DateMidnight;
 import org.joda.time.format.ISODateTimeFormat;

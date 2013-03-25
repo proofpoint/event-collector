@@ -20,7 +20,7 @@ import com.google.common.collect.MapMaker;
 import com.google.common.io.CountingOutputStream;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.event.collector.EventCounters.CounterState;
-import com.proofpoint.experimental.units.DataSize;
+import com.proofpoint.units.DataSize;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 import org.codehaus.jackson.JsonEncoding;

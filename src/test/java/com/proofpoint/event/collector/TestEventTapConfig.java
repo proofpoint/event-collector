@@ -25,8 +25,8 @@ import javax.validation.constraints.NotNull;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.proofpoint.experimental.testing.ValidationAssertions.assertFailsValidation;
-import static com.proofpoint.experimental.testing.ValidationAssertions.assertValidates;
+import static com.proofpoint.testing.ValidationAssertions.assertFailsValidation;
+import static com.proofpoint.testing.ValidationAssertions.assertValidates;
 
 public class TestEventTapConfig
 {

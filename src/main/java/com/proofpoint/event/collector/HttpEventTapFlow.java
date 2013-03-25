@@ -23,7 +23,6 @@ import com.google.common.collect.MapMaker;
 import com.google.common.collect.Sets;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
-import com.proofpoint.http.client.RequestBuilder;
 import com.proofpoint.http.client.Response;
 import com.proofpoint.http.client.ResponseHandler;
 import com.proofpoint.json.JsonCodec;
@@ -169,7 +168,7 @@ class HttpEventTapFlow implements EventTapFlow
     private boolean sendEvents(final URI uri, final List<Event> entries)
             throws Exception
     {
-        RequestBuilder requestBuilder = RequestBuilder.preparePost()
+        Request.Builder requestBuilder = Request.builder().preparePost()
                 .setUri(uri)
                 .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
                 .setBodyGenerator(jsonBodyGenerator(eventsCodec, entries));

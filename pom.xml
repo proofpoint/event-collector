@@ -12,7 +12,7 @@
     <parent>
         <groupId>com.proofpoint.platform</groupId>
         <artifactId>rest-server-base</artifactId>
-        <version>0.60</version>
+        <version>0.62</version>
     </parent>
 
     <licenses>
@@ -142,11 +142,6 @@
 
         <dependency>
             <groupId>com.proofpoint.platform</groupId>
-            <artifactId>experimental</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.proofpoint.platform</groupId>
             <artifactId>node</artifactId>
         </dependency>
 
@@ -158,6 +153,11 @@
         <dependency>
             <groupId>com.proofpoint.platform</groupId>
             <artifactId>event-experimental</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.proofpoint.platform</groupId>
+            <artifactId>jmx-http-experimental</artifactId>
         </dependency>
 
         <dependency>

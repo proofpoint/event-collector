@@ -18,7 +18,7 @@ package com.proofpoint.event.collector;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.proofpoint.configuration.testing.ConfigAssertions;
-import com.proofpoint.experimental.units.DataSize;
+import com.proofpoint.units.DataSize;
 import com.proofpoint.units.Duration;
 import org.testng.annotations.Test;
 
@@ -31,8 +31,8 @@ import java.io.File;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.proofpoint.experimental.testing.ValidationAssertions.assertFailsValidation;
-import static com.proofpoint.experimental.testing.ValidationAssertions.assertValidates;
+import static com.proofpoint.testing.ValidationAssertions.assertFailsValidation;
+import static com.proofpoint.testing.ValidationAssertions.assertValidates;
 
 public class TestServerConfig
 {

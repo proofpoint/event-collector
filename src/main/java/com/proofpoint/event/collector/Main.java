@@ -20,7 +20,6 @@ import com.proofpoint.bootstrap.Bootstrap;
 import com.proofpoint.discovery.client.Announcer;
 import com.proofpoint.discovery.client.DiscoveryModule;
 import com.proofpoint.event.client.JsonEventModule;
-import com.proofpoint.http.client.HttpClientModule;
 import com.proofpoint.http.server.HttpServerModule;
 import com.proofpoint.jaxrs.JaxrsModule;
 import com.proofpoint.jmx.JmxHttpModule;
@@ -50,8 +49,7 @@ public class Main
                 new JmxHttpRpcModule(),
                 new JsonEventModule(),
                 new MainModule(),
-                new EventTapModule(),
-                new HttpClientModule(EventTap.class));
+                new EventTapModule());
 
         try {
             Injector injector = app.strictConfig().initialize();

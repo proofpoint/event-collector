@@ -15,14 +15,14 @@
  */
 package com.proofpoint.event.collector;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.util.TokenBuffer;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.CheckedFuture;
 import com.google.common.util.concurrent.Futures;
 import com.proofpoint.event.client.EventClient;
 import com.proofpoint.event.client.EventSubmissionFailedException;
 import com.proofpoint.event.client.JsonEventSerializer;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.util.TokenBuffer;
 
 import javax.inject.Inject;
 import java.io.IOException;
@@ -102,7 +102,7 @@ public class LocalEventClient
             throws IOException
     {
         TokenBuffer tokenBuffer = new TokenBuffer(objectMapper);
-        eventSerializer.serialize(event, tokenBuffer);
+        eventSerializer.serialize(event, null, tokenBuffer);
         return objectMapper.readValue(tokenBuffer.asParser(), Event.class);
     }
 

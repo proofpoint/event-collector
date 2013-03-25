@@ -15,6 +15,10 @@
  */
 package com.proofpoint.event.collector;
 
+import com.fasterxml.jackson.core.JsonEncoding;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.util.MinimalPrettyPrinter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Function;
 import com.google.common.collect.MapMaker;
 import com.google.common.io.CountingOutputStream;
@@ -23,10 +27,6 @@ import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.units.DataSize;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
-import org.codehaus.jackson.JsonEncoding;
-import org.codehaus.jackson.JsonGenerator;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.util.MinimalPrettyPrinter;
 import org.iq80.snappy.SnappyOutputStream;
 
 import javax.annotation.Nullable;

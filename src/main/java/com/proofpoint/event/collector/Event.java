@@ -15,8 +15,8 @@
  */
 package com.proofpoint.event.collector;
 
-import org.codehaus.jackson.annotate.JsonCreator;
-import org.codehaus.jackson.annotate.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.joda.time.DateTime;
 
 import javax.annotation.concurrent.Immutable;
@@ -33,18 +33,23 @@ public class Event
     private final DateTime timestamp;
     private final Map<String, ?> data;
 
-    @JsonCreator
-    public Event(@JsonProperty("type") String type,
-            @JsonProperty("uuid") String uuid,
-            @JsonProperty("host") String host,
-            @JsonProperty("timestamp") DateTime timestamp,
-            @JsonProperty("data") Map<String, ?> data)
+    public Event(String type, String uuid, String host, DateTime timestamp, Map<String, ?> data)
     {
         this.type = type;
         this.uuid = uuid;
         this.host = host;
         this.timestamp = timestamp;
         this.data = data;
+    }
+
+    @JsonCreator
+    private static Event fromJson(@JsonProperty("type") String type,
+            @JsonProperty("uuid") String uuid,
+            @JsonProperty("host") String host,
+            @JsonProperty("timestamp") String timestamp,
+            @JsonProperty("data") Map<String, ?> data)
+    {
+        return new Event(type, uuid, host, DateTime.parse(timestamp), data);
     }
 
     @JsonProperty

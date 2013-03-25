@@ -15,6 +15,8 @@
  */
 package com.proofpoint.event.collector;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
@@ -25,8 +27,6 @@ import com.proofpoint.event.collector.stats.CollectorStats;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
-import org.codehaus.jackson.JsonParser;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.iq80.snappy.SnappyInputStream;
 
 import javax.annotation.PreDestroy;

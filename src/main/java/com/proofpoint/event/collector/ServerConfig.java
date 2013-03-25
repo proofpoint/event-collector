@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.proofpoint.configuration.Config;
 import com.proofpoint.configuration.ConfigDescription;
+import com.proofpoint.configuration.ConfigSecuritySensitive;
 import com.proofpoint.configuration.LegacyConfig;
 import com.proofpoint.units.DataSize;
 import com.proofpoint.units.Duration;
@@ -174,6 +175,7 @@ public class ServerConfig
     }
 
     @Config("collector.aws-secret-key")
+    @ConfigSecuritySensitive
     public ServerConfig setAwsSecretKey(String awsSecretKey)
     {
         this.awsSecretKey = awsSecretKey;

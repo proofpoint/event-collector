@@ -27,6 +27,7 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Ordering;
+import com.google.common.hash.Hashing;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 import com.google.common.io.CountingOutputStream;
@@ -56,6 +57,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static com.google.common.collect.Maps.newHashMap;
+import static com.google.common.collect.Maps.newHashMapWithExpectedSize;
 import static com.google.common.collect.Maps.newTreeMap;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3ObjectKey;
 import static com.proofpoint.event.collector.combiner.StoredObject.GET_LOCATION_FUNCTION;
@@ -225,7 +227,7 @@ public class TestS3Combine
         StoredObject combinedObject = storageSystem.getObjectDetails(target);
 
         InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
-        String sourceMD5 = encodeHexString(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
+        String sourceMD5 = encodeHexString(ByteStreams.hash(combinedInputs, Hashing.md5()).asBytes());
         if (!sourceMD5.equals(combinedObject.getETag())) {
             Assert.fail("broken");
         }
@@ -244,7 +246,7 @@ public class TestS3Combine
         combinedObject = storageSystem.getObjectDetails(target);
 
         combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
-        sourceMD5 = encodeHexString(ByteStreams.getDigest(combinedInputs, MessageDigest.getInstance("MD5")));
+        sourceMD5 = encodeHexString(ByteStreams.hash(combinedInputs, Hashing.md5()).asBytes());
         if (!sourceMD5.equals(combinedObject.getETag())) {
             Assert.fail("broken");
         }

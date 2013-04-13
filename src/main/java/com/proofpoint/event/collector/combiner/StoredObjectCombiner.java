@@ -15,6 +15,8 @@
  */
 package com.proofpoint.event.collector.combiner;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableList;
@@ -158,6 +160,36 @@ public class StoredObjectCombiner
     }
 
     /**
+     * Retrieve a list of URIs describing the partitions for each event type
+     * to be combined.
+     */
+    public List<String> listEventTypes()
+    {
+        return Lists.transform(
+                storageSystem.listDirectories(stagingBaseUri),
+                new Function<URI, String>()
+                {
+                    @Override
+                    public String apply(URI uri)
+                    {
+                        return getS3FileName(uri);
+                    }
+                });
+    }
+
+    /**
+     * Iterate over all event partitions for a given type, specified by the eventType
+     *
+     * @param eventType The type of event for which to combine.
+     */
+    public void combineObjects(String eventType)
+    {
+        combineObjects(buildS3Location(stagingBaseUri, eventType + "/"),
+                createPartitionForDate(getStartDate()),
+                createPartitionForDate(getEndDate()));
+    }
+
+    /**
      * Split staged objects into small and large groups based on size,
      * then call {@link #combineObjectGroup} to combine the group.
      * We need two groups because we want to perform server-side combines,
@@ -167,7 +199,8 @@ public class StoredObjectCombiner
      * @param baseURI base target filename
      * @param stagedObjects list of all staged objects in partition
      */
-    public void combineObjects(EventPartition eventPartition, URI baseURI, List<StoredObject> stagedObjects)
+    @VisibleForTesting
+    void combineObjects(EventPartition eventPartition, URI baseURI, List<StoredObject> stagedObjects)
     {
         List<StoredObject> smallFiles = Lists.newArrayListWithCapacity(stagedObjects.size());
         List<StoredObject> largeFiles = Lists.newArrayListWithCapacity(stagedObjects.size());

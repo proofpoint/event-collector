@@ -35,6 +35,7 @@ import static java.lang.String.format;
 import static java.util.Arrays.asList;
 import static org.joda.time.DateTimeZone.UTC;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 
@@ -314,6 +315,30 @@ public class TestStoredObjectCombiner
         new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, 1, 2, "testGroup");
     }
 
+    @Test
+    public void testCombineObjectsByEventType()
+    {
+        InMemoryEventClient eventClient = new InMemoryEventClient();
+        TestingStorageSystem storageSystem = new TestingStorageSystem();
+        TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
+        DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
+
+        DateTime allowedDate = DateTime.now(UTC).minusDays(combineDaysAgoStart);
+        String allowedDatePartition = DATE_FORMAT.print(allowedDate);
+        String allowedHourPartition = HOUR_FORMAT.print(allowedDate);
+        URI allowedEventAHourLocation = buildS3Location(stagingArea, "eventA", allowedDatePartition, allowedHourPartition);
+        StoredObject allowedEventA1 = new StoredObject(buildS3Location(allowedEventAHourLocation, "eventA1"), randomUUID(), 1000, 0);
+        StoredObject allowedEventA2 = new StoredObject(buildS3Location(allowedEventAHourLocation, "eventA2"), randomUUID(), 1000, 0);
+        EventPartition allowedEventAPartition = new EventPartition("eventA", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
+
+        storageSystem.addObjects(ImmutableList.of(allowedEventA1, allowedEventA2));
+        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, combineDaysAgoStart, combineDaysAgoEnd, "testGroup");
+        combiner.combineObjects("eventA");
+
+        checkCombinedEventGroup(metadataStore, allowedEventAPartition, "small", allowedEventA1, allowedEventA2);
+        checkEventsGenerated(eventClient, ImmutableList.of(new CombineCompleted("testGroup", "eventA")));
+    }
+
     private void checkCombinedEventGroup(CombineObjectMetadataStore metadataStore, EventPartition eventPartition, String size, StoredObject... events)
     {
         if (events.length == 0) {
@@ -322,6 +347,7 @@ public class TestStoredObjectCombiner
         else {
             // validate manifest
             CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(eventPartition, size);
+            assertNotNull(combinedGroup);
             assertGreaterThan(combinedGroup.getVersion(), 0L);
 
             // validate only objects newer than combineDaysAgoStart get processed

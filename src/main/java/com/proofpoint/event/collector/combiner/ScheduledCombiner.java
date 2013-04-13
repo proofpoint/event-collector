@@ -17,26 +17,30 @@ package com.proofpoint.event.collector.combiner;
 
 import com.proofpoint.event.collector.ServerConfig;
 import com.proofpoint.log.Logger;
-import com.proofpoint.units.Duration;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import javax.inject.Named;
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class ScheduledCombiner
 {
     private static final Logger log = Logger.get(ScheduledCombiner.class);
-
-    private static final Duration CHECK_DELAY = new Duration(10, TimeUnit.SECONDS);
+    private static final long PER_TYPE_CHECK_DELAY_MILLIS = SECONDS.toMillis(10);
+    private static final long CHECK_DELAY_MILLIS = MINUTES.toMillis(10);
 
     private final StoredObjectCombiner objectCombiner;
     private final ScheduledExecutorService executor;
+    private final Set<String> eventTypes;
     private final boolean enabled;
 
     @Inject
@@ -45,6 +49,8 @@ public class ScheduledCombiner
         this.objectCombiner = checkNotNull(objectCombiner, "objectCombiner is null");
         this.executor = checkNotNull(executorService, "executorService is null");
         this.enabled = checkNotNull(config, "config is null").isCombinerEnabled();
+
+        this.eventTypes = new HashSet<String>();
     }
 
     @PostConstruct
@@ -53,20 +59,20 @@ public class ScheduledCombiner
         if (!enabled) {
             return;
         }
-        Runnable combiner = new Runnable()
+
+        executor.scheduleAtFixedRate(new Runnable()
         {
             @Override
             public void run()
             {
                 try {
-                    objectCombiner.combineAllObjects();
+                    scheduleNewTypes();
                 }
                 catch (Exception e) {
-                    log.error(e, "combine failed");
+                    log.error(e, "checking for new types failed");
                 }
             }
-        };
-        executor.scheduleAtFixedRate(combiner, 0, (long) CHECK_DELAY.toMillis(), TimeUnit.MILLISECONDS);
+        }, 0, CHECK_DELAY_MILLIS, MILLISECONDS);
     }
 
     @PreDestroy
@@ -74,5 +80,30 @@ public class ScheduledCombiner
             throws IOException
     {
         executor.shutdown();
+    }
+
+    private void scheduleNewTypes()
+    {
+        for (final String eventType : objectCombiner.listEventTypes()) {
+            if (eventTypes.contains(eventType)) {
+                continue;
+            }
+
+            executor.scheduleWithFixedDelay(
+                    new Runnable()
+                    {
+                        @Override
+                        public void run()
+                        {
+                            try {
+                                objectCombiner.combineObjects(eventType);
+                            }
+                            catch (Exception e) {
+                                log.error(e, "combining objects of type %s failed", eventType);
+                            }
+                        }
+                    }, 0, PER_TYPE_CHECK_DELAY_MILLIS, MILLISECONDS);
+            eventTypes.add(eventType);
+        }
     }
 }

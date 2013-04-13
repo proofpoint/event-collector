@@ -213,7 +213,7 @@
         <dependency>
             <groupId>org.logicalshift</groupId>
             <artifactId>serial-executor-service</artifactId>
-            <version>1.1</version>
+            <version>1.2</version>
             <scope>test</scope>
         </dependency>
 

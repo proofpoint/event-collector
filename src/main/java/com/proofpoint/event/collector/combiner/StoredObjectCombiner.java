@@ -150,33 +150,11 @@ public class StoredObjectCombiner
      */
     public void combineAllObjects()
     {
-        String startDate = DATE_FORMAT.print(DateMidnight.now(UTC).minusDays(startDaysAgo));
-        String endDate = DATE_FORMAT.print(DateMidnight.now(UTC).minusDays(endDaysAgo));
-        log.info("starting combining objects");
-        for (URI eventBaseUri : storageSystem.listDirectories(stagingBaseUri)) {
-            String eventType = getS3FileName(eventBaseUri);
-            for (URI timeSliceBaseUri : storageSystem.listDirectories(eventBaseUri)) {
-                String dateBucket = getS3FileName(timeSliceBaseUri);
-                if (!disableStartEndFiltering) {
-                    if (olderThanThreshold(dateBucket, startDate) || newerThanOrEqualToThreshold(dateBucket, endDate)) {
-                        continue;
-                    }
-                }
-                for (URI hourBaseUri : storageSystem.listDirectories(timeSliceBaseUri)) {
-                    log.info("combining staging bucket: %s", hourBaseUri);
-                    String hour = getS3FileName(hourBaseUri);
-                    URI stagingArea = buildS3Location(timeSliceBaseUri, hour + "/");
-                    List<StoredObject> stagedObjects = storageSystem.listObjects(stagingArea);
-                    if (!stagedObjects.isEmpty()) {
-                        EventPartition eventPartition = new EventPartition(eventType, dateBucket, hour);
-                        URI targetObjectLocation = buildS3Location(targetBaseUri, eventType, dateBucket, hour);
-                        combineObjects(eventPartition, targetObjectLocation, stagedObjects);
-                    }
-                }
-            }
+        String startDate = createPartitionForDate(getStartDate());
+        String endDate = createPartitionForDate(getEndDate());
+        for (URI eventTypeBaseUri : storageSystem.listDirectories(stagingBaseUri)) {
+            combineObjects(eventTypeBaseUri, startDate, endDate);
         }
-        log.info("finished combining objects");
-        eventClient.post(new CombineCompleted(groupId));
     }
 
     /**
@@ -206,6 +184,41 @@ public class StoredObjectCombiner
         }
         combineObjectGroup(eventPartition, "small", baseURI, smallFiles);
         combineObjectGroup(eventPartition, "large", baseURI, largeFiles);
+    }
+
+    /**
+     * Combine objects of a single type that fall between two dates.
+     *
+     * @param eventTypeBaseUri The base URI containing all of the events of a single type to combine.
+     * @param startDate The earliest date of events to combine.
+     * @param endDate The latest date of events to combine.
+     */
+    private void combineObjects(URI eventTypeBaseUri, String startDate, String endDate)
+    {
+
+        String eventType = getS3FileName(eventTypeBaseUri);
+        log.info("starting combining objects of type %s", eventType);
+        for (URI timeSliceBaseUri : storageSystem.listDirectories(eventTypeBaseUri)) {
+            String dateBucket = getS3FileName(timeSliceBaseUri);
+            if (!disableStartEndFiltering) {
+                if (olderThanThreshold(dateBucket, startDate) || newerThanOrEqualToThreshold(dateBucket, endDate)) {
+                    continue;
+                }
+            }
+            for (URI hourBaseUri : storageSystem.listDirectories(timeSliceBaseUri)) {
+                log.info("combining staging bucket: %s", hourBaseUri);
+                String hour = getS3FileName(hourBaseUri);
+                URI stagingArea = buildS3Location(timeSliceBaseUri, hour + "/");
+                List<StoredObject> stagedObjects = storageSystem.listObjects(stagingArea);
+                if (!stagedObjects.isEmpty()) {
+                    EventPartition eventPartition = new EventPartition(eventType, dateBucket, hour);
+                    URI targetObjectLocation = buildS3Location(targetBaseUri, eventType, dateBucket, hour);
+                    combineObjects(eventPartition, targetObjectLocation, stagedObjects);
+                }
+            }
+        }
+        log.info("finished combining objects of type %s", eventType);
+        eventClient.post(new CombineCompleted(groupId, eventType));
     }
 
     /**
@@ -381,5 +394,20 @@ public class StoredObjectCombiner
     private static boolean newerThanOrEqualToThreshold(String dateBucket, String thresholdDate)
     {
         return dateBucket.compareTo(thresholdDate) >= 0;
+    }
+
+    private String createPartitionForDate(DateMidnight startDateMidnight)
+    {
+        return DATE_FORMAT.print(startDateMidnight);
+    }
+
+    private DateMidnight getEndDate()
+    {
+        return DateMidnight.now(UTC).minusDays(endDaysAgo);
+    }
+
+    private DateMidnight getStartDate()
+    {
+        return DateMidnight.now(UTC).minusDays(startDaysAgo);
     }
 }

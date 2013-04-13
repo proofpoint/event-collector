@@ -15,32 +15,19 @@
  */
 package com.proofpoint.event.collector.combiner;
 
-import com.proofpoint.event.client.EventField;
-import com.proofpoint.event.client.EventType;
+import org.testng.annotations.Test;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
-@EventType("CombineCompleted")
-public class CombineCompleted
+public class TestCombineCompleted
 {
-    private final String groupId;
-    private final String eventType;
-
-    public CombineCompleted(String groupId, String eventType)
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "groupId is null")
+    public void testConstructorNullGroupId()
     {
-        this.groupId = checkNotNull(groupId, "groupId is null");
-        this.eventType = checkNotNull(eventType, "eventType is null");
+        new CombineCompleted(null, "eventType");
     }
 
-    @EventField
-    public String getGroupId()
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventType is null")
+    public void testConstructorNullEventType()
     {
-        return groupId;
-    }
-
-    @EventField
-    public String getEventType()
-    {
-        return eventType;
+        new CombineCompleted("groupId", null);
     }
 }

@@ -31,6 +31,7 @@ import java.util.UUID;
 import static com.google.common.collect.Lists.newArrayList;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.testing.Assertions.assertGreaterThan;
+import static java.lang.String.format;
 import static java.util.Arrays.asList;
 import static org.joda.time.DateTimeZone.UTC;
 import static org.testng.Assert.assertEquals;
@@ -187,7 +188,7 @@ public class TestStoredObjectCombiner
         // create initial set of objects
         StoredObject objectA = new StoredObject(buildS3Location(hourLocation, "a"), UUID.randomUUID().toString(), 1000, 0);
         StoredObject objectB = new StoredObject(buildS3Location(hourLocation, "b"), UUID.randomUUID().toString(), 1000, 0);
-        List<StoredObject> smallGroup = newArrayList(objectA, objectB);
+        List<StoredObject> smallGroup = ImmutableList.of(objectA, objectB);
         storageSystem.addObjects(smallGroup);
 
         // combine initial set
@@ -209,7 +210,7 @@ public class TestStoredObjectCombiner
     }
 
     @Test
-    public void testComineDaysAgoStart()
+    public void testCombineDaysAgoStart()
             throws Exception
     {
         InMemoryEventClient eventClient = new InMemoryEventClient();
@@ -219,36 +220,37 @@ public class TestStoredObjectCombiner
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
 
         // create set of objects
-        DateTime allowedDate = DateTime.now(UTC).minusDays(2);
-        URI allowedHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
-        StoredObject objectA = new StoredObject(buildS3Location(allowedHourLocation, "a"), randomUUID(), 1000, 0);
-        StoredObject objectB = new StoredObject(buildS3Location(allowedHourLocation, "b"), randomUUID(), 1000, 0);
-        EventPartition allowedEventPartition = new EventPartition("event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
+        DateTime allowedDate = DateTime.now(UTC).minusDays(combineDaysAgoStart);
+        String allowedDatePartition = DATE_FORMAT.print(allowedDate);
+        String allowedHourPartition = HOUR_FORMAT.print(allowedDate);
+        URI allowedEventAHourLocation = buildS3Location(stagingArea, "eventA", allowedDatePartition, allowedHourPartition);
+        StoredObject allowedEventA1 = new StoredObject(buildS3Location(allowedEventAHourLocation, "allowedA1"), randomUUID(), 1000, 0);
+        StoredObject allowedEventA2 = new StoredObject(buildS3Location(allowedEventAHourLocation, "allowedA2"), randomUUID(), 1000, 0);
+        EventPartition allowedEventAPartition = new EventPartition("eventA", allowedDatePartition, allowedHourPartition);
+
+        URI allowedEventBHourLocation = buildS3Location(stagingArea, "eventB", allowedDatePartition, allowedHourPartition);
+        StoredObject allowedEventB1 = new StoredObject(buildS3Location(allowedEventBHourLocation, "allowedB1"), randomUUID(), 1000, 0);
+        StoredObject allowedEventB2 = new StoredObject(buildS3Location(allowedEventBHourLocation, "allowedB2"), randomUUID(), 1000, 0);
+        EventPartition allowedEventBPartition = new EventPartition("eventB", allowedDatePartition, allowedHourPartition);
 
         DateTime olderDate = DateTime.now(UTC).minusDays(combineDaysAgoStart + 2);
-        URI olderHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(olderDate), HOUR_FORMAT.print(olderDate));
-        StoredObject objectC = new StoredObject(buildS3Location(olderHourLocation, "c"), randomUUID(), 1000, 0);
-        StoredObject objectD = new StoredObject(buildS3Location(olderHourLocation, "d"), randomUUID(), 1000, 0);
-        EventPartition olderEventPartition = new EventPartition("event", DATE_FORMAT.print(olderDate), HOUR_FORMAT.print(olderDate));
+        URI olderEventAHourLocation = buildS3Location(stagingArea, "eventA", DATE_FORMAT.print(olderDate), HOUR_FORMAT.print(olderDate));
+        StoredObject olderEventA1 = new StoredObject(buildS3Location(olderEventAHourLocation, "olderA"), randomUUID(), 1000, 0);
+        StoredObject olderEventA2 = new StoredObject(buildS3Location(olderEventAHourLocation, "olderB"), randomUUID(), 1000, 0);
+        EventPartition olderEventAPartition = new EventPartition("eventA", DATE_FORMAT.print(olderDate), HOUR_FORMAT.print(olderDate));
 
         // create single test group
-        List<StoredObject> group = newArrayList(objectA, objectB, objectC, objectD);
-        storageSystem.addObjects(group);
+        storageSystem.addObjects(ImmutableList.of(allowedEventA1, allowedEventA2, allowedEventB1, allowedEventB2, olderEventA1, olderEventA2));
 
         // combine
         StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, combineDaysAgoStart, combineDaysAgoEnd, "testGroup");
         combiner.combineAllObjects();
 
-        // validate manifest
-        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(allowedEventPartition, "small");
-        assertGreaterThan(combinedGroup.getVersion(), 0L);
+        checkCombinedEventGroup(metadataStore, allowedEventAPartition, "small", allowedEventA1, allowedEventA2);
+        checkCombinedEventGroup(metadataStore, allowedEventBPartition, "small", allowedEventB1, allowedEventB2);
+        checkCombinedEventGroup(metadataStore, olderEventAPartition, "small");
 
-        // validate only objects newer than combineDaysAgoStart get processed
-        List<CombinedStoredObject> combinedObjects = combinedGroup.getCombinedObjects();
-        assertEquals(combinedObjects.size(), 1);
-        assertEquals(combinedObjects.get(0).getSourceParts(), newArrayList(objectA, objectB));
-
-        assertNull(metadataStore.getCombinedGroupManifest(olderEventPartition, "small"));
+        checkEventsGenerated(eventClient, ImmutableList.of(new CombineCompleted("testGroup", "eventA"), new CombineCompleted("testGroup", "eventB")));
     }
 
     @Test
@@ -262,39 +264,40 @@ public class TestStoredObjectCombiner
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
 
         // create set of objects
-        DateTime allowedDate = DateTime.now(UTC).minusDays(2);
-        URI allowedHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
-        StoredObject objectA = new StoredObject(buildS3Location(allowedHourLocation, "a"), randomUUID(), 1000, 0);
-        StoredObject objectB = new StoredObject(buildS3Location(allowedHourLocation, "b"), randomUUID(), 1000, 0);
-        EventPartition allowedEventPartition = new EventPartition("event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
+        DateTime allowedDate = DateTime.now(UTC).minusDays(combineDaysAgoStart);
+        String allowedDatePartition = DATE_FORMAT.print(allowedDate);
+        String allowedHourPartition = HOUR_FORMAT.print(allowedDate);
+        URI allowedEventAHourLocation = buildS3Location(stagingArea, "eventA", allowedDatePartition, allowedHourPartition);
+        StoredObject allowedEventA1 = new StoredObject(buildS3Location(allowedEventAHourLocation, "eventA1"), randomUUID(), 1000, 0);
+        StoredObject allowedEventA2 = new StoredObject(buildS3Location(allowedEventAHourLocation, "eventA2"), randomUUID(), 1000, 0);
+        EventPartition allowedEventAPartition = new EventPartition("eventA", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
+
+        URI allowedEventBHourLocation = buildS3Location(stagingArea, "eventB", allowedDatePartition, allowedHourPartition);
+        StoredObject allowedEventB1 = new StoredObject(buildS3Location(allowedEventBHourLocation, "allowedB1"), randomUUID(), 1000, 0);
+        StoredObject allowedEventB2 = new StoredObject(buildS3Location(allowedEventBHourLocation, "allowedB2"), randomUUID(), 1000, 0);
+        EventPartition allowedEventBPartition = new EventPartition("eventB", allowedDatePartition, allowedHourPartition);
 
         DateTime newerDate = DateTime.now(UTC).minusDays(combineDaysAgoEnd).plusDays(1);
-        URI newerHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(newerDate), HOUR_FORMAT.print(newerDate));
-        StoredObject objectC = new StoredObject(buildS3Location(newerHourLocation, "c"), randomUUID(), 1000, 0);
-        StoredObject objectD = new StoredObject(buildS3Location(newerHourLocation, "d"), randomUUID(), 1000, 0);
-        EventPartition newerEventPartition = new EventPartition("event", DATE_FORMAT.print(newerDate), HOUR_FORMAT.print(newerDate));
+        URI newerEventAHourLocation = buildS3Location(stagingArea, "eventA", DATE_FORMAT.print(newerDate), HOUR_FORMAT.print(newerDate));
+        StoredObject newerEventA1 = new StoredObject(buildS3Location(newerEventAHourLocation, "c"), randomUUID(), 1000, 0);
+        StoredObject newerEventA2 = new StoredObject(buildS3Location(newerEventAHourLocation, "d"), randomUUID(), 1000, 0);
+        EventPartition newerEventAPartition = new EventPartition("eventA", DATE_FORMAT.print(newerDate), HOUR_FORMAT.print(newerDate));
 
         // create single test group
-        List<StoredObject> group = newArrayList(objectA, objectB, objectC, objectD);
-        storageSystem.addObjects(group);
+        storageSystem.addObjects(ImmutableList.of(allowedEventA1, allowedEventA2, allowedEventB1, allowedEventB2, newerEventA1, newerEventA2));
 
         // combine
         StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, combineDaysAgoStart, combineDaysAgoEnd, "testGroup");
         combiner.combineAllObjects();
 
-        // validate manifest
-        CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(allowedEventPartition, "small");
-        assertGreaterThan(combinedGroup.getVersion(), 0L);
+        checkCombinedEventGroup(metadataStore, allowedEventAPartition, "small", allowedEventA1, allowedEventA2);
+        checkCombinedEventGroup(metadataStore, allowedEventBPartition, "small", allowedEventB1, allowedEventB2);
+        checkCombinedEventGroup(metadataStore, newerEventAPartition, "small");
 
-        // validate only objects older than combineDaysAgoEnd get processed
-        List<CombinedStoredObject> combinedObjects = combinedGroup.getCombinedObjects();
-        assertEquals(combinedObjects.size(), 1);
-        assertEquals(combinedObjects.get(0).getSourceParts(), newArrayList(objectA, objectB));
-
-        assertNull(metadataStore.getCombinedGroupManifest(newerEventPartition, "small"));
+        checkEventsGenerated(eventClient, ImmutableList.of(new CombineCompleted("testGroup", "eventA"), new CombineCompleted("testGroup", "eventB")));
     }
 
-    @Test(expectedExceptions = IllegalArgumentException.class)
+    @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "startDaysAgo must be greater than endDaysAgo")
     public void testBadDateRanges()
     {
         InMemoryEventClient eventClient = new InMemoryEventClient();
@@ -308,7 +311,38 @@ public class TestStoredObjectCombiner
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
 
-        StoredObjectCombiner combiner = new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, 1, 2, "testGroup");
+        new StoredObjectCombiner("nodeId", metadataStore, storageSystem, eventClient, stagingArea, targetArea, targetFileSize, 1, 2, "testGroup");
+    }
+
+    private void checkCombinedEventGroup(CombineObjectMetadataStore metadataStore, EventPartition eventPartition, String size, StoredObject... events)
+    {
+        if (events.length == 0) {
+            assertNull(metadataStore.getCombinedGroupManifest(eventPartition, size));
+        }
+        else {
+            // validate manifest
+            CombinedGroup combinedGroup = metadataStore.getCombinedGroupManifest(eventPartition, size);
+            assertGreaterThan(combinedGroup.getVersion(), 0L);
+
+            // validate only objects newer than combineDaysAgoStart get processed
+            List<CombinedStoredObject> combinedObjects = combinedGroup.getCombinedObjects();
+            assertEquals(combinedObjects.size(), 1);
+            assertEquals(combinedObjects.get(0).getSourceParts(), ImmutableList.copyOf(events));
+        }
+    }
+
+    private void checkEventsGenerated(InMemoryEventClient eventClient, List<CombineCompleted> expectedEvents)
+    {
+        List<?> actualEvents = eventClient.getEvents();
+
+        assertEquals(actualEvents.size(), expectedEvents.size());
+        for (int i = 0; i < actualEvents.size(); ++i) {
+            CombineCompleted actualEvent = (CombineCompleted) actualEvents.get(i);
+            CombineCompleted expectedEvent = expectedEvents.get(i);
+
+            assertEquals(actualEvent.getGroupId(), expectedEvent.getGroupId(), format("element %d", i));
+            assertEquals(actualEvent.getEventType(), expectedEvent.getEventType(), format("element %d", i));
+        }
     }
 
     private static String randomUUID()

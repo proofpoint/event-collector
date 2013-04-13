@@ -15,7 +15,6 @@
  */
 package com.proofpoint.event.collector.combiner;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.event.collector.ServerConfig;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
@@ -23,11 +22,12 @@ import com.proofpoint.units.Duration;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
+import javax.inject.Named;
 import java.io.IOException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 public class ScheduledCombiner
 {
@@ -35,17 +35,16 @@ public class ScheduledCombiner
 
     private static final Duration CHECK_DELAY = new Duration(10, TimeUnit.SECONDS);
 
-    private final ScheduledExecutorService executor = newSingleThreadScheduledExecutor(
-            new ThreadFactoryBuilder().setNameFormat("StoredObjectCombiner-%s").setDaemon(true).build());
-
     private final StoredObjectCombiner objectCombiner;
+    private final ScheduledExecutorService executor;
     private final boolean enabled;
 
     @Inject
-    public ScheduledCombiner(StoredObjectCombiner objectCombiner, ServerConfig config)
+    public ScheduledCombiner(StoredObjectCombiner objectCombiner, @Named("ScheduledCombinerExecutor") ScheduledExecutorService executorService, ServerConfig config)
     {
-        this.objectCombiner = objectCombiner;
-        this.enabled = config.isCombinerEnabled();
+        this.objectCombiner = checkNotNull(objectCombiner, "objectCombiner is null");
+        this.executor = checkNotNull(executorService, "executorService is null");
+        this.enabled = checkNotNull(config, "config is null").isCombinerEnabled();
     }
 
     @PostConstruct

@@ -251,6 +251,7 @@ public class TestStoredObjectCombiner
         assertNull(metadataStore.getCombinedGroupManifest(olderEventPartition, "small"));
     }
 
+    @Test
     public void testCombineDaysAgoEnd()
             throws Exception
     {
@@ -267,7 +268,7 @@ public class TestStoredObjectCombiner
         StoredObject objectB = new StoredObject(buildS3Location(allowedHourLocation, "b"), randomUUID(), 1000, 0);
         EventPartition allowedEventPartition = new EventPartition("event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
 
-        DateTime newerDate = DateTime.now(UTC).plusDays(combineDaysAgoEnd + 1);
+        DateTime newerDate = DateTime.now(UTC).minusDays(combineDaysAgoEnd).plusDays(1);
         URI newerHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(newerDate), HOUR_FORMAT.print(newerDate));
         StoredObject objectC = new StoredObject(buildS3Location(newerHourLocation, "c"), randomUUID(), 1000, 0);
         StoredObject objectD = new StoredObject(buildS3Location(newerHourLocation, "d"), randomUUID(), 1000, 0);

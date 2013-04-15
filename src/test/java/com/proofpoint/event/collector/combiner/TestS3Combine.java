@@ -32,6 +32,8 @@ import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.json.JsonCodec;
+import org.joda.time.DateMidnight;
+import org.joda.time.format.ISODateTimeFormat;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
@@ -52,12 +54,16 @@ import static com.google.common.collect.Maps.newHashMap;
 import static com.google.common.collect.Maps.newTreeMap;
 import static com.proofpoint.event.collector.combiner.StoredObject.GET_LOCATION_FUNCTION;
 import static org.apache.commons.codec.binary.Hex.encodeHexString;
+import static org.joda.time.DateTimeZone.UTC;
 
 @Test(groups = "aws")
 public class TestS3Combine
 {
+    private static final int TIME_SLICE_DAYS_AGO = 2;
+    private static final int START_DAYS_AGO = TIME_SLICE_DAYS_AGO + 10;
+    private static final int END_DAYS_AGO = 0;
     private static final String EVENT_TYPE = "TestEvent";
-    private static final String TIME_SLICE = "2011-08-01";
+    private static final String TIME_SLICE = DateMidnight.now(UTC).minusDays(TIME_SLICE_DAYS_AGO).toString(ISODateTimeFormat.date().withZone(UTC));
     private static final int MIN_LARGE_FILE_LENGTH = 5 * 1024 * 1024;
     private static final int MIN_SMALL_FILE_LENGTH = 10 * 1024;
     private static final String HOUR = "08";
@@ -107,8 +113,8 @@ public class TestS3Combine
                 stagingBaseUri,
                 targetBaseUri,
                 new DataSize(512, DataSize.Unit.MEGABYTE),
-                14,
-                0,
+                START_DAYS_AGO,
+                END_DAYS_AGO,
                 "testGroup");
     }
 

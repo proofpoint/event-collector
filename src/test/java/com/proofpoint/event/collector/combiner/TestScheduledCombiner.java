@@ -16,6 +16,7 @@
 package com.proofpoint.event.collector.combiner;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.proofpoint.event.collector.ServerConfig;
 import org.logicalshift.concurrent.SerialScheduledExecutorService;
 import org.mockito.stubbing.Stubber;
@@ -23,6 +24,7 @@ import org.testng.annotations.Test;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.MINUTES;
@@ -48,19 +50,50 @@ public class TestScheduledCombiner
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "objectCombiner is null")
     public void testConstructorNullObjectCombiner()
     {
-        new ScheduledCombiner(null, new SerialScheduledExecutorService(), new ServerConfig());
+        ScheduledExecutorService executor = new SerialScheduledExecutorService();
+        new ScheduledCombiner(null, executor, executor, executor, createServerConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "executorService is null")
     public void testConstructorNullExecutorService()
     {
-        new ScheduledCombiner(mock(StoredObjectCombiner.class), null, new ServerConfig());
+        ScheduledExecutorService executor = new SerialScheduledExecutorService();
+        new ScheduledCombiner(mock(StoredObjectCombiner.class), null, executor, executor, createServerConfig());
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "highPriorityExecutorService is null")
+    public void testConstructorNullHighPriorityExecutorService()
+    {
+        ScheduledExecutorService executor = new SerialScheduledExecutorService();
+        new ScheduledCombiner(mock(StoredObjectCombiner.class), executor, null, executor, createServerConfig().setCombinerHighPriorityEventTypes(ImmutableSet.of("EventA")));
+    }
+
+    @Test
+    public void testConstructorNullHighPriorityExecutorServiceWithoutAny()
+    {
+        ScheduledExecutorService executor = new SerialScheduledExecutorService();
+        new ScheduledCombiner(mock(StoredObjectCombiner.class), executor, null, executor, createServerConfig());
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "lowPriorityExecutorService is null")
+    public void testConstructorNullLowPriorityExecutorService()
+    {
+        ScheduledExecutorService executor = new SerialScheduledExecutorService();
+        new ScheduledCombiner(mock(StoredObjectCombiner.class), executor, executor, null, new ServerConfig().setCombinerLowPriorityEventTypes(ImmutableSet.of("EventA")));
+    }
+
+    @Test
+    public void testConstructorNullLowPriorityExecutorServiceWithoutAny()
+    {
+        ScheduledExecutorService executor = new SerialScheduledExecutorService();
+        new ScheduledCombiner(mock(StoredObjectCombiner.class), executor, executor, null, createServerConfig());
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
     {
-        new ScheduledCombiner(mock(StoredObjectCombiner.class), new SerialScheduledExecutorService(), null);
+        ScheduledExecutorService executor = new SerialScheduledExecutorService();
+        new ScheduledCombiner(mock(StoredObjectCombiner.class), executor, executor, executor, null);
     }
 
     @Test
@@ -69,7 +102,7 @@ public class TestScheduledCombiner
     {
         SerialScheduledExecutorService executorService = new SerialScheduledExecutorService();
         StoredObjectCombiner storedObjectCombiner = createStoredObjectCombiner(ImmutableList.of(EVENT_TYPE_A), ImmutableList.of(EVENT_TYPE_A, EVENT_TYPE_B), ImmutableList.of(EVENT_TYPE_A, EVENT_TYPE_B, EVENT_TYPE_C));
-        ScheduledCombiner scheduledCombiner = new ScheduledCombiner(storedObjectCombiner, executorService, createServerConfig());
+        ScheduledCombiner scheduledCombiner = new ScheduledCombiner(storedObjectCombiner, executorService, executorService, executorService, createServerConfig());
         scheduledCombiner.start();
 
         // Initial delay to check for new event types is 0, frequency is CHECK_DELAY_MILLIS.
@@ -103,7 +136,7 @@ public class TestScheduledCombiner
     {
         SerialScheduledExecutorService executorService = new SerialScheduledExecutorService();
         StoredObjectCombiner storedObjectCombiner = createStoredObjectCombiner();
-        ScheduledCombiner scheduledCombiner = new ScheduledCombiner(storedObjectCombiner, executorService, createServerConfig().setCombinerEnabled(false));
+        ScheduledCombiner scheduledCombiner = new ScheduledCombiner(storedObjectCombiner, executorService, executorService, executorService, createServerConfig().setCombinerEnabled(false));
         scheduledCombiner.start();
 
         executorService.elapseTime(CHECK_DELAY_MILLIS * 10, MILLISECONDS);
@@ -117,7 +150,7 @@ public class TestScheduledCombiner
     {
         SerialScheduledExecutorService executorService = new SerialScheduledExecutorService();
         StoredObjectCombiner storedObjectCombiner = mock(StoredObjectCombiner.class);
-        ScheduledCombiner scheduledCombiner = new ScheduledCombiner(storedObjectCombiner, executorService, createServerConfig());
+        ScheduledCombiner scheduledCombiner = new ScheduledCombiner(storedObjectCombiner, executorService, executorService, executorService, createServerConfig());
 
         doReturn(ImmutableList.of())
                 .doThrow(new RuntimeException())
@@ -139,7 +172,7 @@ public class TestScheduledCombiner
     {
         SerialScheduledExecutorService executorService = new SerialScheduledExecutorService();
         StoredObjectCombiner storedObjectCombiner = createStoredObjectCombiner(EVENT_TYPE_A);
-        ScheduledCombiner scheduledCombiner = new ScheduledCombiner(storedObjectCombiner, executorService, createServerConfig());
+        ScheduledCombiner scheduledCombiner = new ScheduledCombiner(storedObjectCombiner, executorService, executorService, executorService, createServerConfig());
         scheduledCombiner.start();
 
         verify(storedObjectCombiner, times(1)).combineObjects(EVENT_TYPE_A);
@@ -150,6 +183,43 @@ public class TestScheduledCombiner
         verify(storedObjectCombiner, times(2)).combineObjects(EVENT_TYPE_A);
         executorService.elapseTime(PER_TYPE_CHECK_DELAY_MILLIS, MILLISECONDS);
         verify(storedObjectCombiner, times(3)).combineObjects(EVENT_TYPE_A);
+    }
+
+    @Test
+    void testScheduleUsingCorrectExecutor()
+    {
+        SerialScheduledExecutorService highPriorityExecutorService = new SerialScheduledExecutorService();
+        SerialScheduledExecutorService lowPriorityExecutorService = new SerialScheduledExecutorService();
+        SerialScheduledExecutorService normalPriorityExecutorService = new SerialScheduledExecutorService();
+        StoredObjectCombiner storedObjectCombiner = createStoredObjectCombiner(EVENT_TYPE_A, EVENT_TYPE_B, EVENT_TYPE_C);
+        ScheduledCombiner scheduledCombiner = new ScheduledCombiner(
+                storedObjectCombiner,
+                normalPriorityExecutorService,
+                highPriorityExecutorService,
+                lowPriorityExecutorService,
+                createServerConfig()
+                        .setCombinerHighPriorityEventTypes(ImmutableSet.of(EVENT_TYPE_A))
+                        .setCombinerLowPriorityEventTypes(ImmutableSet.of(EVENT_TYPE_C)));
+
+        scheduledCombiner.start();
+        verify(storedObjectCombiner, times(1)).combineObjects(EVENT_TYPE_A);
+        verify(storedObjectCombiner, times(1)).combineObjects(EVENT_TYPE_B);
+        verify(storedObjectCombiner, times(1)).combineObjects(EVENT_TYPE_C);
+
+        highPriorityExecutorService.elapseTime(PER_TYPE_CHECK_DELAY_MILLIS, MILLISECONDS);
+        verify(storedObjectCombiner, times(2)).combineObjects(EVENT_TYPE_A);
+        verify(storedObjectCombiner, times(1)).combineObjects(EVENT_TYPE_B);
+        verify(storedObjectCombiner, times(1)).combineObjects(EVENT_TYPE_C);
+
+        normalPriorityExecutorService.elapseTime(PER_TYPE_CHECK_DELAY_MILLIS, MILLISECONDS);
+        verify(storedObjectCombiner, times(2)).combineObjects(EVENT_TYPE_A);
+        verify(storedObjectCombiner, times(2)).combineObjects(EVENT_TYPE_B);
+        verify(storedObjectCombiner, times(1)).combineObjects(EVENT_TYPE_C);
+
+        lowPriorityExecutorService.elapseTime(PER_TYPE_CHECK_DELAY_MILLIS, MILLISECONDS);
+        verify(storedObjectCombiner, times(2)).combineObjects(EVENT_TYPE_A);
+        verify(storedObjectCombiner, times(2)).combineObjects(EVENT_TYPE_B);
+        verify(storedObjectCombiner, times(2)).combineObjects(EVENT_TYPE_C);
     }
 
     private StoredObjectCombiner createStoredObjectCombiner()

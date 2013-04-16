@@ -28,7 +28,6 @@ import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.log.Logger;
 import com.proofpoint.node.NodeInfo;
 import org.joda.time.DateMidnight;
-import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
 import org.weakref.jmx.Managed;
@@ -50,6 +49,7 @@ import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Loc
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3Directory;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3FileName;
 import static java.lang.System.currentTimeMillis;
+import static org.joda.time.DateTimeZone.UTC;
 
 public class StoredObjectCombiner
 {
@@ -57,7 +57,7 @@ public class StoredObjectCombiner
 
     private static final DataSize S3_MINIMUM_COMBINABLE_SIZE = new DataSize(5, DataSize.Unit.MEGABYTE);
 
-    private static final DateTimeFormatter DATE_FORMAT = ISODateTimeFormat.date().withZone(DateTimeZone.UTC);
+    private static final DateTimeFormatter DATE_FORMAT = ISODateTimeFormat.date().withZone(UTC);
 
     private final Set<URI> badManifests = new ConcurrentSkipListSet<URI>();
 
@@ -150,8 +150,8 @@ public class StoredObjectCombiner
      */
     public void combineAllObjects()
     {
-        String startDate = DATE_FORMAT.print(new DateMidnight().minusDays(startDaysAgo));
-        String endDate = DATE_FORMAT.print(new DateMidnight().minusDays(endDaysAgo));
+        String startDate = DATE_FORMAT.print(DateMidnight.now(UTC).minusDays(startDaysAgo));
+        String endDate = DATE_FORMAT.print(DateMidnight.now(UTC).minusDays(endDaysAgo));
         log.info("starting combining objects");
         for (URI eventBaseUri : storageSystem.listDirectories(stagingBaseUri)) {
             String eventType = getS3FileName(eventBaseUri);

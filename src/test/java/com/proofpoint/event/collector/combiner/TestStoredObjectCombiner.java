@@ -20,7 +20,6 @@ import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.experimental.units.DataSize;
 import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
 import org.testng.annotations.Test;
@@ -33,6 +32,7 @@ import static com.google.common.collect.Lists.newArrayList;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.testing.Assertions.assertGreaterThan;
 import static java.util.Arrays.asList;
+import static org.joda.time.DateTimeZone.UTC;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
@@ -41,8 +41,8 @@ public class TestStoredObjectCombiner
 {
     public static final URI stagingArea = URI.create("s3://bucket/staging/");
     public static final URI targetArea = URI.create("s3://bucket/target/");
-    private static final DateTimeFormatter DATE_FORMAT = ISODateTimeFormat.date().withZone(DateTimeZone.UTC);
-    private static final DateTimeFormatter HOUR_FORMAT = ISODateTimeFormat.hour().withZone(DateTimeZone.UTC);
+    private static final DateTimeFormatter DATE_FORMAT = ISODateTimeFormat.date().withZone(UTC);
+    private static final DateTimeFormatter HOUR_FORMAT = ISODateTimeFormat.hour().withZone(UTC);
     private static final int combineDaysAgoStart = 14;
     private static final int combineDaysAgoEnd = -1;
 
@@ -53,7 +53,7 @@ public class TestStoredObjectCombiner
         InMemoryEventClient eventClient = new InMemoryEventClient();
         EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
-        DateTime date = new DateTime();
+        DateTime date = DateTime.now(UTC);
         URI hourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(date), HOUR_FORMAT.print(date));
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
@@ -106,7 +106,7 @@ public class TestStoredObjectCombiner
         InMemoryEventClient eventClient = new InMemoryEventClient();
         EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
-        DateTime date = new DateTime();
+        DateTime date = DateTime.now(UTC);
         URI hourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(date), HOUR_FORMAT.print(date));
 
         TestingCombineObjectMetadataStore metadataStore = new TestingCombineObjectMetadataStore();
@@ -176,7 +176,7 @@ public class TestStoredObjectCombiner
         InMemoryEventClient eventClient = new InMemoryEventClient();
         EventPartition eventPartition = new EventPartition("event", "day", "hour");
         TestingStorageSystem storageSystem = new TestingStorageSystem();
-        DateTime date = new DateTime();
+        DateTime date = DateTime.now(UTC);
         URI hourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(date), HOUR_FORMAT.print(date));
         URI targetLocation = buildS3Location(targetArea, "event", DATE_FORMAT.print(date), HOUR_FORMAT.print(date));
 
@@ -219,13 +219,13 @@ public class TestStoredObjectCombiner
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
 
         // create set of objects
-        DateTime allowedDate = new DateTime().minusDays(2);
+        DateTime allowedDate = DateTime.now(UTC).minusDays(2);
         URI allowedHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
         StoredObject objectA = new StoredObject(buildS3Location(allowedHourLocation, "a"), randomUUID(), 1000, 0);
         StoredObject objectB = new StoredObject(buildS3Location(allowedHourLocation, "b"), randomUUID(), 1000, 0);
         EventPartition allowedEventPartition = new EventPartition("event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
 
-        DateTime olderDate = new DateTime().minusDays(combineDaysAgoStart + 2);
+        DateTime olderDate = DateTime.now(UTC).minusDays(combineDaysAgoStart + 2);
         URI olderHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(olderDate), HOUR_FORMAT.print(olderDate));
         StoredObject objectC = new StoredObject(buildS3Location(olderHourLocation, "c"), randomUUID(), 1000, 0);
         StoredObject objectD = new StoredObject(buildS3Location(olderHourLocation, "d"), randomUUID(), 1000, 0);
@@ -261,13 +261,13 @@ public class TestStoredObjectCombiner
         DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
 
         // create set of objects
-        DateTime allowedDate = new DateTime().minusDays(2);
+        DateTime allowedDate = DateTime.now(UTC).minusDays(2);
         URI allowedHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
         StoredObject objectA = new StoredObject(buildS3Location(allowedHourLocation, "a"), randomUUID(), 1000, 0);
         StoredObject objectB = new StoredObject(buildS3Location(allowedHourLocation, "b"), randomUUID(), 1000, 0);
         EventPartition allowedEventPartition = new EventPartition("event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
 
-        DateTime newerDate = new DateTime().plusDays(combineDaysAgoEnd + 1);
+        DateTime newerDate = DateTime.now(UTC).plusDays(combineDaysAgoEnd + 1);
         URI newerHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(newerDate), HOUR_FORMAT.print(newerDate));
         StoredObject objectC = new StoredObject(buildS3Location(newerHourLocation, "c"), randomUUID(), 1000, 0);
         StoredObject objectD = new StoredObject(buildS3Location(newerHourLocation, "d"), randomUUID(), 1000, 0);
@@ -299,7 +299,7 @@ public class TestStoredObjectCombiner
         InMemoryEventClient eventClient = new InMemoryEventClient();
         TestingStorageSystem storageSystem = new TestingStorageSystem();
 
-        DateTime allowedDate = new DateTime().minusDays(2);
+        DateTime allowedDate = DateTime.now(UTC).minusDays(2);
         URI allowedHourLocation = buildS3Location(stagingArea, "event", DATE_FORMAT.print(allowedDate), HOUR_FORMAT.print(allowedDate));
         StoredObject objectA = new StoredObject(buildS3Location(allowedHourLocation, "a"), randomUUID(), 1000, 0);
         storageSystem.addObjects(ImmutableList.of(objectA));

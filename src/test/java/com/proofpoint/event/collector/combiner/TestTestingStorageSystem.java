@@ -15,38 +15,116 @@
  */
 package com.proofpoint.event.collector.combiner;
 
-import java.util.List;
-import java.util.UUID;
-import java.net.URI;
+import com.google.common.collect.ImmutableList;
 import org.testng.annotations.Test;
 
-import static com.google.common.collect.Lists.newArrayList;
+import java.net.URI;
+import java.util.UUID;
+
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Location;
 import static org.testng.Assert.assertEquals;
 
 public class TestTestingStorageSystem
 {
     private static final URI stagingArea = URI.create("s3://bucket/staging/");
+    private static final URI eventLocation = URI.create(stagingArea + "event/");
+    private static final URI eventDay1Location = URI.create(eventLocation + "2011-10-09/");
+    private static final URI eventDay1Hour1Location = URI.create(eventDay1Location + "00/");
+    private static final URI eventDay1Hour2Location = URI.create(eventDay1Location + "23/");
+    private static final URI eventDay2Location = URI.create(eventLocation + "2012-11-10/");
+    private static final URI eventDay2Hour1Location = URI.create(eventDay2Location + "11/");
+    private static final URI eventDay2Hour2Location = URI.create(eventDay2Location + "12/");
+    private static final StoredObject eventDay1Hour1ObjectA = createStoredObject(eventDay1Hour1Location, "A");
+    private static final StoredObject eventDay1Hour1ObjectB = createStoredObject(eventDay1Hour1Location, "B");
+    private static final StoredObject eventDay1Hour2ObjectA = createStoredObject(eventDay1Hour2Location, "A");
+    private static final StoredObject eventDay1Hour2ObjectB = createStoredObject(eventDay1Hour2Location, "B");
+    private static final StoredObject eventDay2Hour1ObjectA = createStoredObject(eventDay2Hour1Location, "A");
+    private static final StoredObject eventDay2Hour1ObjectB = createStoredObject(eventDay2Hour1Location, "B");
+    private static final StoredObject eventDay2Hour2ObjectA = createStoredObject(eventDay2Hour2Location, "A");
+    private static final StoredObject eventDay2Hour2ObjectB = createStoredObject(eventDay2Hour2Location, "B");
+    private static final StoredObject eventObjectA = createStoredObject(eventLocation, "A");
+    private static final StoredObject[] allObjects = new StoredObject[]{
+            eventDay1Hour1ObjectA, eventDay1Hour1ObjectB, eventDay1Hour2ObjectA, eventDay1Hour2ObjectB,
+            eventDay2Hour1ObjectA, eventDay2Hour1ObjectB, eventDay2Hour2ObjectA, eventDay2Hour2ObjectB,
+            eventObjectA};
 
     @Test
     public void testListDirectories()
     {
-        TestingStorageSystem storageSystem = new TestingStorageSystem();
-        URI location = buildS3Location(stagingArea, "event", "day", "hour");
-        StoredObject objectA = new StoredObject(buildS3Location(location, "a"), UUID.randomUUID().toString(), 1000, 0);
-        StoredObject objectB = new StoredObject(buildS3Location(location, "b"), UUID.randomUUID().toString(), 1000, 0);
+        StorageSystem storageSystem = createStorageSystem(allObjects);
+        checkDirectoryListing(storageSystem, stagingArea, eventLocation);
+        checkDirectoryListing(storageSystem, eventLocation, eventDay1Location, eventDay2Location);
+        checkDirectoryListing(storageSystem, eventDay1Location, eventDay1Hour1Location, eventDay1Hour2Location);
+        checkDirectoryListing(storageSystem, eventDay2Location, eventDay2Hour1Location, eventDay2Hour2Location);
+        checkDirectoryListing(storageSystem, eventDay1Hour1Location);
+        checkDirectoryListing(storageSystem, eventDay1Hour2Location);
+        checkDirectoryListing(storageSystem, eventDay1Hour1Location);
+        checkDirectoryListing(storageSystem, eventDay2Hour2Location);
+    }
 
-        // create single test group
-        List<StoredObject> smallGroup = newArrayList(objectA, objectB);
-        storageSystem.addObjects(smallGroup);
+    @Test
+    public void testListDirectoriesNoTrailingSlash()
+    {
+        StorageSystem storageSystem = createStorageSystem(eventDay1Hour1ObjectA);
+        checkDirectoryListing(storageSystem, eventLocation, eventDay1Location);
+        checkDirectoryListing(storageSystem, stripTrailingSlashFromUri(eventLocation));
+    }
 
-        List<URI> directories = storageSystem.listDirectories(stagingArea);
-        assertEquals(directories, newArrayList(URI.create(stagingArea + "event")));
+    @Test
+    public void testListObjects()
+    {
+        StorageSystem storageSystem = createStorageSystem(allObjects);
+        checkObjectListing(storageSystem, stagingArea);
+        checkObjectListing(storageSystem, eventLocation, eventObjectA);
+        checkObjectListing(storageSystem, eventDay1Location);
+        checkObjectListing(storageSystem, eventDay2Location);
+        checkObjectListing(storageSystem, eventDay1Hour1Location, eventDay1Hour1ObjectA, eventDay1Hour1ObjectB);
+        checkObjectListing(storageSystem, eventDay1Hour2Location, eventDay1Hour2ObjectA, eventDay1Hour2ObjectB);
+        checkObjectListing(storageSystem, eventDay2Hour1Location, eventDay2Hour1ObjectA, eventDay2Hour1ObjectB);
+        checkObjectListing(storageSystem, eventDay2Hour2Location, eventDay2Hour2ObjectA, eventDay2Hour2ObjectB);
+    }
 
-        directories = storageSystem.listDirectories(directories.get(0));
-        assertEquals(directories, newArrayList(URI.create(stagingArea + "event/day")));
+    @Test
+    public void testListObjectsNoTrailingSlash()
+    {
+        StorageSystem storageSystem = createStorageSystem(eventObjectA);
+        checkObjectListing(storageSystem, eventLocation, eventObjectA);
+        checkObjectListing(storageSystem, stripTrailingSlashFromUri(eventLocation));
+    }
 
-        directories = storageSystem.listDirectories(directories.get(0));
-        assertEquals(directories, newArrayList(URI.create(stagingArea + "event/day/hour")));
+    private static void checkDirectoryListing(StorageSystem storageSystem, URI directory, URI... subdirs)
+    {
+        assertEquals(storageSystem.listDirectories(directory), ImmutableList.copyOf(subdirs));
+    }
+
+    private static void checkObjectListing(StorageSystem storageSystem, URI directory, StoredObject... children)
+    {
+        assertEquals(storageSystem.listObjects(directory), ImmutableList.copyOf(children));
+    }
+
+    private static StorageSystem createStorageSystem(StoredObject... storedObjects)
+    {
+        TestingStorageSystem result = new TestingStorageSystem();
+        result.addObjects(ImmutableList.copyOf(storedObjects));
+        return result;
+    }
+
+    private static StoredObject createStoredObject(URI eventLocation, String... parts)
+    {
+        return new StoredObject(buildS3Location(eventLocation, parts), createEtag(), 1000, 0);
+    }
+
+    private static String createEtag()
+    {
+        return UUID.randomUUID().toString();
+    }
+
+    private static URI stripTrailingSlashFromUri(URI uri)
+    {
+        String uriAsString = uri.toString();
+        while (uriAsString.endsWith("/")) {
+            uriAsString = uriAsString.substring(0, uriAsString.length() - 1);
+        }
+        return URI.create(uriAsString);
     }
 }

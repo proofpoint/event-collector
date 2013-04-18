@@ -18,6 +18,7 @@ package com.proofpoint.event.collector;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import com.proofpoint.configuration.Config;
 import com.proofpoint.configuration.ConfigDescription;
 import com.proofpoint.configuration.LegacyConfig;
@@ -37,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 public class ServerConfig
 {
     private static final String S3_PATH_REGEXP = "s3://[A-Za-z0-9-]+/([A-Za-z0-9-]+/)*";
+    private static final Splitter COMMA_SPLITTER = Splitter.on(',').omitEmptyStrings().trimResults();
 
     private Duration maxBufferTime = new Duration(1, TimeUnit.MINUTES);
     private DataSize targetFileSize = new DataSize(512, DataSize.Unit.MEGABYTE);
@@ -52,6 +54,9 @@ public class ServerConfig
     private boolean combinerDateRangeLimitDisabled = false;
     private int combinerStartDaysAgo = 14;
     private int combinerEndDaysAgo = -1;
+    private int combinerThreadCount = 5;
+    private Set<String> combinerHighPriorityEventTypes = ImmutableSet.of();
+    private Set<String> combinerLowPriorityEventTypes = ImmutableSet.of();
     private Set<String> acceptedEventTypes = ImmutableSet.of();
     private Duration retryPeriod = new Duration(5, TimeUnit.MINUTES);
     private Duration retryDelay = new Duration(0, TimeUnit.MINUTES);
@@ -67,7 +72,7 @@ public class ServerConfig
     @ConfigDescription("Comma separated list of known event types")
     public ServerConfig setAcceptedEventTypes(String acceptedEventTypes)
     {
-        this.acceptedEventTypes = ImmutableSet.copyOf(Splitter.on(',').omitEmptyStrings().trimResults().split(acceptedEventTypes));
+        this.acceptedEventTypes = toSetOfStrings(acceptedEventTypes);
         return this;
     }
 
@@ -294,6 +299,66 @@ public class ServerConfig
         return this.combinerDateRangeLimitDisabled;
     }
 
+    @Min(1)
+    public int getCombinerThreadCount()
+    {
+        return combinerThreadCount;
+    }
+
+    @Config("collector.combiner.thread-count")
+    @ConfigDescription("Number of threads the combiner uses for combining events of normal priority.")
+    public ServerConfig setCombinerThreadCount(int combinerThreadCount)
+    {
+        this.combinerThreadCount = combinerThreadCount;
+        return this;
+    }
+
+    @NotNull
+    public Set<String> getCombinerHighPriorityEventTypes()
+    {
+        return combinerHighPriorityEventTypes;
+    }
+
+    @Config("collector.combiner.high-priority-event-types")
+    @ConfigDescription("Comma separated list of event types that are high priority for the combiner.")
+    public ServerConfig setCombinerHighPriorityEventTypes(String combinerHighPriorityEventTypes)
+    {
+        this.combinerHighPriorityEventTypes = toSetOfStrings(combinerHighPriorityEventTypes);
+        return this;
+    }
+
+    public ServerConfig setCombinerHighPriorityEventTypes(Set<String> combinerHighPriorityEventTypes)
+    {
+        this.combinerHighPriorityEventTypes = ImmutableSet.copyOf(combinerHighPriorityEventTypes);
+        return this;
+    }
+
+    @NotNull
+    public Set<String> getCombinerLowPriorityEventTypes()
+    {
+        return combinerLowPriorityEventTypes;
+    }
+
+    @Config("collector.combiner.low-priority-event-types")
+    @ConfigDescription("Comma separated list of event types that are low priority for the combiner.")
+    public ServerConfig setCombinerLowPriorityEventTypes(String combinerLowPriorityEventTypes)
+    {
+        this.combinerLowPriorityEventTypes = toSetOfStrings(combinerLowPriorityEventTypes);
+        return this;
+    }
+
+    public ServerConfig setCombinerLowPriorityEventTypes(Set<String> combinerLowPriorityEventTypes)
+    {
+        this.combinerLowPriorityEventTypes = ImmutableSet.copyOf(combinerLowPriorityEventTypes);
+        return this;
+    }
+
+    @AssertTrue(message = "High- and Low-Priority event type lists must be disjoint.")
+    public boolean isHighAndLowPriorityEventTypesDisjoint()
+    {
+        return Sets.intersection(combinerHighPriorityEventTypes, combinerLowPriorityEventTypes).isEmpty();
+    }
+
     @Config("collector.retry-period")
     @ConfigDescription("period between iterations for retrying files that were not successfully uploaded")
     public ServerConfig setRetryPeriod(Duration retryPeriod)
@@ -333,5 +398,10 @@ public class ServerConfig
     public String getCombinerGroupId()
     {
         return combinerGroupId;
+    }
+
+    private Set<String> toSetOfStrings(String commaSeparatedList)
+    {
+        return ImmutableSet.copyOf(COMMA_SPLITTER.split(commaSeparatedList));
     }
 }

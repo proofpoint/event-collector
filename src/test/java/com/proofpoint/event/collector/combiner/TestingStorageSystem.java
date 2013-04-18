@@ -17,6 +17,7 @@ package com.proofpoint.event.collector.combiner;
 
 import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.MapMaker;
 import com.google.common.collect.Ordering;
 
@@ -81,21 +82,20 @@ public class TestingStorageSystem
     public List<URI> listDirectories(URI storageAreaURI)
     {
         String storageArea = storageAreaURI.toString();
-        if (!storageArea.endsWith("/")) {
-            storageArea += "/";
-        }
-        ImmutableList.Builder<URI> builder = ImmutableList.builder();
-        for (Map.Entry<URI, Set<StoredObject>> entry : objects.entrySet()) {
-            String uri = entry.getKey().toString();
-            if (!uri.endsWith("/")) {
-                uri += "/";
+        ImmutableSortedSet.Builder<URI> builder = ImmutableSortedSet.naturalOrder();
+        if (storageArea.endsWith("/")) {
+            // Directories must end in a slash, otherwise S3 considers them as normal files.
+            for (Map.Entry<URI, Set<StoredObject>> entry : objects.entrySet()) {
+                String uri = entry.getKey().toString();
+                if (uri.startsWith(storageArea) && !uri.equals(storageArea)) {
+                    // All URIs are directories and MUST have another slash following the prefix
+                    // being searched (except for the search directory). That trailing slash
+                    // of the subdirectory must be included in the result.
+                    builder.add(URI.create(uri.substring(0, uri.indexOf("/", storageArea.length()) + 1)));
+                }
             }
-            if (uri.startsWith(storageArea)) {
-                String directory = uri.substring(0, storageArea.length() + uri.substring(storageArea.length()).indexOf("/"));
-                builder.add(URI.create(directory));
-            }
         }
-        return builder.build();
+        return ImmutableList.copyOf(builder.build());
     }
 
     @Override

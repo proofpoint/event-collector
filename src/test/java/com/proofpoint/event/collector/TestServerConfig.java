@@ -23,6 +23,7 @@ import com.proofpoint.units.Duration;
 import org.testng.annotations.Test;
 
 import javax.validation.constraints.AssertTrue;
+import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Pattern;
 import javax.validation.constraints.Size;
@@ -54,6 +55,9 @@ public class TestServerConfig
                 .setCombinerStartDaysAgo(14)
                 .setCombinerEndDaysAgo(-1)
                 .setCombinerDateRangeLimitDisabled(false)
+                .setCombinerThreadCount(5)
+                .setCombinerHighPriorityEventTypes("")
+                .setCombinerLowPriorityEventTypes("")
                 .setRetryPeriod(new Duration(5, TimeUnit.MINUTES))
                 .setRetryDelay(new Duration(0, TimeUnit.MINUTES))
                 .setCombinerGroupId("default")
@@ -79,6 +83,9 @@ public class TestServerConfig
                 .put("collector.combiner.days-ago-to-start", "10")
                 .put("collector.combiner.days-ago-to-end", "1")
                 .put("collector.combiner.disable-date-range-limit", "true")
+                .put("collector.combiner.thread-count", "10")
+                .put("collector.combiner.high-priority-event-types", ", TypeA , , TypeB,TypeB,")
+                .put("collector.combiner.low-priority-event-types", ", TypeC , ,TypeD,")
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
                 .put("collector.combiner.group-id", "someGroupId")
@@ -100,6 +107,9 @@ public class TestServerConfig
                 .setCombinerStartDaysAgo(10)
                 .setCombinerEndDaysAgo(1)
                 .setCombinerDateRangeLimitDisabled(true)
+                .setCombinerThreadCount(10)
+                .setCombinerHighPriorityEventTypes(ImmutableSet.of("TypeA", "TypeB"))
+                .setCombinerLowPriorityEventTypes(ImmutableSet.of("TypeC", "TypeD"))
                 .setRetryPeriod(new Duration(10, TimeUnit.MINUTES))
                 .setRetryDelay(new Duration(4, TimeUnit.MINUTES))
                 .setCombinerGroupId("someGroupId");
@@ -161,6 +171,8 @@ public class TestServerConfig
         assertFailsValidation(new ServerConfig().setCombinerStartDaysAgo(1).setCombinerEndDaysAgo(1), "combinerStartEndDaysSane", "must be true", AssertTrue.class);
         assertFailsValidation(new ServerConfig().setCombinerGroupId(null), "combinerGroupId", "may not be null", NotNull.class);
         assertFailsValidation(new ServerConfig().setCombinerGroupId(""), "combinerGroupId", "must be non-empty", Size.class);
+        assertFailsValidation(new ServerConfig().setCombinerThreadCount(0), "combinerThreadCount", "must be greater than or equal to 1", Min.class);
+        assertFailsValidation(new ServerConfig().setCombinerHighPriorityEventTypes(ImmutableSet.of("TypeA", "TypeB")).setCombinerLowPriorityEventTypes(ImmutableSet.of("TypeB", "TypeC")), "highAndLowPriorityEventTypesDisjoint", "High- and Low-Priority event type lists must be disjoint.", AssertTrue.class);
 
         assertValidates(new ServerConfig()
                 .setLocalStagingDirectory(new File("testdir"))

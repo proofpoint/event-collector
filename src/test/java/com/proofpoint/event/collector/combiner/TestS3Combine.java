@@ -19,8 +19,12 @@ import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.DeleteObjectsRequest;
+import com.amazonaws.services.s3.model.DeleteObjectsRequest.KeyVersion;
 import com.google.common.base.Charsets;
+import com.google.common.base.Function;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Ordering;
 import com.google.common.io.ByteStreams;
@@ -32,7 +36,10 @@ import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.experimental.units.DataSize;
 import com.proofpoint.json.JsonCodec;
+import org.joda.time.DateMidnight;
+import org.joda.time.format.ISODateTimeFormat;
 import org.testng.Assert;
+import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Parameters;
@@ -50,21 +57,35 @@ import java.util.UUID;
 
 import static com.google.common.collect.Maps.newHashMap;
 import static com.google.common.collect.Maps.newTreeMap;
+import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3ObjectKey;
 import static com.proofpoint.event.collector.combiner.StoredObject.GET_LOCATION_FUNCTION;
 import static org.apache.commons.codec.binary.Hex.encodeHexString;
+import static org.joda.time.DateTimeZone.UTC;
 
 @Test(groups = "aws")
 public class TestS3Combine
 {
+    private static final int TIME_SLICE_DAYS_AGO = 2;
+    private static final int START_DAYS_AGO = TIME_SLICE_DAYS_AGO + 10;
+    private static final int END_DAYS_AGO = 0;
     private static final String EVENT_TYPE = "TestEvent";
-    private static final String TIME_SLICE = "2011-08-01";
+    private static final String TIME_SLICE = DateMidnight.now(UTC).minusDays(TIME_SLICE_DAYS_AGO).toString(ISODateTimeFormat.date().withZone(UTC));
     private static final int MIN_LARGE_FILE_LENGTH = 5 * 1024 * 1024;
     private static final int MIN_SMALL_FILE_LENGTH = 10 * 1024;
     private static final String HOUR = "08";
+    private static final Function<StoredObject, KeyVersion> KEY_VERSION_FROM_STORED_OBJECT_TRANSFORMER = new Function<StoredObject, KeyVersion>()
+    {
+        @Override
+        public KeyVersion apply(StoredObject storedObject)
+        {
+            return new KeyVersion(getS3ObjectKey(storedObject.getLocation()));
+        }
+    };
 
     private String testBucket;
     private AmazonS3 service;
     private StoredObjectCombiner objectCombiner;
+    private URI testBaseUri;
     private URI stagingBaseUri;
     private URI targetBaseUri;
     private S3StorageSystem storageSystem;
@@ -94,8 +115,10 @@ public class TestS3Combine
     public void setUpMethod()
     {
         String randomPart = "CombineTest-" + UUID.randomUUID().toString().replace("-", "");
-        stagingBaseUri = S3StorageHelper.buildS3Location("s3://", testBucket, randomPart, "staging/");
-        targetBaseUri = S3StorageHelper.buildS3Location("s3://", testBucket, randomPart, "target/");
+
+        testBaseUri = S3StorageHelper.buildS3Location("s3://", testBucket, randomPart);
+        stagingBaseUri = S3StorageHelper.buildS3Location(testBaseUri, "staging/");
+        targetBaseUri = S3StorageHelper.buildS3Location(testBaseUri, "target/");
 
         eventClient = new InMemoryEventClient();
         storageSystem = new S3StorageSystem(service);
@@ -107,9 +130,16 @@ public class TestS3Combine
                 stagingBaseUri,
                 targetBaseUri,
                 new DataSize(512, DataSize.Unit.MEGABYTE),
-                14,
-                0,
+                START_DAYS_AGO,
+                END_DAYS_AGO,
                 "testGroup");
+    }
+
+    @AfterMethod
+    public void tearDownMethod()
+    {
+        DeleteObjectsRequest request = new DeleteObjectsRequest(testBucket).withKeys(findKeysToDelete(testBaseUri));
+        service.deleteObjects(request);
     }
 
     @Test
@@ -280,5 +310,21 @@ public class TestS3Combine
             throw Throwables.propagate(t);
         }
         return tempFile;
+    }
+
+    private List<KeyVersion> findKeysToDelete(URI uri)
+    {
+        ImmutableList.Builder resultBuilder = ImmutableList.builder();
+        findKeysToDelete(resultBuilder, uri);
+        return resultBuilder.build();
+    }
+
+    private void findKeysToDelete(ImmutableList.Builder resultBuilder, URI uri)
+    {
+        resultBuilder.addAll(Lists.transform(storageSystem.listObjects(uri), KEY_VERSION_FROM_STORED_OBJECT_TRANSFORMER));
+
+        for (URI subdir : storageSystem.listDirectories(uri)) {
+            findKeysToDelete(resultBuilder, subdir);
+        }
     }
 }

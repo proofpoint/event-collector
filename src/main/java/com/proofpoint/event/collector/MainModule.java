@@ -34,17 +34,20 @@ import com.proofpoint.event.collector.combiner.ScheduledCombiner;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObjectCombiner;
 import com.proofpoint.event.collector.stats.CollectorStats;
-import java.util.concurrent.ExecutorService;
 
+import javax.inject.Named;
+import javax.inject.Singleton;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import javax.inject.Singleton;
 
 import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
 import static com.proofpoint.event.client.EventBinder.eventBinder;
 import static com.proofpoint.event.collector.ProcessStats.HourlyEventCount;
+import static java.util.concurrent.Executors.newScheduledThreadPool;
+import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static org.weakref.jmx.guice.MBeanModule.newExporter;
 
 public class MainModule
@@ -123,8 +126,52 @@ public class MainModule
     @Provides
     @Singleton
     @PendingFileExecutorService
-     private ScheduledExecutorService createPendingFileExecutor()
+    private ScheduledExecutorService createPendingFileExecutor()
     {
         return Executors.newSingleThreadScheduledExecutor();
+    }
+
+    @Provides
+    @Singleton
+    @Named("ScheduledCombinerExecutor")
+    private ScheduledExecutorService createScheduledCombinerExecutor(ServerConfig config)
+    {
+        return newScheduledThreadPool(
+                config.getCombinerThreadCount(),
+                new ThreadFactoryBuilder()
+                        .setNameFormat("StoredObjectCombiner-%s")
+                        .setDaemon(true)
+                        .build());
+    }
+
+    @Provides
+    @Singleton
+    @Named("ScheduledCombinerHighPriorityExecutor")
+    private ScheduledExecutorService createScheduledCombinerHighPriorityExecutor(ServerConfig config)
+    {
+        int highPriorityTypeCount = config.getCombinerHighPriorityEventTypes().size();
+        ThreadFactoryBuilder threadFactoryBuilder = new ThreadFactoryBuilder().setDaemon(true);
+        if (highPriorityTypeCount == 0) {
+            return newSingleThreadScheduledExecutor(threadFactoryBuilder.setNameFormat("StoredObjectCombiner-High-Disabled-Should-Not-Be-Used").build());
+        }
+        else {
+            return newScheduledThreadPool(highPriorityTypeCount, threadFactoryBuilder.setNameFormat("StoredObjectCombiner-High-%s").build());
+        }
+    }
+
+    @Provides
+    @Singleton
+    @Named("ScheduledCombinerLowPriorityExecutor")
+    private ScheduledExecutorService createScheduledCombinerLowPriorityExecutor(ServerConfig config)
+    {
+        ThreadFactoryBuilder threadFactoryBuilder = new ThreadFactoryBuilder().setDaemon(true);
+        if (config.getCombinerLowPriorityEventTypes().size() <= 0) {
+            threadFactoryBuilder.setNameFormat("StoredObjectCombiner-Low-Disabled-Should-Not-Be-Used");
+        }
+        else {
+            threadFactoryBuilder.setNameFormat("StoredObjectCombiner-Low-%s");
+        }
+
+        return newSingleThreadScheduledExecutor(threadFactoryBuilder.build());
     }
 }

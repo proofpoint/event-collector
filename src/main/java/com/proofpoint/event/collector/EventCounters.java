@@ -15,10 +15,10 @@
  */
 package com.proofpoint.event.collector;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.annotations.Beta;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.MapMaker;
-import org.codehaus.jackson.annotate.JsonProperty;
 
 import java.util.Map;
 import java.util.Map.Entry;

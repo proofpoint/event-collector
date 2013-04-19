@@ -18,7 +18,7 @@ package com.proofpoint.event.collector.combiner;
 import com.google.common.collect.ImmutableList;
 import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
-import com.proofpoint.experimental.units.DataSize;
+import com.proofpoint.units.DataSize;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;

@@ -45,6 +45,12 @@ class MockHttpClient implements HttpClient
     }
 
     @Override
+    public void close()
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public <T, E extends Exception> T execute(Request request, ResponseHandler<T, E> responseHandler)
             throws E
     {

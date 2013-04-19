@@ -24,8 +24,8 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.proofpoint.experimental.testing.ValidationAssertions.assertFailsValidation;
-import static com.proofpoint.experimental.testing.ValidationAssertions.assertValidates;
+import static com.proofpoint.testing.ValidationAssertions.assertFailsValidation;
+import static com.proofpoint.testing.ValidationAssertions.assertValidates;
 
 public class TestEvent
 {

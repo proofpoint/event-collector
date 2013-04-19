@@ -28,6 +28,7 @@ import static com.google.inject.Scopes.SINGLETON;
 import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
+import static com.proofpoint.http.client.HttpClientBinder.httpClientBinder;
 import static com.proofpoint.json.JsonCodecBinder.jsonCodecBinder;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 
@@ -48,6 +49,8 @@ public class EventTapModule implements Module
         binder.bind(HttpEventTapFlowFactory.class).in(SINGLETON);
         binder.bind(EventTapWriter.class).in(SINGLETON);
         binder.bind(EventTapStats.class).to(EventTapWriter.class);
+
+        httpClientBinder(binder).bindHttpClient("EventTap", EventTap.class);
 
         MBeanModule.newExporter(binder).export(EventTapWriter.class).withGeneratedName();
         newSetBinder(binder, EventWriter.class).addBinding().to(Key.get(EventTapWriter.class)).in(SINGLETON);

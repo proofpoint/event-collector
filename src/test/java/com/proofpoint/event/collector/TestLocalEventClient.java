@@ -15,11 +15,12 @@
  */
 package com.proofpoint.event.collector;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableSet;
 import com.proofpoint.event.client.EventField;
 import com.proofpoint.event.client.EventType;
 import com.proofpoint.event.client.JsonEventSerializer;
-import org.codehaus.jackson.map.ObjectMapper;
+import com.proofpoint.node.NodeInfo;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
@@ -34,7 +35,7 @@ public class TestLocalEventClient
     @BeforeMethod
     public void setup()
     {
-        JsonEventSerializer eventSerializer = new JsonEventSerializer(TestEvent.class);
+        JsonEventSerializer eventSerializer = new JsonEventSerializer(new NodeInfo("test"), TestEvent.class);
         ObjectMapper objectMapper = new ObjectMapper();
 
         eventWriter = new InMemoryEventWriter();

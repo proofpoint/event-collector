@@ -27,7 +27,6 @@ import com.proofpoint.configuration.ConfigurationFactory;
 import com.proofpoint.configuration.ConfigurationModule;
 import com.proofpoint.discovery.client.DiscoveryModule;
 import com.proofpoint.event.client.JsonEventModule;
-import com.proofpoint.http.client.HttpClientModule;
 import com.proofpoint.http.server.testing.TestingHttpServer;
 import com.proofpoint.http.server.testing.TestingHttpServerModule;
 import com.proofpoint.jaxrs.JaxrsModule;
@@ -81,7 +80,6 @@ public class TestServer
                 new JsonEventModule(),
                 new EventTapModule(),
                 new MainModule(),
-                new HttpClientModule(EventTap.class),
                 new ConfigurationModule(new ConfigurationFactory(config)));
 
         server = injector.getInstance(TestingHttpServer.class);

@@ -24,7 +24,7 @@ import java.util.Map;
 
 import static com.proofpoint.configuration.testing.ConfigAssertions.assertRecordedDefaults;
 import static com.proofpoint.configuration.testing.ConfigAssertions.recordDefaults;
-import static com.proofpoint.experimental.testing.ValidationAssertions.assertFailsValidation;
+import static com.proofpoint.testing.ValidationAssertions.assertFailsValidation;
 
 public class TestBatchProcessorConfig
 {

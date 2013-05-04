@@ -897,7 +897,7 @@ public class TestEventTapWriter
 
         for (ServiceDescriptor tap : taps) {
             String thisEventType = tap.getProperties().get("eventType");
-            String thisFlowId = tap.getProperties().get("tapId");
+            String thisFlowId = tap.getProperties().get("flowId");
             String thisUri = tap.getProperties().get("http");
             boolean thisQosEnabled = nullToEmpty(tap.getProperties().get("qos.delivery")).equalsIgnoreCase("retry");
 
@@ -939,13 +939,13 @@ public class TestEventTapWriter
     private static String extractProcessorName(ServiceDescriptor tap)
     {
         return format("%s{%s}", tap.getProperties().get("eventType"),
-                tap.getProperties().get("tapId"));
+                tap.getProperties().get("flowId"));
     }
 
     private static String extractQueueCounterName(ServiceDescriptor tap)
     {
         return format("[%s, %s]", tap.getProperties().get("eventType"),
-                tap.getProperties().get("tapId"));
+                tap.getProperties().get("flowId"));
     }
 
     private static ServiceDescriptor createServiceDescriptor(String eventType, Map<String, String> properties)
@@ -955,8 +955,11 @@ public class TestEventTapWriter
 
         builder.putAll(properties);
         builder.put("eventType", eventType);
+        if (!properties.containsKey("flowId")) {
+            builder.put("flowId", "1");
+        }
         if (!properties.containsKey("tapId")) {
-            builder.put("tapId", "1");
+            builder.put("tapId", randomUUID().toString());
         }
         if (!properties.containsKey("http")) {
             builder.put("http", format("http://%s.event.tap", eventType));
@@ -974,14 +977,14 @@ public class TestEventTapWriter
     private static ServiceDescriptor createServiceDescriptor(String eventType, String flowId, String instanceId)
     {
         return createServiceDescriptor(eventType,
-                ImmutableMap.of("tapId", flowId, "http", format("http://%s-%s.event.tap", eventType, instanceId)));
+                ImmutableMap.of("flowId", flowId, "http", format("http://%s-%s.event.tap", eventType, instanceId)));
     }
 
     private static ServiceDescriptor createQosServiceDescriptor(String eventType, String flowId, String instanceId)
     {
         return createServiceDescriptor(eventType,
                 ImmutableMap.of("qos.delivery", "retry",
-                        "tapId", flowId,
+                        "flowId", flowId,
                         "http", format("http://%s-%s.event.tap", eventType, instanceId)));
     }
 

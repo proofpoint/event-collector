@@ -79,41 +79,23 @@ public class TestEventTapWriter
     private static final ServiceDescriptor tapA2b = createServiceDescriptor(typeA, flowId2, instanceB);
     private static final ServiceDescriptor tapB = createServiceDescriptor(typeB, flowId1, instanceA);
     private static final ServiceDescriptor tapB1 = tapB;
-    private static final ServiceDescriptor tapB1a = tapB1;
-    private static final ServiceDescriptor tapB1b = createServiceDescriptor(typeB, flowId1, instanceB);
     private static final ServiceDescriptor tapB2 = createServiceDescriptor(typeB, flowId2, instanceA);
     private static final ServiceDescriptor tapB2a = tapB2;
     private static final ServiceDescriptor tapB2b = createServiceDescriptor(typeB, flowId2, instanceB);
     private static final ServiceDescriptor tapC = createServiceDescriptor(typeC, flowId1, instanceA);
-    private static final ServiceDescriptor tapC1 = tapC;
-    private static final ServiceDescriptor tapC1a = tapC1;
-    private static final ServiceDescriptor tapC1b = createServiceDescriptor(typeC, flowId1, instanceB);
-    private static final ServiceDescriptor tapC2 = createServiceDescriptor(typeC, flowId2, instanceA);
-    private static final ServiceDescriptor tapC2a = tapC2;
-    private static final ServiceDescriptor tapC2b = createServiceDescriptor(typeC, flowId2, instanceB);
     private static final ServiceDescriptor qtapA = createQosServiceDescriptor(typeA, flowId1, instanceA);
     private static final ServiceDescriptor qtapA1 = qtapA;
-    private static final ServiceDescriptor qtapA1a = qtapA1;
-    private static final ServiceDescriptor qtapA1b = createQosServiceDescriptor(typeA, flowId1, instanceB);
     private static final ServiceDescriptor qtapA2 = createQosServiceDescriptor(typeA, flowId2, instanceA);
     private static final ServiceDescriptor qtapA2a = qtapA2;
     private static final ServiceDescriptor qtapA2b = createQosServiceDescriptor(typeA, flowId2, instanceB);
     private static final ServiceDescriptor qtapA3 = createQosServiceDescriptor(typeA, flowId3, instanceA);
     private static final ServiceDescriptor qtapB = createQosServiceDescriptor(typeB, flowId1, instanceA);
     private static final ServiceDescriptor qtapB1 = qtapB;
-    private static final ServiceDescriptor qtapB1a = qtapB1;
-    private static final ServiceDescriptor qtapB1b = createQosServiceDescriptor(typeB, flowId1, instanceB);
     private static final ServiceDescriptor qtapB2 = createQosServiceDescriptor(typeB, flowId2, instanceA);
     private static final ServiceDescriptor qtapB3 = createQosServiceDescriptor(typeB, flowId3, instanceA);
     private static final ServiceDescriptor qtapB2a = qtapB2;
     private static final ServiceDescriptor qtapB2b = createQosServiceDescriptor(typeB, flowId2, instanceB);
     private static final ServiceDescriptor qtapC = createQosServiceDescriptor(typeC, flowId1, instanceA);
-    private static final ServiceDescriptor qtapC1 = qtapC;
-    private static final ServiceDescriptor qtapC1a = qtapC1;
-    private static final ServiceDescriptor qtapC1b = createQosServiceDescriptor(typeC, flowId1, instanceB);
-    private static final ServiceDescriptor qtapC2 = createQosServiceDescriptor(typeC, flowId2, instanceA);
-    private static final ServiceDescriptor qtapC2a = qtapC2;
-    private static final ServiceDescriptor qtapC2b = createQosServiceDescriptor(typeC, flowId2, instanceB);
 
     private ServiceSelector serviceSelector;
     private Map<String, Boolean> currentProcessors;
@@ -134,7 +116,7 @@ public class TestEventTapWriter
         currentProcessors = ImmutableMap.of();
         executorService = new SerialScheduledExecutorService();
         batchProcessors = LinkedListMultimap.create();      // Insertion order per-key matters
-        expectedBatchProcessorDiscards = new HashMap<String, Integer>();
+        expectedBatchProcessorDiscards = new HashMap<>();
         nonQosEventTapFlows = LinkedListMultimap.create();  // Insertion order per-key matters
         qosEventTapFlows = LinkedListMultimap.create();     // Insertion order per-key matters
         eventTapConfig = new EventTapConfig();
@@ -790,7 +772,7 @@ public class TestEventTapWriter
 
     private Map<String, Boolean> createProcessorsForTaps(ServiceDescriptor[] taps)
     {
-        HashMap<String, Boolean> result = new HashMap<String, Boolean>();
+        HashMap<String, Boolean> result = new HashMap<>();
         for (ServiceDescriptor tap : taps) {
             String processorName = extractProcessorName(tap);
             boolean qos = nullToEmpty(tap.getProperties().get("qos.delivery")).equalsIgnoreCase("retry");
@@ -1012,7 +994,7 @@ public class TestEventTapWriter
         public int startCount = 0;
         public int stopCount = 0;
         public boolean succeed = true;
-        public List<T> entries = new LinkedList<T>();
+        public List<T> entries = new LinkedList<>();
         public final String name;
 
         private final BatchHandler<T> handler;
@@ -1095,7 +1077,7 @@ public class TestEventTapWriter
         public MockEventTapFlow(Set<URI> taps)
         {
             this.taps = taps;
-            this.events = new LinkedList<Event>();
+            this.events = new LinkedList<>();
         }
 
         @Override

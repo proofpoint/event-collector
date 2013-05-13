@@ -20,7 +20,7 @@ import com.amazonaws.services.s3.model.ListObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.google.common.base.Function;
-import com.google.common.collect.AbstractLinkedIterator;
+import com.google.common.collect.AbstractSequentialIterator;
 import com.google.common.collect.Iterators;
 
 import java.util.Iterator;
@@ -40,7 +40,7 @@ class S3ObjectListing
     @Override
     public Iterator<S3ObjectSummary> iterator()
     {
-        Iterator<ObjectListing> objectListings = new AbstractLinkedIterator<ObjectListing>(s3Client.listObjects(listObjectsRequest))
+        Iterator<ObjectListing> objectListings = new AbstractSequentialIterator<ObjectListing>(s3Client.listObjects(listObjectsRequest))
         {
             @Override
             protected ObjectListing computeNext(ObjectListing previous)

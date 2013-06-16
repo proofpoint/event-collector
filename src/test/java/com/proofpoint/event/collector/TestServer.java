@@ -21,12 +21,15 @@ import com.google.common.io.Files;
 import com.google.common.io.Resources;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
-import com.ning.http.client.AsyncHttpClient;
-import com.ning.http.client.Response;
 import com.proofpoint.configuration.ConfigurationFactory;
 import com.proofpoint.configuration.ConfigurationModule;
 import com.proofpoint.discovery.client.DiscoveryModule;
 import com.proofpoint.event.client.JsonEventModule;
+import com.proofpoint.http.client.ApacheHttpClient;
+import com.proofpoint.http.client.HttpClient;
+import com.proofpoint.http.client.Response;
+import com.proofpoint.http.client.StatusResponseHandler.StatusResponse;
+import com.proofpoint.http.client.StringResponseHandler.StringResponse;
 import com.proofpoint.http.server.testing.TestingHttpServer;
 import com.proofpoint.http.server.testing.TestingHttpServerModule;
 import com.proofpoint.jaxrs.JaxrsModule;
@@ -40,17 +43,26 @@ import org.testng.annotations.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.util.concurrent.ExecutionException;
 
+import static com.proofpoint.http.client.Request.Builder.prepareGet;
+import static com.proofpoint.http.client.Request.Builder.prepareDelete;
+import static com.proofpoint.http.client.Request.Builder.preparePost;
+import static com.proofpoint.http.client.StaticBodyGenerator.createStaticBodyGenerator;
+import static com.proofpoint.http.client.StatusResponseHandler.createStatusResponseHandler;
+
+import static com.proofpoint.http.client.StringResponseHandler.createStringResponseHandler;
 import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.Response.Status;
+
 import static org.testng.Assert.assertEquals;
 
 public class TestServer
 {
     private JsonCodec<Object> OBJECT_CODEC = JsonCodec.jsonCodec(Object.class);
-    private AsyncHttpClient client;
+    private HttpClient client;
     private TestingHttpServer server;
     private File tempStageDir;
     private EventTapWriter eventTapWriter;
@@ -87,7 +99,8 @@ public class TestServer
 
         server.start();
         eventTapWriter.start();
-        client = new AsyncHttpClient();
+        client = new ApacheHttpClient();
+
     }
 
     @AfterMethod
@@ -114,11 +127,12 @@ public class TestServer
             throws IOException, ExecutionException, InterruptedException
     {
         String json = Resources.toString(Resources.getResource("single.json"), Charsets.UTF_8);
-        Response response = client.preparePost(urlFor("/v2/event"))
+        StatusResponse response = client.execute(preparePost()
+                .setUri(urlFor("/v2/event"))
                 .setHeader("Content-Type", APPLICATION_JSON)
-                .setBody(json)
-                .execute()
-                .get();
+                .setBodyGenerator(createStaticBodyGenerator(json, Charsets.UTF_8))
+                .build(),
+                createStatusResponseHandler());
 
         assertEquals(response.getStatusCode(), Status.ACCEPTED.getStatusCode());
     }
@@ -128,11 +142,12 @@ public class TestServer
             throws IOException, ExecutionException, InterruptedException
     {
         String json = Resources.toString(Resources.getResource("multiple.json"), Charsets.UTF_8);
-        Response response = client.preparePost(urlFor("/v2/event"))
-                .setHeader("Content-Type", APPLICATION_JSON)
-                .setBody(json)
-                .execute()
-                .get();
+        StatusResponse response = client.execute(
+                preparePost().setUri(urlFor("/v2/event"))
+                        .setHeader("Content-Type", APPLICATION_JSON)
+                        .setBodyGenerator(createStaticBodyGenerator(json.getBytes(Charsets.UTF_8)))
+                        .build(),
+                createStatusResponseHandler());
 
         assertEquals(response.getStatusCode(), Status.ACCEPTED.getStatusCode());
     }
@@ -141,12 +156,16 @@ public class TestServer
     public void testGetTapCounts()
             throws Exception
     {
-        Response response = client.prepareGet(urlFor("/v1/tap/stats")).execute().get();
+        StringResponse response = client.execute(prepareGet()
+                .setUri(urlFor("/v1/tap/stats"))
+                .build(),
+                createStringResponseHandler()
+        );
 
         assertEquals(response.getStatusCode(), Status.OK.getStatusCode());
         assertEquals(response.getHeader(CONTENT_TYPE), APPLICATION_JSON);
 
-        Object actual = OBJECT_CODEC.fromJson(response.getResponseBody());
+        Object actual = OBJECT_CODEC.fromJson(response.getBody());
         Object expected = OBJECT_CODEC.fromJson("{\"queue\":{},\"flows\":{}}");
         assertEquals(actual, expected);
     }
@@ -155,7 +174,10 @@ public class TestServer
     public void testClearTapCounts()
             throws Exception
     {
-        Response response = client.prepareDelete(urlFor("/v1/tap/stats")).execute().get();
+        StatusResponse response = client.execute(prepareDelete()
+                .setUri(urlFor("/v1/tap/stats"))
+                .build(), createStatusResponseHandler()
+        );
 
         assertEquals(response.getStatusCode(), Status.NO_CONTENT.getStatusCode());
     }
@@ -165,12 +187,13 @@ public class TestServer
     public void testGetSpoolCounts()
             throws Exception
     {
-        Response response = client.prepareGet(urlFor("/v1/spool/stats")).execute().get();
+        StringResponse response = client.execute(prepareGet()
+                .setUri(urlFor("/v1/spool/stats")).build(), createStringResponseHandler());
 
         assertEquals(response.getStatusCode(), Status.OK.getStatusCode());
         assertEquals(response.getHeader(CONTENT_TYPE), APPLICATION_JSON);
 
-        Object actual = OBJECT_CODEC.fromJson(response.getResponseBody());
+        Object actual = OBJECT_CODEC.fromJson(response.getBody());
         Object expected = OBJECT_CODEC.fromJson("{}");
         assertEquals(actual, expected);
     }
@@ -179,13 +202,16 @@ public class TestServer
     public void testClearSpoolCounts()
             throws Exception
     {
-        Response response = client.prepareDelete(urlFor("/v1/spool/stats")).execute().get();
+        StatusResponse response = client.execute(prepareDelete()
+                .setUri(urlFor("/v1/spool/stats")).build(),
+                createStatusResponseHandler());
 
         assertEquals(response.getStatusCode(), Status.NO_CONTENT.getStatusCode());
     }
 
-    private String urlFor(String path)
+    private URI urlFor(String path)
     {
-        return server.getBaseUrl().resolve(path).toString();
+        return server.getBaseUrl().resolve(path);
     }
+
 }

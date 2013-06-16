@@ -87,4 +87,46 @@ public class Event
     {
         return data;
     }
+
+    @Override
+    public boolean equals(Object o)
+    {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        Event event = (Event) o;
+
+        if (!data.equals(event.data)) {
+            return false;
+        }
+        if (!host.equals(event.host)) {
+            return false;
+        }
+        if (!timestamp.isEqual(event.timestamp)) {
+            return false;
+        }
+        if (!type.equals(event.type)) {
+            return false;
+        }
+        if (!uuid.equals(event.uuid)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    @Override
+    public int hashCode()
+    {
+        int result = type.hashCode();
+        result = 31 * result + uuid.hashCode();
+        result = 31 * result + host.hashCode();
+        result = 31 * result + timestamp.hashCode();
+        result = 31 * result + data.hashCode();
+        return result;
+    }
 }

@@ -15,6 +15,7 @@
  */
 package com.proofpoint.event.collector;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -48,6 +49,9 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 
 public class EventTapWriter implements EventWriter, EventTapStats
 {
+    @VisibleForTesting
+    static final String FLOW_ID_PROPERTY_NAME = "flowId";
+
     private static final Logger log = Logger.get(EventTapWriter.class);
     private static final EventTypePolicy NULL_EVENT_TYPE_POLICY = new EventTypePolicy.Builder().build();
     private final ServiceSelector selector;
@@ -185,7 +189,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
         for (ServiceDescriptor descriptor : descriptors) {
             Map<String, String> properties = descriptor.getProperties();
             String eventType = properties.get("eventType");
-            String flowId = properties.get("tapId");
+            String flowId = properties.get(FLOW_ID_PROPERTY_NAME);
             URI uri = safeUriFromString(properties.get("http"));
             String qosDelivery = properties.get("qos.delivery");
 

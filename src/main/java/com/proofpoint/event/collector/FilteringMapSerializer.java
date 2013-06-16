@@ -28,7 +28,7 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
             throws IOException, JsonProcessingException
     {
         //have to do this before starting to write the object, otherwise proper context is lost.
-        MapFilter filter = findApplicableFilters(jgen.getOutputContext());
+        MapFilter filter = findApplicableFilter(jgen.getOutputContext());
         jgen.writeStartObject();
         for (Map.Entry<String, ?> entry : map.entrySet()) {
             String name = entry.getKey();
@@ -43,7 +43,7 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
         jgen.writeEndObject();
     }
 
-    private MapFilter findApplicableFilters(JsonStreamContext outputContext)
+    private MapFilter findApplicableFilter(JsonStreamContext outputContext)
     {
         for (MapFilter filter : filters) {
             //second condition ensures we are at the proper level (i.e. one below root)

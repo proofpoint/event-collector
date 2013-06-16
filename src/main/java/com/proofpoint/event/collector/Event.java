@@ -23,6 +23,7 @@ import javax.annotation.concurrent.Immutable;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Pattern;
 import java.util.Map;
+import java.util.Objects;
 
 @Immutable
 public class Event
@@ -89,44 +90,27 @@ public class Event
     }
 
     @Override
-    public boolean equals(Object o)
+    public int hashCode()
     {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-
-        Event event = (Event) o;
-
-        if (data != null ? !data.equals(event.data) : event.data != null) {
-            return false;
-        }
-        if (host != null ? !host.equals(event.host) : event.host != null) {
-            return false;
-        }
-        if (timestamp != null ? !timestamp.isEqual(event.timestamp) : event.timestamp != null) {
-            return false;
-        }
-        if (type != null ? !type.equals(event.type) : event.type != null) {
-            return false;
-        }
-        if (uuid != null ? !uuid.equals(event.uuid) : event.uuid != null) {
-            return false;
-        }
-
-        return true;
+        return Objects.hash(type, uuid, host, timestamp, data);
     }
 
     @Override
-    public int hashCode()
+    public boolean equals(Object obj)
     {
-        int result = type != null ? type.hashCode() : 0;
-        result = 31 * result + (uuid != null ? uuid.hashCode() : 0);
-        result = 31 * result + (host != null ? host.hashCode() : 0);
-        result = 31 * result + (timestamp != null ? timestamp.hashCode() : 0);
-        result = 31 * result + (data != null ? data.hashCode() : 0);
-        return result;
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        final Event other = (Event) obj;
+
+        //this part is not auto generated since we have to use the ridiculous isEqual method to compare timestamps
+        if (timestamp != null ? !timestamp.isEqual(other.timestamp) : other.timestamp != null) {
+            return false;
+        }
+
+        return Objects.equals(this.type, other.type) && Objects.equals(this.uuid, other.uuid) && Objects.equals(this.host, other.host) && Objects.equals(this.data, other.data);
     }
 }

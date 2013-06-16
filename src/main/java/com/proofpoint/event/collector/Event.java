@@ -100,19 +100,19 @@ public class Event
 
         Event event = (Event) o;
 
-        if (!data.equals(event.data)) {
+        if (data != null ? !data.equals(event.data) : event.data != null) {
             return false;
         }
-        if (!host.equals(event.host)) {
+        if (host != null ? !host.equals(event.host) : event.host != null) {
             return false;
         }
-        if (!timestamp.isEqual(event.timestamp)) {
+        if (timestamp != null ? !timestamp.isEqual(event.timestamp) : event.timestamp != null) {
             return false;
         }
-        if (!type.equals(event.type)) {
+        if (type != null ? !type.equals(event.type) : event.type != null) {
             return false;
         }
-        if (!uuid.equals(event.uuid)) {
+        if (uuid != null ? !uuid.equals(event.uuid) : event.uuid != null) {
             return false;
         }
 
@@ -122,11 +122,11 @@ public class Event
     @Override
     public int hashCode()
     {
-        int result = type.hashCode();
-        result = 31 * result + uuid.hashCode();
-        result = 31 * result + host.hashCode();
-        result = 31 * result + timestamp.hashCode();
-        result = 31 * result + data.hashCode();
+        int result = type != null ? type.hashCode() : 0;
+        result = 31 * result + (uuid != null ? uuid.hashCode() : 0);
+        result = 31 * result + (host != null ? host.hashCode() : 0);
+        result = 31 * result + (timestamp != null ? timestamp.hashCode() : 0);
+        result = 31 * result + (data != null ? data.hashCode() : 0);
         return result;
     }
 }

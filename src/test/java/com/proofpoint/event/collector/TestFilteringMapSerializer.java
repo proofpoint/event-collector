@@ -27,7 +27,7 @@ public class TestFilteringMapSerializer
     public void testSimpleFiltering()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new MapFilter("data", null, ImmutableSet.of("key1", "key2")))));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new MapFilter("data", ImmutableSet.of("key1", "key2")))));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                         "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
         Event filteredEvent1 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
@@ -43,7 +43,7 @@ public class TestFilteringMapSerializer
     public void testExtraInapplicableFilters()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new MapFilter("data", null, ImmutableSet.of("key1", "key2", "key15")))));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new MapFilter("data", ImmutableSet.of("key1", "key2", "key15")))));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                 "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
         Event filteredEvent1 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
@@ -73,7 +73,7 @@ public class TestFilteringMapSerializer
     public void testSubstructuresAreNotFiltered()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new MapFilter("data", null, ImmutableSet.of("key3", "key4", "subkey1", "listElement1")))));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new MapFilter("data", ImmutableSet.of("key3", "key4", "subkey1", "listElement1")))));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                 "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
         Event filteredEvent1 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));

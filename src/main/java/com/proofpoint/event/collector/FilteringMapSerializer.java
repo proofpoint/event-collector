@@ -70,7 +70,7 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
         private String nodeName;
         private Set<String> propertiesToSerialize;
 
-        public MapFilter(String nodeName, String parentName, Set<String> propertiesToSerialize)
+        public MapFilter(String nodeName, Set<String> propertiesToSerialize)
         {
             this.nodeName = nodeName;
             this.propertiesToSerialize = propertiesToSerialize;

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.JsonStreamContext;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
+import com.google.common.collect.ImmutableSet;
 import com.google.inject.TypeLiteral;
 
 import java.io.IOException;
@@ -12,13 +13,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.google.common.base.Objects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
 {
-    private final List<MapFilter> filters;
+    private final List<PropertyMapFilter> filters;
 
-    public FilteringMapSerializer(List<MapFilter> filters)
+    public FilteringMapSerializer(List<PropertyMapFilter> filters)
     {
         this.filters = checkNotNull(filters, "filters were null");
     }
@@ -33,7 +35,7 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
         for (Map.Entry<String, ?> entry : map.entrySet()) {
             String name = entry.getKey();
 
-            if (filter != null && !filter.getPropertiesToSerialize().contains(entry.getKey())) {
+            if (!filter.matches(name)) {
                 continue;
             }
 
@@ -45,13 +47,13 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
 
     private MapFilter findApplicableFilter(JsonStreamContext outputContext)
     {
-        for (MapFilter filter : filters) {
+        for (PropertyMapFilter filter : filters) {
             //second condition ensures we are at the proper level (i.e. one below root)
             if (filter.getNodeName().equals(outputContext.getCurrentName()) && isRootThisContextsParent(outputContext)) {
                 return filter;
             }
         }
-        return null;
+        return UniversalMatchFilter.get();
     }
 
     private boolean isRootThisContextsParent(JsonStreamContext outputContext)
@@ -62,18 +64,40 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
     @Override
     public Class<Map<String, ?>> handledType()
     {
-        return (Class<Map<String, ?>>) new TypeLiteral<Map<String, ?>>() {}.getRawType();    //To change body of overridden methods use File | Settings | File Templates.
+        return (Class<Map<String, ?>>) (Class<?>) Map.class;
     }
 
-    public static class MapFilter
+    public interface MapFilter {
+        public boolean matches(String property);
+    }
+
+    public static class UniversalMatchFilter
+        implements MapFilter
+    {
+        static MapFilter matchesEverything = new UniversalMatchFilter();
+
+        public static MapFilter get()
+        {
+            return matchesEverything;
+        }
+
+        @Override
+        public boolean matches(String property)
+        {
+            return true;
+        }
+    }
+
+    public static class PropertyMapFilter
+        implements MapFilter
     {
         private String nodeName;
         private Set<String> propertiesToSerialize;
 
-        public MapFilter(String nodeName, Set<String> propertiesToSerialize)
+        public PropertyMapFilter(String nodeName, Set<String> propertiesToSerialize)
         {
             this.nodeName = nodeName;
-            this.propertiesToSerialize = propertiesToSerialize;
+            this.propertiesToSerialize = ImmutableSet.copyOf(firstNonNull(propertiesToSerialize, ImmutableSet.<String>of()));
         }
 
         public String getNodeName()
@@ -84,6 +108,12 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
         public Set<String> getPropertiesToSerialize()
         {
             return propertiesToSerialize;
+        }
+
+        @Override
+        public boolean matches(String property)
+        {
+            return propertiesToSerialize.isEmpty() || propertiesToSerialize.contains(property);
         }
     }
 }

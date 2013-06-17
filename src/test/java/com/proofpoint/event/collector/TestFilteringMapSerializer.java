@@ -8,11 +8,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.proofpoint.event.collector.FilteringMapSerializer.MapFilter;
+import com.proofpoint.event.collector.FilteringMapSerializer.PropertyMapFilter;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.json.ObjectMapperProvider;
 import org.joda.time.DateTime;
 import org.testng.annotations.Test;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.testng.Assert.assertEquals;
@@ -27,7 +29,7 @@ public class TestFilteringMapSerializer
     public void testSimpleFiltering()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new MapFilter("data", ImmutableSet.of("key1", "key2")))));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new PropertyMapFilter("data", ImmutableSet.of("key1", "key2")))));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                         "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
         Event filteredEvent1 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
@@ -43,7 +45,7 @@ public class TestFilteringMapSerializer
     public void testExtraInapplicableFilters()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new MapFilter("data", ImmutableSet.of("key1", "key2", "key15")))));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new PropertyMapFilter("data", ImmutableSet.of("key1", "key2", "key15")))));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                 "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
         Event filteredEvent1 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
@@ -59,7 +61,7 @@ public class TestFilteringMapSerializer
     public void testNoFilters()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.<MapFilter>of()));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.<PropertyMapFilter>of()));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                 "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
 
@@ -73,7 +75,7 @@ public class TestFilteringMapSerializer
     public void testSubstructuresAreNotFiltered()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new MapFilter("data", ImmutableSet.of("key3", "key4", "subkey1", "listElement1")))));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new PropertyMapFilter("data", ImmutableSet.of("key3", "key4", "subkey1", "listElement1")))));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                 "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
         Event filteredEvent1 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
@@ -82,6 +84,25 @@ public class TestFilteringMapSerializer
 
         Event eventFromFilteredString = eventCodec.fromJson(fromMyObjectMapper);
         assertEquals(eventFromFilteredString, filteredEvent1);
+    }
+
+    @Test
+    public void testFiltersListOfEvents()
+            throws JsonProcessingException
+    {
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new PropertyMapFilter("data", ImmutableSet.of("key3", "key4", "subkey1", "listElement1")))));
+        Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
+                "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
+        Event event2 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1a",
+                "key2", "value2a", "key3", ImmutableMap.of("subkey1a", "subvalue2a"), "key4", ImmutableList.of("listElement1a", "listElement2a")));
+
+        Event filteredEvent1 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
+        Event filteredEvent2 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key3", ImmutableMap.of("subkey1a", "subvalue2a"), "key4", ImmutableList.of("listElement1a", "listElement2a")));
+
+        String fromMyObjectMapper = mapper.writeValueAsString(ImmutableList.of(event, event2));
+
+        List<Event> eventsFromFilteredString = JsonCodec.listJsonCodec(Event.class).fromJson(fromMyObjectMapper);
+        assertEquals(eventsFromFilteredString, ImmutableList.of(filteredEvent1, filteredEvent2));
     }
 
     private ObjectMapper getMapper(FilteringMapSerializer filteringMapSerializer)

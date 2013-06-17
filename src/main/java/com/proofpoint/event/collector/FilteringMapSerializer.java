@@ -6,7 +6,6 @@ import com.fasterxml.jackson.core.JsonStreamContext;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.google.common.collect.ImmutableSet;
-import com.google.inject.TypeLiteral;
 
 import java.io.IOException;
 import java.util.List;

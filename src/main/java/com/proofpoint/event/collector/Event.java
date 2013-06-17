@@ -23,6 +23,7 @@ import javax.annotation.concurrent.Immutable;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Pattern;
 import java.util.Map;
+import java.util.Objects;
 
 @Immutable
 public class Event
@@ -86,5 +87,30 @@ public class Event
     public Map<String, ?> getData()
     {
         return data;
+    }
+
+    @Override
+    public int hashCode()
+    {
+        return Objects.hash(type, uuid, host, timestamp, data);
+    }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        final Event other = (Event) obj;
+
+        //this part is not auto generated since we have to use the ridiculous isEqual method to compare timestamps
+        if (timestamp != null ? !timestamp.isEqual(other.timestamp) : other.timestamp != null) {
+            return false;
+        }
+
+        return Objects.equals(this.type, other.type) && Objects.equals(this.uuid, other.uuid) && Objects.equals(this.host, other.host) && Objects.equals(this.data, other.data);
     }
 }

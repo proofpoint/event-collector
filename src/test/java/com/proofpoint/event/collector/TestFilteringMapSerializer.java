@@ -22,8 +22,7 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.proofpoint.event.collector.FilteringMapSerializer.MapFilter;
-import com.proofpoint.event.collector.FilteringMapSerializer.PropertyMapFilter;
+import com.proofpoint.event.collector.FilteringMapSerializer.DefinedPropertiesSelectionPolicy;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.json.ObjectMapperProvider;
 import org.joda.time.DateTime;
@@ -44,7 +43,7 @@ public class TestFilteringMapSerializer
     public void testSimpleFiltering()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new PropertyMapFilter("data", ImmutableSet.of("key1", "key2")))));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new DefinedPropertiesSelectionPolicy("data", ImmutableSet.of("key1", "key2")))));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                         "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
         Event filteredEvent1 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
@@ -60,7 +59,7 @@ public class TestFilteringMapSerializer
     public void testExtraInapplicableFilters()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new PropertyMapFilter("data", ImmutableSet.of("key1", "key2", "key15")))));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new DefinedPropertiesSelectionPolicy("data", ImmutableSet.of("key1", "key2", "key15")))));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                 "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
         Event filteredEvent1 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
@@ -76,7 +75,7 @@ public class TestFilteringMapSerializer
     public void testNoFilters()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.<PropertyMapFilter>of()));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.<DefinedPropertiesSelectionPolicy>of()));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                 "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
 
@@ -90,7 +89,7 @@ public class TestFilteringMapSerializer
     public void testSubstructuresAreNotFiltered()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new PropertyMapFilter("data", ImmutableSet.of("key3", "key4", "subkey1", "listElement1")))));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new DefinedPropertiesSelectionPolicy("data", ImmutableSet.of("key3", "key4", "subkey1", "listElement1")))));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                 "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
         Event filteredEvent1 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
@@ -105,7 +104,7 @@ public class TestFilteringMapSerializer
     public void testFiltersListOfEvents()
             throws JsonProcessingException
     {
-        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new PropertyMapFilter("data", ImmutableSet.of("key3", "key4", "subkey1", "listElement1")))));
+        ObjectMapper mapper = getMapper(new FilteringMapSerializer(ImmutableList.of(new DefinedPropertiesSelectionPolicy("data", ImmutableSet.of("key3", "key4", "subkey1", "listElement1")))));
         Event event = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1",
                 "key2", "value2", "key3", ImmutableMap.of("subkey1", "subvalue2"), "key4", ImmutableList.of("listElement1", "listElement2")));
         Event event2 = new Event("TestEvent", uuid, "localhost", now, ImmutableMap.of("key1", "value1a",

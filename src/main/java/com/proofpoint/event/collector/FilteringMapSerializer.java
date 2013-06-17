@@ -32,9 +32,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
 {
-    private final Collection<PropertyMapFilter> filters;
+    private final Collection<DefinedPropertiesSelectionPolicy> filters;
 
-    public FilteringMapSerializer(Collection<PropertyMapFilter> filters)
+    public FilteringMapSerializer(Collection<DefinedPropertiesSelectionPolicy> filters)
     {
         this.filters = checkNotNull(filters, "filters were null");
     }
@@ -44,7 +44,7 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
             throws IOException, JsonProcessingException
     {
         //have to do this before starting to write the object, otherwise proper context is lost.
-        MapFilter filter = findApplicableFilter(jgen.getOutputContext());
+        PropertyMapSelectionPolicy filter = findApplicableFilter(jgen.getOutputContext());
         jgen.writeStartObject();
         for (Map.Entry<String, ?> entry : map.entrySet()) {
             String name = entry.getKey();
@@ -59,15 +59,15 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
         jgen.writeEndObject();
     }
 
-    private MapFilter findApplicableFilter(JsonStreamContext outputContext)
+    private PropertyMapSelectionPolicy findApplicableFilter(JsonStreamContext outputContext)
     {
-        for (PropertyMapFilter filter : filters) {
+        for (DefinedPropertiesSelectionPolicy filter : filters) {
             //second condition ensures we are at the proper level (i.e. one below root)
             if (filter.getNodeName().equals(outputContext.getCurrentName()) && isRootThisContextsParent(outputContext)) {
                 return filter;
             }
         }
-        return UniversalMatchFilter.get();
+        return UniversalMatchSelectionPolicy.get();
     }
 
     private boolean isRootThisContextsParent(JsonStreamContext outputContext)
@@ -81,17 +81,17 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
         return (Class<Map<String, ?>>) (Class<?>) Map.class;
     }
 
-    public interface MapFilter
+    public interface PropertyMapSelectionPolicy
     {
         public boolean matches(String property);
     }
 
-    private static class UniversalMatchFilter
-        implements MapFilter
+    private static class UniversalMatchSelectionPolicy
+        implements PropertyMapSelectionPolicy
     {
-        private static MapFilter matchesEverything = new UniversalMatchFilter();
+        private static PropertyMapSelectionPolicy matchesEverything = new UniversalMatchSelectionPolicy();
 
-        public static MapFilter get()
+        public static PropertyMapSelectionPolicy get()
         {
             return matchesEverything;
         }
@@ -103,13 +103,13 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
         }
     }
 
-    public static class PropertyMapFilter
-        implements MapFilter
+    public static class DefinedPropertiesSelectionPolicy
+        implements PropertyMapSelectionPolicy
     {
         private String nodeName;
         private Set<String> propertiesToSerialize;
 
-        public PropertyMapFilter(String nodeName, Set<String> propertiesToSerialize)
+        public DefinedPropertiesSelectionPolicy(String nodeName, Set<String> propertiesToSerialize)
         {
             this.nodeName = nodeName;
             this.propertiesToSerialize = ImmutableSet.copyOf(firstNonNull(propertiesToSerialize, ImmutableSet.<String>of()));

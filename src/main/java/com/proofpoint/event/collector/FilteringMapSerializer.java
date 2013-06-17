@@ -67,7 +67,8 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
         return (Class<Map<String, ?>>) (Class<?>) Map.class;
     }
 
-    public interface MapFilter {
+    public interface MapFilter
+    {
         public boolean matches(String property);
     }
 
@@ -103,11 +104,6 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
         public String getNodeName()
         {
             return nodeName;
-        }
-
-        public Set<String> getPropertiesToSerialize()
-        {
-            return propertiesToSerialize;
         }
 
         @Override

@@ -1,3 +1,18 @@
+/*
+ * Copyright 2011-2013 Proofpoint, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.proofpoint.event.collector;
 
 import com.fasterxml.jackson.core.JsonGenerator;
@@ -8,7 +23,7 @@ import com.fasterxml.jackson.databind.SerializerProvider;
 import com.google.common.collect.ImmutableSet;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
@@ -17,9 +32,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
 {
-    private final List<PropertyMapFilter> filters;
+    private final Collection<PropertyMapFilter> filters;
 
-    public FilteringMapSerializer(List<PropertyMapFilter> filters)
+    public FilteringMapSerializer(Collection<PropertyMapFilter> filters)
     {
         this.filters = checkNotNull(filters, "filters were null");
     }
@@ -71,10 +86,10 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
         public boolean matches(String property);
     }
 
-    public static class UniversalMatchFilter
+    private static class UniversalMatchFilter
         implements MapFilter
     {
-        static MapFilter matchesEverything = new UniversalMatchFilter();
+        private static MapFilter matchesEverything = new UniversalMatchFilter();
 
         public static MapFilter get()
         {

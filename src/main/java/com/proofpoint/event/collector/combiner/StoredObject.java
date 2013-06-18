@@ -126,7 +126,7 @@ public class StoredObject
         return sb.toString();
     }
 
-    public static Function<StoredObject, URI> GET_LOCATION_FUNCTION = new Function<StoredObject, URI>()
+    public static final Function<StoredObject, URI> GET_LOCATION_FUNCTION = new Function<StoredObject, URI>()
     {
         @Override
         public URI apply(StoredObject storedObject)

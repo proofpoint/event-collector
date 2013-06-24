@@ -11,7 +11,7 @@ public class FlowConfiguration
     private Set<String> propertiesToSerialize;
 
     @JsonCreator
-    public FlowConfiguration(@JsonProperty Set<String> propertiesToSerialize)
+    public FlowConfiguration(@JsonProperty("propertiesToSerialize") Set<String> propertiesToSerialize)
     {
         this.propertiesToSerialize = propertiesToSerialize;
     }

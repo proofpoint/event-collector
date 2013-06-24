@@ -19,12 +19,11 @@ import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.Files;
 import com.google.common.io.Resources;
-import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.ning.http.client.AsyncHttpClient;
 import com.ning.http.client.Response;
-import com.proofpoint.configuration.ConfigurationFactory;
-import com.proofpoint.configuration.ConfigurationModule;
+import com.proofpoint.bootstrap.Bootstrap;
+import com.proofpoint.bootstrap.LifeCycleManager;
 import com.proofpoint.discovery.client.DiscoveryModule;
 import com.proofpoint.event.client.JsonEventModule;
 import com.proofpoint.http.server.testing.TestingHttpServer;
@@ -54,6 +53,7 @@ public class TestServer
     private TestingHttpServer server;
     private File tempStageDir;
     private EventTapWriter eventTapWriter;
+    private LifeCycleManager lifeCycleManager;
 
     @BeforeMethod
     public void setup()
@@ -61,7 +61,6 @@ public class TestServer
     {
         tempStageDir = Files.createTempDir();
 
-        // TODO: wrap all this stuff in a TestBootstrap class
         ImmutableMap<String, String> config = ImmutableMap.<String, String>builder()
                 .put("collector.accepted-event-types", "Test")
                 .put("collector.local-staging-directory", tempStageDir.getAbsolutePath())
@@ -71,7 +70,7 @@ public class TestServer
                 .put("collector.s3-data-location", "s3://test-data/")
                 .put("collector.s3-metadata-location", "s3://test-metadata/")
                 .build();
-        Injector injector = Guice.createInjector(
+        Bootstrap app = new Bootstrap(
                 new TestingNodeModule(),
                 new TestingHttpServerModule(),
                 new DiscoveryModule(),
@@ -79,13 +78,17 @@ public class TestServer
                 new JaxrsModule(),
                 new JsonEventModule(),
                 new EventTapModule(),
-                new MainModule(),
-                new ConfigurationModule(new ConfigurationFactory(config)));
+                new MainModule());
+
+        Injector injector = app
+                .doNotInitializeLogging()
+                .setRequiredConfigurationProperties(config)
+                .initialize();
+
+        lifeCycleManager = injector.getInstance(LifeCycleManager.class);
 
         server = injector.getInstance(TestingHttpServer.class);
         eventTapWriter = injector.getInstance(EventTapWriter.class);
-
-        server.start();
         eventTapWriter.start();
         client = new AsyncHttpClient();
     }
@@ -98,8 +101,8 @@ public class TestServer
             eventTapWriter.stop();
         }
 
-        if (server != null) {
-            server.stop();
+        if (lifeCycleManager != null) {
+            lifeCycleManager.stop();
         }
 
         if (client != null) {

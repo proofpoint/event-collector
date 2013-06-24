@@ -19,15 +19,13 @@ import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.Files;
 import com.google.common.io.Resources;
-import com.google.inject.Guice;
 import com.google.inject.Injector;
-import com.proofpoint.configuration.ConfigurationFactory;
-import com.proofpoint.configuration.ConfigurationModule;
+import com.proofpoint.bootstrap.Bootstrap;
+import com.proofpoint.bootstrap.LifeCycleManager;
 import com.proofpoint.discovery.client.DiscoveryModule;
 import com.proofpoint.event.client.JsonEventModule;
 import com.proofpoint.http.client.ApacheHttpClient;
 import com.proofpoint.http.client.HttpClient;
-import com.proofpoint.http.client.Response;
 import com.proofpoint.http.client.StatusResponseHandler.StatusResponse;
 import com.proofpoint.http.client.StringResponseHandler.StringResponse;
 import com.proofpoint.http.server.testing.TestingHttpServer;
@@ -46,17 +44,15 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.concurrent.ExecutionException;
 
-import static com.proofpoint.http.client.Request.Builder.prepareGet;
 import static com.proofpoint.http.client.Request.Builder.prepareDelete;
+import static com.proofpoint.http.client.Request.Builder.prepareGet;
 import static com.proofpoint.http.client.Request.Builder.preparePost;
 import static com.proofpoint.http.client.StaticBodyGenerator.createStaticBodyGenerator;
 import static com.proofpoint.http.client.StatusResponseHandler.createStatusResponseHandler;
-
 import static com.proofpoint.http.client.StringResponseHandler.createStringResponseHandler;
 import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.Response.Status;
-
 import static org.testng.Assert.assertEquals;
 
 public class TestServer
@@ -66,6 +62,7 @@ public class TestServer
     private TestingHttpServer server;
     private File tempStageDir;
     private EventTapWriter eventTapWriter;
+    private LifeCycleManager lifeCycleManager;
 
     @BeforeMethod
     public void setup()
@@ -73,7 +70,6 @@ public class TestServer
     {
         tempStageDir = Files.createTempDir();
 
-        // TODO: wrap all this stuff in a TestBootstrap class
         ImmutableMap<String, String> config = ImmutableMap.<String, String>builder()
                 .put("collector.accepted-event-types", "Test")
                 .put("collector.local-staging-directory", tempStageDir.getAbsolutePath())
@@ -83,7 +79,7 @@ public class TestServer
                 .put("collector.s3-data-location", "s3://test-data/")
                 .put("collector.s3-metadata-location", "s3://test-metadata/")
                 .build();
-        Injector injector = Guice.createInjector(
+        Bootstrap app = new Bootstrap(
                 new TestingNodeModule(),
                 new TestingHttpServerModule(),
                 new DiscoveryModule(),
@@ -91,13 +87,17 @@ public class TestServer
                 new JaxrsModule(),
                 new JsonEventModule(),
                 new EventTapModule(),
-                new MainModule(),
-                new ConfigurationModule(new ConfigurationFactory(config)));
+                new MainModule());
+
+        Injector injector = app
+                .doNotInitializeLogging()
+                .setRequiredConfigurationProperties(config)
+                .initialize();
+
+        lifeCycleManager = injector.getInstance(LifeCycleManager.class);
 
         server = injector.getInstance(TestingHttpServer.class);
         eventTapWriter = injector.getInstance(EventTapWriter.class);
-
-        server.start();
         eventTapWriter.start();
         client = new ApacheHttpClient();
 
@@ -111,8 +111,8 @@ public class TestServer
             eventTapWriter.stop();
         }
 
-        if (server != null) {
-            server.stop();
+        if (lifeCycleManager != null) {
+            lifeCycleManager.stop();
         }
 
         if (client != null) {

@@ -19,6 +19,7 @@ import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.transfer.TransferManager;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.Binder;
 import com.google.inject.Key;
@@ -98,6 +99,13 @@ public class MainModule
     private AmazonS3 provideAmazonS3(AWSCredentials credentials)
     {
         return new AmazonS3Client(credentials);
+    }
+
+    @Provides
+    @Singleton
+    private TransferManager provideAmazonS3TransferManager(AWSCredentials credentials)
+    {
+        return new TransferManager(credentials);
     }
 
     @Provides

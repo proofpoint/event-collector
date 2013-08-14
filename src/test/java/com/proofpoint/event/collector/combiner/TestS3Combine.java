@@ -21,6 +21,7 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest.KeyVersion;
+import com.amazonaws.services.s3.transfer.TransferManager;
 import com.google.common.base.Charsets;
 import com.google.common.base.Function;
 import com.google.common.base.Throwables;
@@ -86,6 +87,7 @@ public class TestS3Combine
 
     private String testBucket;
     private AmazonS3 service;
+    private TransferManager transferManager;
     private StoredObjectCombiner objectCombiner;
     private URI testBaseUri;
     private URI stagingBaseUri;
@@ -106,6 +108,7 @@ public class TestS3Combine
 
         AWSCredentials awsCredentials = new BasicAWSCredentials(awsAccessKey, awsSecretKey);
         service = new AmazonS3Client(awsCredentials);
+        transferManager = new TransferManager(awsCredentials);
 
         testBucket = awsTestBucket;
         if (!service.doesBucketExist(testBucket)) {
@@ -123,7 +126,7 @@ public class TestS3Combine
         targetBaseUri = S3StorageHelper.buildS3Location(testBaseUri, "target/");
 
         eventClient = new InMemoryEventClient();
-        storageSystem = new S3StorageSystem(service);
+        storageSystem = new S3StorageSystem(service, transferManager);
         metadataStore = new TestingCombineObjectMetadataStore();
         objectCombiner = new StoredObjectCombiner("test",
                 metadataStore,

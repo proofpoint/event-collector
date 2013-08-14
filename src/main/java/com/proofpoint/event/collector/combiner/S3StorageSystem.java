@@ -25,8 +25,12 @@ import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
 import com.amazonaws.services.s3.model.ListObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PartETag;
-import com.amazonaws.services.s3.model.PutObjectResult;
+import com.amazonaws.services.s3.model.ProgressEvent;
+import com.amazonaws.services.s3.model.ProgressListener;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.Upload;
+import com.amazonaws.services.s3.transfer.model.UploadResult;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
@@ -43,6 +47,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.google.common.collect.Lists.newArrayList;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Location;
@@ -54,13 +59,15 @@ public class S3StorageSystem
         implements StorageSystem
 {
     private static final Logger log = Logger.get(S3StorageSystem.class);
+    private final TransferManager s3TransferManager;
     private final AmazonS3 s3Service;
 
     @Inject
-    public S3StorageSystem(AmazonS3 s3Service)
+    public S3StorageSystem(AmazonS3 s3Service, TransferManager s3TransferManager)
     {
         Preconditions.checkNotNull(s3Service, "s3Service is null");
         this.s3Service = s3Service;
+        this.s3TransferManager = s3TransferManager;
     }
 
     @Override
@@ -195,17 +202,29 @@ public class S3StorageSystem
     }
 
     @Override
-    public StoredObject putObject(URI location, File source)
+    public StoredObject putObject(final URI location, File source)
     {
         try {
             log.info("starting upload: %s", location);
-            PutObjectResult result = s3Service.putObject(getS3Bucket(location), getS3ObjectKey(location), source);
+            final AtomicLong totalTransferred = new AtomicLong();
+            Upload upload = s3TransferManager.upload(getS3Bucket(location), getS3ObjectKey(location), source);
+            upload.addProgressListener(new ProgressListener()
+            {
+                @Override
+                public void progressChanged(ProgressEvent progressEvent)
+                {
+                    // NOTE: This may be invoked by multiple threads.
+                    long transferred = totalTransferred.addAndGet(progressEvent.getBytesTransferred());
+                    log.debug("upload progress: %s: transferred=%d code=%d", location, transferred, progressEvent.getEventCode());
+                }
+            });
+            UploadResult uploadResult = upload.waitForUploadResult();
             ObjectMetadata metadata = s3Service.getObjectMetadata(getS3Bucket(location), getS3ObjectKey(location));
-            if (!result.getETag().equals(metadata.getETag())) {
+            if (!uploadResult.getETag().equals(metadata.getETag())) {
                 // this might happen in rare cases due to S3's eventual consistency
                 throw new IllegalStateException("uploaded etag is different from retrieved object etag");
             }
-            log.info("completed upload: %s", location);
+            log.info("completed upload: %s (size=%d bytes)", location, totalTransferred.get());
             return updateStoredObject(location, metadata);
         }
         catch (Exception e) {

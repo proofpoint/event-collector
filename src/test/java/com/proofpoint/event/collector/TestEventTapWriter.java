@@ -15,7 +15,6 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -49,8 +48,9 @@ import static com.google.common.base.Objects.firstNonNull;
 import static com.google.common.base.Strings.nullToEmpty;
 import static java.lang.String.format;
 import static java.util.UUID.randomUUID;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertFalse;
@@ -696,6 +696,30 @@ public class TestEventTapWriter
     }
 
     @Test
+    public void testRefreshFlowsStillHappensAfterException()
+    {
+        String batchProcessorName = extractProcessorName(tapA);
+
+        // Cause exception, which we expect to be handled
+        updateTaps(new RuntimeException("Thrown deliberately"));
+        executorService.elapseTime(
+                (long) eventTapConfig.getEventTapRefreshDuration().toMillis(),
+                TimeUnit.MILLISECONDS);
+
+
+        // If the refreshFlows() is rescheduled after the exception, tap should be
+        // created to handle the new tap after one period.
+        updateTaps(tapA);
+        executorService.elapseTime(
+                (long) eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
+                TimeUnit.MILLISECONDS);
+        assertFalse(batchProcessors.containsKey(batchProcessorName));
+        executorService.elapseTime(1, TimeUnit.MILLISECONDS);
+        assertTrue(batchProcessors.containsKey(batchProcessorName));
+        assertEquals(batchProcessors.get(batchProcessorName).size(), 1);
+    }
+
+    @Test
     public void testWritePartitionsByType()
     {
         updateThenRefreshFlowsThenCheck(tapA, tapB);
@@ -790,7 +814,12 @@ public class TestEventTapWriter
 
     private void updateTaps(ServiceDescriptor... taps)
     {
-        when(serviceSelector.selectAllServices()).thenReturn(ImmutableList.copyOf(taps));
+        doReturn(ImmutableList.copyOf(taps)).when(serviceSelector).selectAllServices();
+    }
+
+    private void updateTaps(Exception e)
+    {
+        doThrow(e).when(serviceSelector).selectAllServices();
     }
 
     private void writeEvents(Event... events)

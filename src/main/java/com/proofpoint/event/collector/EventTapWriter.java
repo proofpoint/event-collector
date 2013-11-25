@@ -91,13 +91,24 @@ public class EventTapWriter implements EventWriter, EventTapStats
             return;
         }
 
-        refreshFlows();
-        refreshJob = executorService.scheduleWithFixedDelay(new Runnable()
+        try {
+            refreshFlows();
+        }
+        catch (Exception e) {
+            log.error(e, "Couldn't initially load flows");
+        }
+
+        refreshJob = executorService.scheduleAtFixedRate(new Runnable()
         {
             @Override
             public void run()
             {
-                refreshFlows();
+                try {
+                    refreshFlows();
+                }
+                catch (Exception e) {
+                    log.error(e, "Couldn't refresh flows");
+                }
             }
         }, (long) flowRefreshDuration.toMillis(), (long) flowRefreshDuration.toMillis(), TimeUnit.MILLISECONDS);
     }
@@ -243,13 +254,17 @@ public class EventTapWriter implements EventWriter, EventTapStats
     {
         EventTypePolicy.Builder policyBuilder = EventTypePolicy.builder();
 
+        log.debug("Constructing policy for %s", eventType);
+
         for (Entry<String, FlowInfo> flowEntry : flows.entrySet()) {
             String flowId = flowEntry.getKey();
             FlowInfo updatedFlowInfo = flowEntry.getValue();
+            log.debug("** considering flow ID %s", flowId);
             Set<URI> destinations = ImmutableSet.copyOf(updatedFlowInfo.destinations);
             FlowPolicy existingFlowPolicy = existingPolicy.flowPolicies.get(flowId);
 
             if (existingFlowPolicy == null || existingFlowPolicy.qosEnabled != updatedFlowInfo.qosEnabled) {
+                log.debug("**-> making new policy because %s", existingFlowPolicy == null ? "existing is null" : "qos changed");
                 EventTapFlow eventTapFlow;
                 if (updatedFlowInfo.qosEnabled) {
                     eventTapFlow = createQosEventTapFlow(eventType, flowId, destinations);
@@ -257,15 +272,18 @@ public class EventTapWriter implements EventWriter, EventTapStats
                 else {
                     eventTapFlow = createNonQosEventTapFlow(eventType, flowId, destinations);
                 }
+                log.debug("  -> made flow with destinations %s", destinations);
                 BatchProcessor<Event> batchProcessor = createBatchProcessor(eventType, flowId, eventTapFlow);
                 policyBuilder.addFlowPolicy(flowId, batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled);
                 batchProcessor.start();
             }
             else if (!destinations.equals(existingFlowPolicy.eventTapFlow.getTaps())) {
+                log.debug("**-> changing taps from %s to %s", existingFlowPolicy.eventTapFlow.getTaps(), destinations);
                 existingFlowPolicy.eventTapFlow.setTaps(destinations);
                 policyBuilder.addFlowPolicy(flowId, existingFlowPolicy);
             }
             else {
+                log.debug("**-> keeping as is (URIs: %s)", existingFlowPolicy.eventTapFlow.getTaps());
                 policyBuilder.addFlowPolicy(flowId, existingFlowPolicy);
             }
         }

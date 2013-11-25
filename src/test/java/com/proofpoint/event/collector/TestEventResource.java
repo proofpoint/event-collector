@@ -61,6 +61,7 @@ public class TestEventResource
     public void testPost()
             throws IOException
     {
+        cleanup("Test");
         EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"),
                 executor, eventClient);
 

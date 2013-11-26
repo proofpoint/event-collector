@@ -48,9 +48,11 @@ import static com.google.common.base.Objects.firstNonNull;
 import static com.google.common.base.Strings.nullToEmpty;
 import static java.lang.String.format;
 import static java.util.UUID.randomUUID;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertFalse;
@@ -705,7 +707,7 @@ public class TestEventTapWriter
         executorService.elapseTime(
                 (long) eventTapConfig.getEventTapRefreshDuration().toMillis(),
                 TimeUnit.MILLISECONDS);
-
+        verify(serviceSelector, atLeastOnce()).selectAllServices();
 
         // If the refreshFlows() is rescheduled after the exception, tap should be
         // created to handle the new tap after one period.

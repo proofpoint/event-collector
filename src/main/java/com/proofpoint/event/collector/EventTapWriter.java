@@ -91,24 +91,14 @@ public class EventTapWriter implements EventWriter, EventTapStats
             return;
         }
 
-        try {
-            refreshFlows();
-        }
-        catch (Exception e) {
-            log.error(e, "Couldn't initially load flows");
-        }
+        refreshFlows();
 
         refreshJob = executorService.scheduleAtFixedRate(new Runnable()
         {
             @Override
             public void run()
             {
-                try {
-                    refreshFlows();
-                }
-                catch (Exception e) {
-                    log.error(e, "Couldn't refresh flows");
-                }
+                refreshFlows();
             }
         }, (long) flowRefreshDuration.toMillis(), (long) flowRefreshDuration.toMillis(), TimeUnit.MILLISECONDS);
     }
@@ -136,28 +126,34 @@ public class EventTapWriter implements EventWriter, EventTapStats
     @Managed
     public void refreshFlows()
     {
-        Map<String, EventTypePolicy> existingPolicies = eventTypePolicies.get();
-        Map<String, Map<String, FlowInfo>> existingFlows = flows;
-        ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.<String, EventTypePolicy>builder();
+        try {
+            Map<String, EventTypePolicy> existingPolicies = eventTypePolicies.get();
+            Map<String, Map<String, FlowInfo>> existingFlows = flows;
+            ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.<String, EventTypePolicy>builder();
 
-        Map<String, Map<String, FlowInfo>> newFlows = constructFlowInfoFromDiscovery();
-        if (existingFlows.equals(newFlows)) {
-            return;
+            Map<String, Map<String, FlowInfo>> newFlows = constructFlowInfoFromDiscovery();
+            if (existingFlows.equals(newFlows)) {
+                return;
+            }
+
+            for (Map.Entry<String, Map<String, FlowInfo>> flowsForEventTypeEntry : newFlows.entrySet()) {
+                String eventType = flowsForEventTypeEntry.getKey();
+                Map<String, FlowInfo> flowsForEventType = flowsForEventTypeEntry.getValue();
+                EventTypePolicy existingPolicy = firstNonNull(existingPolicies.get(eventType), NULL_EVENT_TYPE_POLICY);
+
+                policiesBuilder.put(eventType, constructPolicyForFlows(existingPolicy, eventType, flowsForEventType));
+            }
+
+            Map<String, EventTypePolicy> newPolicies = policiesBuilder.build();
+            eventTypePolicies.set(newPolicies);
+            flows = newFlows;
+
+            stopExistingPoliciesNoLongerInUse(existingPolicies, newPolicies);
+        }
+        catch (Exception e) {
+            log.error(e, "Couldn't refresh flows");
         }
 
-        for (Map.Entry<String, Map<String, FlowInfo>> flowsForEventTypeEntry : newFlows.entrySet()) {
-            String eventType = flowsForEventTypeEntry.getKey();
-            Map<String, FlowInfo> flowsForEventType = flowsForEventTypeEntry.getValue();
-            EventTypePolicy existingPolicy = firstNonNull(existingPolicies.get(eventType), NULL_EVENT_TYPE_POLICY);
-
-            policiesBuilder.put(eventType, constructPolicyForFlows(existingPolicy, eventType, flowsForEventType));
-        }
-
-        Map<String, EventTypePolicy> newPolicies = policiesBuilder.build();
-        eventTypePolicies.set(newPolicies);
-        flows = newFlows;
-
-        stopExistingPoliciesNoLongerInUse(existingPolicies, newPolicies);
     }
 
     @Override
@@ -210,7 +206,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
 
             Map<String, FlowInfo.Builder> flowsForEventType = flows.get(eventType);
             if (flowsForEventType == null) {
-                flowsForEventType = new HashMap<String, FlowInfo.Builder>();
+                flowsForEventType = new HashMap<>();
                 flows.put(eventType, flowsForEventType);
             }
 
@@ -283,7 +279,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
                 policyBuilder.addFlowPolicy(flowId, existingFlowPolicy);
             }
             else {
-                log.debug("**-> keeping as is (URIs: %s)", existingFlowPolicy.eventTapFlow.getTaps());
+                log.debug("**-> keeping as is with destinations %s", existingFlowPolicy.eventTapFlow.getTaps());
                 policyBuilder.addFlowPolicy(flowId, existingFlowPolicy);
             }
         }

@@ -22,9 +22,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.io.Files;
 import com.proofpoint.event.client.InMemoryEventClient;
+import com.proofpoint.testing.FileUtils;
 import org.joda.time.DateTime;
 import org.logicalshift.concurrent.SerialScheduledExecutorService;
 import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.BeforeSuite;
 import org.testng.annotations.Test;
 
 import javax.ws.rs.core.Response;
@@ -44,10 +46,15 @@ import static org.testng.Assert.assertTrue;
 
 public class TestEventResource
 {
-
     private InMemoryEventWriter writer;
     private InMemoryEventClient eventClient;
     private SerialScheduledExecutorService executor;
+
+    @BeforeSuite
+    public void ensureCleanWorkingDirectory()
+    {
+        FileUtils.deleteDirectoryContents(new File("var/stats"));
+    }
 
     @BeforeMethod
     public void setup()
@@ -61,21 +68,25 @@ public class TestEventResource
     public void testPost()
             throws IOException
     {
-        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"),
-                executor, eventClient);
+        try {
+            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"),
+                    executor, eventClient);
 
-        ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
-        Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+            ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
+            Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
 
-        Response response = resource.post(ImmutableList.of(event));
+            Response response = resource.post(ImmutableList.of(event));
 
-        assertEquals(response.getStatus(), Response.Status.ACCEPTED.getStatusCode());
-        assertNull(response.getEntity());
-        assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
+            assertEquals(response.getStatus(), Status.ACCEPTED.getStatusCode());
+            assertNull(response.getEntity());
+            assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
 
-        assertEquals(writer.getEvents(), ImmutableList.of(event));
-        checkProcessStats("Test", writer.getEvents().size());
-        cleanup("Test");
+            assertEquals(writer.getEvents(), ImmutableList.of(event));
+            checkProcessStats("Test", writer.getEvents().size());
+        }
+        finally {
+            ensureCleanWorkingDirectory();
+        }
     }
 
     @Test
@@ -100,25 +111,30 @@ public class TestEventResource
     public void testAcceptAllEvents()
             throws IOException
     {
-        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(),
-                executor, eventClient);
-
-        ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
         String eventType = UUID.randomUUID().toString();
-        Event event = new Event(eventType, UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        try {
+            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(),
+                    executor, eventClient);
 
-        Response response = resource.post(ImmutableList.of(event));
+            ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
+            Event event = new Event(eventType, UUID.randomUUID().toString(), "test.local", new DateTime(), data);
 
-        assertEquals(response.getStatus(), Response.Status.ACCEPTED.getStatusCode());
-        assertNull(response.getEntity());
-        assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
+            Response response = resource.post(ImmutableList.of(event));
 
-        assertEquals(writer.getEvents(), ImmutableList.of(event));
-        checkProcessStats(eventType, writer.getEvents().size());
-        cleanup(eventType);
+            assertEquals(response.getStatus(), Status.ACCEPTED.getStatusCode());
+            assertNull(response.getEntity());
+            assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
+
+            assertEquals(writer.getEvents(), ImmutableList.of(event));
+            checkProcessStats(eventType, writer.getEvents().size());
+        }
+        finally {
+            ensureCleanWorkingDirectory();
+        }
     }
 
-    private void checkProcessStats(String eventType, int count) throws IOException
+    private void checkProcessStats(String eventType, int count)
+            throws IOException
     {
         executor.elapseTime(1, TimeUnit.MINUTES);
         checkStatsInFile("var/stats/" + eventType + "/current.txt", count);
@@ -131,21 +147,22 @@ public class TestEventResource
 
         executor.elapseTime(1, TimeUnit.DAYS);
         List<Object> events = eventClient.getEvents();
-        assertEquals(((HourlyEventCount)events.get(0)).getCount(), count);
-        assertEquals(((HourlyEventCount)events.get(0)).getEventType(), eventType);
+        assertEquals(((HourlyEventCount) events.get(0)).getCount(), count);
+        assertEquals(((HourlyEventCount) events.get(0)).getEventType(), eventType);
 
-        assertEquals(((HourlyEventCount)events.get(1)).getCount(), 0);
-        assertEquals(((HourlyEventCount)events.get(1)).getEventType(), eventType);
+        assertEquals(((HourlyEventCount) events.get(1)).getCount(), 0);
+        assertEquals(((HourlyEventCount) events.get(1)).getEventType(), eventType);
     }
 
-    private void checkStatsInFile(String fileName, int count) throws IOException
+    private void checkStatsInFile(String fileName, int count)
+            throws IOException
     {
         File file = new File(fileName);
         assertTrue(file.exists());
 
         List<String> lines = Files.readLines(file, Charsets.UTF_8);
 
-        assertTrue(lines != null && !lines.isEmpty());
+        assertTrue(lines != null && !lines.isEmpty(), String.format("lines of %s are unexpectedly '%s'", fileName, lines));
         String line = lines.get(lines.size() - 1);
 
         Iterator<String> iterator = Splitter.on(" ").split(line).iterator();
@@ -153,18 +170,5 @@ public class TestEventResource
         long value = Long.parseLong(iterator.next());
 
         assertEquals(value, count);
-    }
-
-    private void cleanup(String eventType)
-    {
-        File file = new File("var/stats/" + eventType + "/current.txt");
-        if (file.exists()) {
-            file.delete();
-        }
-
-        file = new File("var/stats/" + eventType + "/hourly.txt");
-        if (file.exists()) {
-            file.delete();
-        }
     }
 }

@@ -53,7 +53,10 @@ public class TestEventResource
     @BeforeSuite
     public void ensureCleanWorkingDirectory()
     {
-        FileUtils.deleteDirectoryContents(new File("var/stats"));
+        File statsDirectory = new File("var/stats");
+        if (statsDirectory.exists()) {
+            FileUtils.deleteDirectoryContents(statsDirectory);
+        }
     }
 
     @BeforeMethod

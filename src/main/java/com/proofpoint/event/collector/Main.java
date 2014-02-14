@@ -17,14 +17,13 @@ package com.proofpoint.event.collector;
 
 import com.google.inject.Injector;
 import com.proofpoint.bootstrap.Bootstrap;
-import com.proofpoint.discovery.client.Announcer;
 import com.proofpoint.discovery.client.DiscoveryModule;
+import com.proofpoint.discovery.client.announce.Announcer;
 import com.proofpoint.event.client.JsonEventModule;
 import com.proofpoint.http.server.HttpServerModule;
 import com.proofpoint.jaxrs.JaxrsModule;
 import com.proofpoint.jmx.JmxHttpModule;
 import com.proofpoint.jmx.JmxModule;
-import com.proofpoint.jmx.http.rpc.JmxHttpRpcModule;
 import com.proofpoint.json.JsonModule;
 import com.proofpoint.log.Logger;
 import com.proofpoint.node.NodeModule;
@@ -46,13 +45,12 @@ public class Main
                 new MBeanModule(),
                 new JmxModule(),
                 new JmxHttpModule(),
-                new JmxHttpRpcModule(),
                 new JsonEventModule(),
-                new MainModule(),
-                new EventTapModule());
+                new EventTapModule(),
+                new MainModule());
 
         try {
-            Injector injector = app.strictConfig().initialize();
+            Injector injector = app.initialize();
             injector.getInstance(Announcer.class).start();
         }
         catch (Exception e) {

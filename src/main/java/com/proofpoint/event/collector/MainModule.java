@@ -47,9 +47,9 @@ import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
 import static com.proofpoint.event.client.EventBinder.eventBinder;
 import static com.proofpoint.event.collector.ProcessStats.HourlyEventCount;
+import static org.weakref.jmx.guice.ExportBinder.newExporter;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
-import static org.weakref.jmx.guice.MBeanModule.newExporter;
 
 public class MainModule
         implements Module

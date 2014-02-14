@@ -20,7 +20,6 @@ import com.google.inject.Binder;
 import com.google.inject.Key;
 import com.google.inject.Module;
 import com.google.inject.Provides;
-import org.weakref.jmx.guice.MBeanModule;
 
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -30,6 +29,7 @@ import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
 import static com.proofpoint.http.client.HttpClientBinder.httpClientBinder;
 import static com.proofpoint.json.JsonCodecBinder.jsonCodecBinder;
+import static org.weakref.jmx.guice.ExportBinder.newExporter;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 
 public class EventTapModule implements Module
@@ -52,7 +52,7 @@ public class EventTapModule implements Module
 
         httpClientBinder(binder).bindHttpClient("EventTap", EventTap.class);
 
-        MBeanModule.newExporter(binder).export(EventTapWriter.class).withGeneratedName();
+        newExporter(binder).export(EventTapWriter.class).withGeneratedName();
         newSetBinder(binder, EventWriter.class).addBinding().to(Key.get(EventTapWriter.class)).in(SINGLETON);
 
         binder.bind(EventTapStatsResource.class).in(SINGLETON);

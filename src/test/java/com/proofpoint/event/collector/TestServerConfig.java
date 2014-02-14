@@ -162,7 +162,7 @@ public class TestServerConfig
                 .put("collector.combiner.group-id", "someGroupId")
                 .build();
 
-        ConfigAssertions.assertDeprecatedEquivalence(ServerConfig.class, currentProperties, oldProperties);
+        ConfigAssertions.assertLegacyEquivalence(ServerConfig.class, currentProperties, oldProperties);
     }
 
     @Test

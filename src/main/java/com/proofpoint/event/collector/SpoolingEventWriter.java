@@ -19,13 +19,14 @@ import com.fasterxml.jackson.core.JsonEncoding;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.util.MinimalPrettyPrinter;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.base.Function;
-import com.google.common.collect.MapMaker;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.io.CountingOutputStream;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.event.collector.EventCounters.CounterState;
-import com.proofpoint.units.DataSize;
 import com.proofpoint.log.Logger;
+import com.proofpoint.units.DataSize;
 import com.proofpoint.units.Duration;
 import org.iq80.snappy.SnappyOutputStream;
 
@@ -38,7 +39,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -57,13 +57,13 @@ public class SpoolingEventWriter
     private final ObjectMapper objectMapper;
     private final Duration maxBufferTime;
     private final DataSize targetFileSize;
-    private final EventCounters<String> counters = new EventCounters<String>();
+    private final EventCounters<String> counters = new EventCounters<>();
 
-    private final ConcurrentMap<EventPartition, OutputPartition> outputFiles = new MapMaker()
-            .makeComputingMap(new Function<EventPartition, OutputPartition>()
+    private final LoadingCache<EventPartition, OutputPartition> outputFiles = CacheBuilder.newBuilder()
+            .build(new CacheLoader<EventPartition, OutputPartition>()
             {
                 @Override
-                public OutputPartition apply(@Nullable EventPartition partition)
+                public OutputPartition load(@Nullable EventPartition partition)
                 {
                     return new OutputPartition(partition, uploader, objectMapper, targetFileSize, maxBufferTime);
                 }
@@ -88,7 +88,7 @@ public class SpoolingEventWriter
             @Override
             public void run()
             {
-                for (OutputPartition partition : outputFiles.values()) {
+                for (OutputPartition partition : outputFiles.asMap().values()) {
                     try {
                         if (partition.isAtMaxAge()) {
                             partition.close();
@@ -108,7 +108,7 @@ public class SpoolingEventWriter
             throws IOException
     {
         executor.shutdown();
-        for (OutputPartition partition : outputFiles.values()) {
+        for (OutputPartition partition : outputFiles.asMap().values()) {
             partition.close();
         }
     }
@@ -119,7 +119,7 @@ public class SpoolingEventWriter
     {
         EventPartition partition = partitioner.getPartition(event);
 
-        outputFiles.get(partition).write(event);
+        outputFiles.getUnchecked(partition).write(event);
         counters.recordReceived(event.getType(), 1);
     }
 
@@ -171,7 +171,7 @@ public class SpoolingEventWriter
             output = new CountingOutputStream(new FileOutputStream(file));
             OutputStream snappyOut = new SnappyOutputStream(output);
 
-            generator = objectMapper.getJsonFactory().createJsonGenerator(snappyOut, JsonEncoding.UTF8);
+            generator = objectMapper.getFactory().createGenerator(snappyOut, JsonEncoding.UTF8);
             generator.disable(JsonGenerator.Feature.FLUSH_PASSED_TO_STREAM);
             generator.setPrettyPrinter(new MinimalPrettyPrinter("\n"));
 

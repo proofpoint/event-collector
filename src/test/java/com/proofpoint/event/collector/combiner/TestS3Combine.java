@@ -36,8 +36,8 @@ import com.google.common.io.Files;
 import com.google.common.io.InputSupplier;
 import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
-import com.proofpoint.units.DataSize;
 import com.proofpoint.json.JsonCodec;
+import com.proofpoint.units.DataSize;
 import org.joda.time.DateMidnight;
 import org.joda.time.format.ISODateTimeFormat;
 import org.testng.Assert;
@@ -52,13 +52,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.security.MessageDigest;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static com.google.common.collect.Maps.newHashMap;
-import static com.google.common.collect.Maps.newHashMapWithExpectedSize;
 import static com.google.common.collect.Maps.newTreeMap;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3ObjectKey;
 import static com.proofpoint.event.collector.combiner.StoredObject.GET_LOCATION_FUNCTION;
@@ -310,7 +308,7 @@ public class TestS3Combine
             storageSystem.putObject(target.getLocation(), tempFile);
         }
         catch (Throwable t) {
-            Closeables.closeQuietly(countingOutputStream);
+            Closeables.close(countingOutputStream, true);
             tempFile.delete();
             throw Throwables.propagate(t);
         }

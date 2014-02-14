@@ -38,27 +38,27 @@ public class Main
     public static void main(String[] args)
             throws Exception
     {
-        Bootstrap app = Bootstrap.bootstrapApplication("event-collector")
-                .withModules(
-                        new NodeModule(),
-                        new DiscoveryModule(),
-                        new HttpServerModule(),
-                        new JsonModule(),
-                        new JaxrsModule(),
-                        new MBeanModule(),
-                        new JmxModule(),
-                        new JmxHttpModule(),
-                        new JsonEventModule(),
-                        new EventTapModule(),
-                        new ReportingModule(),
-                        new ReportingClientModule(),
-                        new MainModule());
-
         try {
+            Bootstrap app = Bootstrap.bootstrapApplication("event-collector")
+                    .withModules(
+                            new NodeModule(),
+                            new DiscoveryModule(),
+                            new HttpServerModule(),
+                            new JsonModule(),
+                            new JaxrsModule(),
+                            new MBeanModule(),
+                            new JmxModule(),
+                            new JmxHttpModule(),
+                            new JsonEventModule(),
+                            new EventTapModule(),
+                            new ReportingModule(),
+                            new ReportingClientModule(),
+                            new MainModule());
+
             Injector injector = app.initialize();
             injector.getInstance(Announcer.class).start();
         }
-        catch (Exception e) {
+        catch (Throwable e) {
             log.error(e);
             System.exit(1);
         }

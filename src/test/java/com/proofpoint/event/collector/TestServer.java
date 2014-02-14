@@ -82,7 +82,9 @@ public class TestServer
                 .put("collector.s3-data-location", "s3://test-data/")
                 .put("collector.s3-metadata-location", "s3://test-metadata/")
                 .build();
+
         Bootstrap app = Bootstrap.bootstrapApplication("event-collector")
+                .doNotInitializeLogging()
                 .withModules(
                         new TestingNodeModule(),
                         new TestingHttpServerModule(),
@@ -97,7 +99,6 @@ public class TestServer
                         new MainModule());
 
         Injector injector = app
-                .doNotInitializeLogging()
                 .setRequiredConfigurationProperties(config)
                 .initialize();
 

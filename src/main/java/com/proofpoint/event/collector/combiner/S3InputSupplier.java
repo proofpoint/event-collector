@@ -17,7 +17,7 @@ package com.proofpoint.event.collector.combiner;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3;
-import com.google.common.io.InputSupplier;
+import com.google.common.io.ByteSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,7 +26,7 @@ import java.net.URI;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3Bucket;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.getS3ObjectKey;
 
-class S3InputSupplier implements InputSupplier<InputStream>
+class S3InputSupplier extends ByteSource
 {
     private final AmazonS3 service;
     private final URI target;
@@ -38,7 +38,7 @@ class S3InputSupplier implements InputSupplier<InputStream>
     }
 
     @Override
-    public InputStream getInput()
+    public InputStream openStream()
             throws IOException
     {
         try {

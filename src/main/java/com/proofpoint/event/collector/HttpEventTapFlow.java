@@ -41,11 +41,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.proofpoint.http.client.JsonBodyGenerator.jsonBodyGenerator;
-import static java.lang.String.format;
-import static java.lang.Thread.sleep;
 import static javax.ws.rs.core.Response.Status.Family.CLIENT_ERROR;
 import static javax.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static javax.ws.rs.core.Response.Status.fromStatusCode;
+import static java.lang.String.format;
+import static java.lang.Thread.sleep;
 
 class HttpEventTapFlow implements EventTapFlow
 {
@@ -189,10 +189,11 @@ class HttpEventTapFlow implements EventTapFlow
         return httpClient.execute(requestBuilder.build(), new ResponseHandler<Boolean, Exception>()
         {
             @Override
-            public Exception handleException(Request request, Exception exception)
+            public Boolean handleException(Request request, Exception exception)
+                    throws Exception
             {
                 restoreStateAfterError();
-                return exception;
+                throw exception;
             }
 
             @Override

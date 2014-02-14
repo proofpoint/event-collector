@@ -22,7 +22,7 @@ import com.google.common.io.Resources;
 import com.google.inject.Injector;
 import com.proofpoint.bootstrap.Bootstrap;
 import com.proofpoint.bootstrap.LifeCycleManager;
-import com.proofpoint.discovery.client.DiscoveryModule;
+import com.proofpoint.discovery.client.testing.TestingDiscoveryModule;
 import com.proofpoint.event.client.JsonEventModule;
 import com.proofpoint.http.client.ApacheHttpClient;
 import com.proofpoint.http.client.HttpClient;
@@ -31,13 +31,16 @@ import com.proofpoint.http.client.StringResponseHandler.StringResponse;
 import com.proofpoint.http.server.testing.TestingHttpServer;
 import com.proofpoint.http.server.testing.TestingHttpServerModule;
 import com.proofpoint.jaxrs.JaxrsModule;
+import com.proofpoint.jmx.testing.TestingJmxModule;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.json.JsonModule;
 import com.proofpoint.node.testing.TestingNodeModule;
+import com.proofpoint.reporting.ReportingModule;
 import com.proofpoint.testing.FileUtils;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
+import org.weakref.jmx.guice.MBeanModule;
 
 import java.io.File;
 import java.io.IOException;
@@ -50,10 +53,10 @@ import static com.proofpoint.http.client.Request.Builder.preparePost;
 import static com.proofpoint.http.client.StaticBodyGenerator.createStaticBodyGenerator;
 import static com.proofpoint.http.client.StatusResponseHandler.createStatusResponseHandler;
 import static com.proofpoint.http.client.StringResponseHandler.createStringResponseHandler;
+import static org.testng.Assert.assertEquals;
 import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.Response.Status;
-import static org.testng.Assert.assertEquals;
 
 public class TestServer
 {
@@ -79,15 +82,19 @@ public class TestServer
                 .put("collector.s3-data-location", "s3://test-data/")
                 .put("collector.s3-metadata-location", "s3://test-metadata/")
                 .build();
-        Bootstrap app = new Bootstrap(
-                new TestingNodeModule(),
-                new TestingHttpServerModule(),
-                new DiscoveryModule(),
-                new JsonModule(),
-                new JaxrsModule(),
-                new JsonEventModule(),
-                new EventTapModule(),
-                new MainModule());
+        Bootstrap app = Bootstrap.bootstrapApplication("event-collector")
+                .withModules(
+                        new TestingNodeModule(),
+                        new TestingHttpServerModule(),
+                        new TestingDiscoveryModule(),
+                        new TestingJmxModule(),
+                        new JsonModule(),
+                        new JaxrsModule(),
+                        new JsonEventModule(),
+                        new EventTapModule(),
+                        new ReportingModule(),
+                        new MBeanModule(),
+                        new MainModule());
 
         Injector injector = app
                 .doNotInitializeLogging()

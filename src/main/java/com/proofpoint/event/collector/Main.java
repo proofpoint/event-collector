@@ -37,19 +37,20 @@ public class Main
     public static void main(String[] args)
             throws Exception
     {
-        Bootstrap app = new Bootstrap(
-                new NodeModule(),
-                new DiscoveryModule(),
-                new HttpServerModule(),
-                new JsonModule(),
-                new JaxrsModule(),
-                new MBeanModule(),
-                new JmxModule(),
-                new JmxHttpModule(),
-                new JsonEventModule(),
-                new EventTapModule(),
-                new ReportingModule(),
-                new MainModule());
+        Bootstrap app = Bootstrap.bootstrapApplication("event-collector")
+                .withModules(
+                        new NodeModule(),
+                        new DiscoveryModule(),
+                        new HttpServerModule(),
+                        new JsonModule(),
+                        new JaxrsModule(),
+                        new MBeanModule(),
+                        new JmxModule(),
+                        new JmxHttpModule(),
+                        new JsonEventModule(),
+                        new EventTapModule(),
+                        new ReportingModule(),
+                        new MainModule());
 
         try {
             Injector injector = app.initialize();

@@ -15,10 +15,11 @@
  */
 package com.proofpoint.event.collector.combiner;
 
-import com.google.common.base.Function;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
-import com.google.common.collect.MapMaker;
 import com.google.common.collect.Ordering;
 
 import javax.annotation.Nullable;
@@ -39,25 +40,27 @@ import static java.util.Arrays.asList;
 public class TestingStorageSystem
         implements StorageSystem
 {
-    private final Map<URI, Set<StoredObject>> objects = new MapMaker().makeComputingMap(new Function<URI, Set<StoredObject>>()
-    {
-        @Override
-        public Set<StoredObject> apply(@Nullable URI input)
-        {
-            return newHashSet();
-        }
-    });
+
+    private final LoadingCache<URI, Set<StoredObject>> objects = CacheBuilder.newBuilder()
+            .build(new CacheLoader<URI, Set<StoredObject>>()
+            {
+                @Override
+                public Set<StoredObject> load(@Nullable URI input)
+                {
+                    return newHashSet();
+                }
+            });
 
     public void addObjects(Collection<StoredObject> storedObjects)
     {
         for (StoredObject storedObject : storedObjects) {
-            objects.get(directory(storedObject.getLocation())).add(storedObject);
+            objects.getUnchecked(directory(storedObject.getLocation())).add(storedObject);
         }
     }
 
     public boolean removeObject(URI location)
     {
-        Iterator<StoredObject> iter = objects.get(directory(location)).iterator();
+        Iterator<StoredObject> iter = objects.getUnchecked(directory(location)).iterator();
         while (iter.hasNext()) {
             StoredObject object = iter.next();
             if (object.getLocation().equals(location)) {
@@ -70,7 +73,7 @@ public class TestingStorageSystem
 
     public boolean objectExists(URI location)
     {
-        for (StoredObject storedObject : objects.get(directory(location))) {
+        for (StoredObject storedObject : objects.getUnchecked(directory(location))) {
             if (storedObject.getLocation().equals(location)) {
                 return true;
             }
@@ -85,7 +88,7 @@ public class TestingStorageSystem
         ImmutableSortedSet.Builder<URI> builder = ImmutableSortedSet.naturalOrder();
         if (storageArea.endsWith("/")) {
             // Directories must end in a slash, otherwise S3 considers them as normal files.
-            for (Map.Entry<URI, Set<StoredObject>> entry : objects.entrySet()) {
+            for (Map.Entry<URI, Set<StoredObject>> entry : objects.asMap().entrySet()) {
                 String uri = entry.getKey().toString();
                 if (uri.startsWith(storageArea) && !uri.equals(storageArea)) {
                     // All URIs are directories and MUST have another slash following the prefix
@@ -109,7 +112,7 @@ public class TestingStorageSystem
             {
                 return o1.getLocation().compareTo(o2.getLocation());
             }
-        }).immutableSortedCopy(objects.get(storageArea));
+        }).immutableSortedCopy(objects.getUnchecked(storageArea));
     }
 
     @Override

@@ -217,7 +217,6 @@
         <dependency>
             <groupId>com.proofpoint.platform</groupId>
             <artifactId>reporting-client</artifactId>
-            <version>0.82-SNAPSHOT</version>
         </dependency>
     </dependencies>
 

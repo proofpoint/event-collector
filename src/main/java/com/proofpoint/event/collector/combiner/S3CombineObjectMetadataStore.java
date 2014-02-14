@@ -20,7 +20,6 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.google.common.base.Charsets;
-import com.google.common.io.CharStreams;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.event.collector.ServerConfig;
 import com.proofpoint.json.JsonCodec;
@@ -117,7 +116,7 @@ public class S3CombineObjectMetadataStore
         URI metadataFile = toMetadataLocation(eventPartition, sizeName);
         String json;
         try {
-            json = CharStreams.toString(CharStreams.newReaderSupplier(new S3InputSupplier(s3Service, metadataFile), Charsets.UTF_8));
+            json = new S3InputSupplier(s3Service, metadataFile).asCharSource(Charsets.UTF_8).read();
         }
         catch (IOException e) {
             if (e.getCause() instanceof AmazonS3Exception) {

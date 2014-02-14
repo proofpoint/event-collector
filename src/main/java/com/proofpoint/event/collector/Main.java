@@ -27,6 +27,7 @@ import com.proofpoint.jmx.JmxModule;
 import com.proofpoint.json.JsonModule;
 import com.proofpoint.log.Logger;
 import com.proofpoint.node.NodeModule;
+import com.proofpoint.reporting.ReportingClientModule;
 import com.proofpoint.reporting.ReportingModule;
 import org.weakref.jmx.guice.MBeanModule;
 
@@ -51,6 +52,7 @@ public class Main
                             new JsonEventModule(),
                             new EventTapModule(),
                             new ReportingModule(),
+                            new ReportingClientModule(),
                             new MainModule());
 
             Injector injector = app.initialize();

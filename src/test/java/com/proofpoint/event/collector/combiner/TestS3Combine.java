@@ -29,11 +29,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Ordering;
 import com.google.common.hash.Hashing;
-import com.google.common.io.ByteStreams;
+import com.google.common.io.ByteSource;
 import com.google.common.io.Closeables;
 import com.google.common.io.CountingOutputStream;
 import com.google.common.io.Files;
-import com.google.common.io.InputSupplier;
 import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.json.JsonCodec;
@@ -50,7 +49,6 @@ import org.testng.annotations.Test;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -156,21 +154,21 @@ public class TestS3Combine
 
         // upload two 5 MB files
         String base = UUID.randomUUID().toString().replace("-", "");
-        Map<URI, InputSupplier<? extends InputStream>> files = newHashMap();
+        Map<URI, ByteSource> files = newHashMap();
         for (int i = 0; i < 2; i++) {
             URI name = createStagingFileName(base, i + 10);
             File file = uploadFile(name, MIN_LARGE_FILE_LENGTH);
-            files.put(name, Files.newInputStreamSupplier(file));
+            files.put(name, Files.asByteSource(file));
         }
 
         // combine the files
         objectCombiner.combineAllObjects();
 
         // verify the contents
-        InputSupplier<? extends InputStream> s3InputSupplier = storageSystem.getInputSupplier(target);
+        ByteSource s3InputSupplier = storageSystem.getInputSupplier(target);
 
-        InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
-        if (!ByteStreams.equal(combinedInputs, s3InputSupplier)) {
+        ByteSource combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, target);
+        if (!combinedInputs.contentEquals(s3InputSupplier)) {
             Assert.fail("broken");
         }
 
@@ -178,7 +176,7 @@ public class TestS3Combine
         for (int i = 0; i < 2; i++) {
             URI name = createStagingFileName(base, i);
             File file = uploadFile(name, MIN_LARGE_FILE_LENGTH);
-            files.put(name, Files.newInputStreamSupplier(file));
+            files.put(name, Files.asByteSource(file));
         }
 
         // combine the files
@@ -187,8 +185,8 @@ public class TestS3Combine
         // verify the contents
         s3InputSupplier = storageSystem.getInputSupplier(target);
 
-        combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
-        if (!ByteStreams.equal(combinedInputs, s3InputSupplier)) {
+        combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, target);
+        if (!combinedInputs.contentEquals(s3InputSupplier)) {
             Assert.fail("broken");
         }
 
@@ -214,11 +212,11 @@ public class TestS3Combine
 
         // upload two 10 KB file for to each name
         String base = UUID.randomUUID().toString().replace("-", "");
-        Map<URI, InputSupplier<? extends InputStream>> files = newHashMap();
+        Map<URI, ByteSource> files = newHashMap();
         for (int i = 0; i < 2; i++) {
             URI name = createStagingFileName(base, i + 10);
             File file = uploadFile(name, MIN_SMALL_FILE_LENGTH);
-            files.put(name, Files.newInputStreamSupplier(file));
+            files.put(name, Files.asByteSource(file));
         }
 
         // combine the files
@@ -227,8 +225,8 @@ public class TestS3Combine
         // verify the contents
         StoredObject combinedObject = storageSystem.getObjectDetails(target);
 
-        InputSupplier<InputStream> combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
-        String sourceMD5 = encodeHexString(ByteStreams.hash(combinedInputs, Hashing.md5()).asBytes());
+        ByteSource combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, target);
+        String sourceMD5 = encodeHexString(combinedInputs.hash(Hashing.md5()).asBytes());
         if (!sourceMD5.equals(combinedObject.getETag())) {
             Assert.fail("broken");
         }
@@ -237,7 +235,7 @@ public class TestS3Combine
         for (int i = 0; i < 2; i++) {
             URI name = createStagingFileName(base, i);
             File file = uploadFile(name, MIN_SMALL_FILE_LENGTH);
-            files.put(name, Files.newInputStreamSupplier(file));
+            files.put(name, Files.asByteSource(file));
         }
 
         // combine the files
@@ -246,8 +244,8 @@ public class TestS3Combine
         // verify the contents
         combinedObject = storageSystem.getObjectDetails(target);
 
-        combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, groupPrefix, target);
-        sourceMD5 = encodeHexString(ByteStreams.hash(combinedInputs, Hashing.md5()).asBytes());
+        combinedInputs = getCombinedInputsSupplier(eventPartition, sizeName, files, target);
+        sourceMD5 = encodeHexString(combinedInputs.hash(Hashing.md5()).asBytes());
         if (!sourceMD5.equals(combinedObject.getETag())) {
             Assert.fail("broken");
         }
@@ -263,7 +261,7 @@ public class TestS3Combine
         Assert.assertEquals(eventClient.getEvents().size(), 3);
     }
 
-    private InputSupplier<InputStream> getCombinedInputsSupplier(EventPartition eventPartition, String sizeName, Map<URI, InputSupplier<? extends InputStream>> files, URI groupPrefix, URI target)
+    private ByteSource getCombinedInputsSupplier(EventPartition eventPartition, String sizeName, Map<URI, ByteSource> files, URI target)
     {
         // get the manifest for the group prefix
         CombinedGroup combinedObjectManifest = metadataStore.getCombinedGroupManifest(eventPartition, sizeName);
@@ -276,11 +274,11 @@ public class TestS3Combine
         List<URI> sourcePartsLocation = Lists.transform(combinedObject.getSourceParts(), GET_LOCATION_FUNCTION);
 
         // sort the supplied files map based on this explicit order
-        Map<URI, InputSupplier<? extends InputStream>> parts = newTreeMap(Ordering.explicit(sourcePartsLocation));
+        Map<URI, ByteSource> parts = newTreeMap(Ordering.explicit(sourcePartsLocation));
         parts.putAll(files);
 
         // join the parts
-        return ByteStreams.join(parts.values());
+        return ByteSource.concat(parts.values());
     }
 
     private URI createStagingFileName(String base, int i)

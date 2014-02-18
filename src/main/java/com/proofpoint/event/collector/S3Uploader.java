@@ -171,7 +171,7 @@ public class S3Uploader
             throws IOException
     {
         SnappyInputStream input = new SnappyInputStream(new FileInputStream(file));
-        JsonParser parser = new ObjectMapper().getJsonFactory().createJsonParser(input);
+        JsonParser parser = new ObjectMapper().getFactory().createParser(input);
         try {
             while (parser.readValueAsTree() != null) {
                 // ignore contents

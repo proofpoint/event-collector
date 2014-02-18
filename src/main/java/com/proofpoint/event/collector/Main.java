@@ -17,17 +17,18 @@ package com.proofpoint.event.collector;
 
 import com.google.inject.Injector;
 import com.proofpoint.bootstrap.Bootstrap;
-import com.proofpoint.discovery.client.Announcer;
 import com.proofpoint.discovery.client.DiscoveryModule;
+import com.proofpoint.discovery.client.announce.Announcer;
 import com.proofpoint.event.client.JsonEventModule;
 import com.proofpoint.http.server.HttpServerModule;
 import com.proofpoint.jaxrs.JaxrsModule;
 import com.proofpoint.jmx.JmxHttpModule;
 import com.proofpoint.jmx.JmxModule;
-import com.proofpoint.jmx.http.rpc.JmxHttpRpcModule;
 import com.proofpoint.json.JsonModule;
 import com.proofpoint.log.Logger;
 import com.proofpoint.node.NodeModule;
+import com.proofpoint.reporting.ReportingClientModule;
+import com.proofpoint.reporting.ReportingModule;
 import org.weakref.jmx.guice.MBeanModule;
 
 public class Main
@@ -37,25 +38,27 @@ public class Main
     public static void main(String[] args)
             throws Exception
     {
-        Bootstrap app = new Bootstrap(
-                new NodeModule(),
-                new DiscoveryModule(),
-                new HttpServerModule(),
-                new JsonModule(),
-                new JaxrsModule(),
-                new MBeanModule(),
-                new JmxModule(),
-                new JmxHttpModule(),
-                new JmxHttpRpcModule(),
-                new JsonEventModule(),
-                new MainModule(),
-                new EventTapModule());
-
         try {
-            Injector injector = app.strictConfig().initialize();
+            Bootstrap app = Bootstrap.bootstrapApplication("event-collector")
+                    .withModules(
+                            new NodeModule(),
+                            new DiscoveryModule(),
+                            new HttpServerModule(),
+                            new JsonModule(),
+                            new JaxrsModule(),
+                            new MBeanModule(),
+                            new JmxModule(),
+                            new JmxHttpModule(),
+                            new JsonEventModule(),
+                            new EventTapModule(),
+                            new ReportingModule(),
+                            new ReportingClientModule(),
+                            new MainModule());
+
+            Injector injector = app.initialize();
             injector.getInstance(Announcer.class).start();
         }
-        catch (Exception e) {
+        catch (Throwable e) {
             log.error(e);
             System.exit(1);
         }

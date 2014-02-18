@@ -22,14 +22,13 @@ import com.proofpoint.http.client.RequestStats;
 import com.proofpoint.http.client.Response;
 import com.proofpoint.http.client.ResponseHandler;
 
-import javax.ws.rs.core.Response.Status;
 import java.util.LinkedList;
 import java.util.List;
 
-import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
-import static javax.ws.rs.core.Response.Status.SERVICE_UNAVAILABLE;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
+import static javax.ws.rs.core.Response.Status.SERVICE_UNAVAILABLE;
 
 class MockHttpClient implements HttpClient
 {
@@ -64,11 +63,7 @@ class MockHttpClient implements HttpClient
                 }
             }
 
-            E newException = responseHandler.handleException(request, thisException);
-            if (newException != null) {
-                throw newException;
-            }
-            return null;
+            return responseHandler.handleException(request, thisException);
         }
 
         return responseHandler.handle(request, response);

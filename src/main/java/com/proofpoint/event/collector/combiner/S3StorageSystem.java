@@ -35,15 +35,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.io.ByteStreams;
+import com.google.common.io.ByteSource;
 import com.google.common.io.Files;
-import com.google.common.io.InputSupplier;
 import com.proofpoint.log.Logger;
 
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.util.Iterator;
 import java.util.List;
@@ -177,17 +175,17 @@ public class S3StorageSystem
 
     private StoredObject createCombinedObjectSmall(CombinedStoredObject combinedObject)
     {
-        ImmutableList.Builder<InputSupplier<InputStream>> builder = ImmutableList.builder();
+        ImmutableList.Builder<ByteSource> builder = ImmutableList.builder();
         List<URI> sourceParts = Lists.transform(combinedObject.getSourceParts(), StoredObject.GET_LOCATION_FUNCTION);
         for (URI sourcePart : sourceParts) {
             builder.add(getInputSupplier(sourcePart));
         }
-        InputSupplier<InputStream> source = ByteStreams.join(builder.build());
+        ByteSource source = ByteSource.concat(builder.build());
 
         File tempFile = null;
         try {
             tempFile = File.createTempFile(S3StorageHelper.getS3FileName(combinedObject.getLocation()), ".small.s3.data");
-            Files.copy(source, tempFile);
+            source.copyTo(Files.asByteSink(tempFile));
             StoredObject result = putObject(combinedObject.getLocation(), tempFile);
             return result;
         }
@@ -239,7 +237,7 @@ public class S3StorageSystem
         return updateStoredObject(storedObject.getLocation(), metadata);
     }
 
-    public InputSupplier<InputStream> getInputSupplier(URI target)
+    public ByteSource getInputSupplier(URI target)
     {
         return new S3InputSupplier(s3Service, target);
     }

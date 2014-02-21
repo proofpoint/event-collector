@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.proofpoint.event</groupId>
     <artifactId>event-collector</artifactId>
-    <version>1.14.64-SNAPSHOT</version>
+    <version>1.14.64</version>
 
     <name>event-collector</name>
     <description>Event collector</description>
@@ -31,7 +31,8 @@
         <connection>scm:git:git://github.com/proofpoint/event-collector.git</connection>
         <developerConnection>scm:git:git@github.com:proofpoint/event-collector.git</developerConnection>
         <url>https://github.com/proofpoint/event-collector</url>
-    </scm>
+      <tag>1.14.64</tag>
+  </scm>
 
     <distributionManagement>
         <snapshotRepository>

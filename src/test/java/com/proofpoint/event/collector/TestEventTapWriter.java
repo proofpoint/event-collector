@@ -29,8 +29,8 @@ import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
 import com.proofpoint.log.Logger;
+import com.proofpoint.testing.SerialScheduledExecutorService;
 import org.joda.time.DateTime;
-import org.logicalshift.concurrent.SerialScheduledExecutorService;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
@@ -46,8 +46,6 @@ import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Objects.firstNonNull;
 import static com.google.common.base.Strings.nullToEmpty;
-import static java.lang.String.format;
-import static java.util.UUID.randomUUID;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -58,6 +56,8 @@ import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertTrue;
+import static java.lang.String.format;
+import static java.util.UUID.randomUUID;
 
 public class TestEventTapWriter
 {

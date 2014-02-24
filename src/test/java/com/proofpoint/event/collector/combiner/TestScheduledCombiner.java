@@ -18,7 +18,7 @@ package com.proofpoint.event.collector.combiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.proofpoint.event.collector.ServerConfig;
-import org.logicalshift.concurrent.SerialScheduledExecutorService;
+import com.proofpoint.testing.SerialScheduledExecutorService;
 import org.mockito.stubbing.Stubber;
 import org.testng.annotations.Test;
 
@@ -26,9 +26,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.MINUTES;
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -37,6 +34,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class TestScheduledCombiner
 {

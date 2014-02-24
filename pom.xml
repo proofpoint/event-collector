@@ -197,13 +197,6 @@
         </dependency>
 
         <dependency>
-            <groupId>org.logicalshift</groupId>
-            <artifactId>serial-executor-service</artifactId>
-            <version>1.2</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
             <groupId>com.proofpoint.platform</groupId>
             <artifactId>testing</artifactId>
             <scope>test</scope>

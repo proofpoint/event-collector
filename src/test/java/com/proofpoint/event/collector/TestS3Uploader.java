@@ -24,7 +24,11 @@ import com.proofpoint.event.collector.combiner.CombinedStoredObject;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
 import com.proofpoint.event.collector.stats.CollectorStats;
+import com.proofpoint.testing.SerialScheduledExecutorService;
 import com.proofpoint.units.Duration;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Test;
+
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -32,9 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import org.logicalshift.concurrent.SerialScheduledExecutorService;
-import org.testng.annotations.BeforeMethod;
-import org.testng.annotations.Test;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;

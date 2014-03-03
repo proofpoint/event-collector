@@ -46,7 +46,6 @@ import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
 import static com.proofpoint.event.client.EventBinder.eventBinder;
-import static com.proofpoint.event.collector.ProcessStats.HourlyEventCount;
 import static org.weakref.jmx.guice.ExportBinder.newExporter;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
@@ -85,8 +84,6 @@ public class MainModule
         eventBinder(binder).bindEventClient(CombineCompleted.class);
 
         binder.bind(EventWriterStatsResource.class).in(Scopes.SINGLETON);
-
-        eventBinder(binder).bindEventClient(HourlyEventCount.class);
 
         binder.bind(CollectorStats.class).in(Scopes.SINGLETON);
         newExporter(binder).export(CollectorStats.class).withGeneratedName();

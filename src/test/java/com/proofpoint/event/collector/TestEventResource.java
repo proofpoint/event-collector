@@ -15,15 +15,10 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.base.Charsets;
-import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.io.Files;
-import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.testing.FileUtils;
-import com.proofpoint.testing.SerialScheduledExecutorService;
 import org.joda.time.DateTime;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.BeforeSuite;
@@ -33,12 +28,8 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import java.io.File;
 import java.io.IOException;
-import java.util.Iterator;
-import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
-import static com.proofpoint.event.collector.ProcessStats.HourlyEventCount;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
@@ -47,8 +38,6 @@ import static org.testng.Assert.assertTrue;
 public class TestEventResource
 {
     private InMemoryEventWriter writer;
-    private InMemoryEventClient eventClient;
-    private SerialScheduledExecutorService executor;
 
     @BeforeSuite
     public void ensureCleanWorkingDirectory()
@@ -63,8 +52,6 @@ public class TestEventResource
     public void setup()
     {
         writer = new InMemoryEventWriter();
-        eventClient = new InMemoryEventClient();
-        executor = new SerialScheduledExecutorService();
     }
 
     @Test
@@ -72,8 +59,7 @@ public class TestEventResource
             throws IOException
     {
         try {
-            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"),
-                    executor, eventClient);
+            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"));
 
             ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
             Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
@@ -85,7 +71,6 @@ public class TestEventResource
             assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
 
             assertEquals(writer.getEvents(), ImmutableList.of(event));
-            checkProcessStats("Test", writer.getEvents().size());
         }
         finally {
             ensureCleanWorkingDirectory();
@@ -96,8 +81,8 @@ public class TestEventResource
     public void testPostInvalidType()
             throws IOException
     {
-        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"),
-                executor, eventClient);
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"));
+
         ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
         Event badEvent1 = new Event("TestBad1", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
         Event badEvent2 = new Event("TestBad2", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
@@ -116,8 +101,7 @@ public class TestEventResource
     {
         String eventType = UUID.randomUUID().toString();
         try {
-            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(),
-                    executor, eventClient);
+            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig());
 
             ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
             Event event = new Event(eventType, UUID.randomUUID().toString(), "test.local", new DateTime(), data);
@@ -129,49 +113,9 @@ public class TestEventResource
             assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
 
             assertEquals(writer.getEvents(), ImmutableList.of(event));
-            checkProcessStats(eventType, writer.getEvents().size());
         }
         finally {
             ensureCleanWorkingDirectory();
         }
-    }
-
-    private void checkProcessStats(String eventType, int count)
-            throws IOException
-    {
-        executor.elapseTime(1, TimeUnit.MINUTES);
-        checkStatsInFile("var/stats/" + eventType + "/current.txt", count);
-
-        executor.elapseTime(1, TimeUnit.HOURS);
-        checkStatsInFile("var/stats/" + eventType + "/hourly.txt", count);
-
-        executor.elapseTime(1, TimeUnit.HOURS);
-        checkStatsInFile("var/stats/" + eventType + "/hourly.txt", 0);
-
-        executor.elapseTime(1, TimeUnit.DAYS);
-        List<Object> events = eventClient.getEvents();
-        assertEquals(((HourlyEventCount) events.get(0)).getCount(), count);
-        assertEquals(((HourlyEventCount) events.get(0)).getEventType(), eventType);
-
-        assertEquals(((HourlyEventCount) events.get(1)).getCount(), 0);
-        assertEquals(((HourlyEventCount) events.get(1)).getEventType(), eventType);
-    }
-
-    private void checkStatsInFile(String fileName, int count)
-            throws IOException
-    {
-        File file = new File(fileName);
-        assertTrue(file.exists());
-
-        List<String> lines = Files.readLines(file, Charsets.UTF_8);
-
-        assertTrue(lines != null && !lines.isEmpty(), String.format("lines of %s are unexpectedly '%s'", fileName, lines));
-        String line = lines.get(lines.size() - 1);
-
-        Iterator<String> iterator = Splitter.on(" ").split(line).iterator();
-        String date = iterator.next();
-        long value = Long.parseLong(iterator.next());
-
-        assertEquals(value, count);
     }
 }

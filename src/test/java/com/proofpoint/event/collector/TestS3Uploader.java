@@ -23,7 +23,6 @@ import com.google.common.io.Resources;
 import com.proofpoint.event.collector.combiner.CombinedStoredObject;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
-import com.proofpoint.event.collector.stats.CollectorStats;
 import com.proofpoint.testing.SerialScheduledExecutorService;
 import com.proofpoint.units.Duration;
 import org.testng.annotations.BeforeMethod;
@@ -48,7 +47,6 @@ public class TestS3Uploader
     private DummyStorageSystem storageSystem;
     private ServerConfig serverConfig;
     private SerialScheduledExecutorService executor;
-    private CollectorStats stats;
 
     @BeforeMethod
     public void setup()
@@ -65,53 +63,42 @@ public class TestS3Uploader
                 .setRetryDelay(new Duration(1, TimeUnit.MINUTES));
 
         executor = new SerialScheduledExecutorService();
-        stats = new CollectorStats();
     }
 
     @Test
     public void testSuccessOnFailedDirExists()
     {
         new File(tempStageDir.getPath(), "failed").mkdir();
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, stats);
-
-        checkStats(stats, 0, 0, 0);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class)
     public void testFailureOnFailedFileExists() throws IOException
     {
         new File(tempStageDir.getPath(), "failed").createNewFile();
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, stats);
-
-        checkStats(stats, 0, 0, 0);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
     }
 
     @Test
     public void testSuccessOnRetryDirExists()
     {
         new File(tempStageDir.getPath(), "retry").mkdir();
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, stats);
-
-        checkStats(stats, 0, 0, 0);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class)
     public void testFailureOnRetryFileExists() throws IOException
     {
         new File(tempStageDir.getPath(), "retry").createNewFile();
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, stats);
-
-        checkStats(stats, 0, 0, 0);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
     }
 
     @Test
     public void testSuccessOnDirectoriesInStaging() throws IOException
     {
         new File(tempStageDir.getPath(), "directory").mkdir();
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, stats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
         uploader.start();
-
-        checkStats(stats, 0, 0, 0);
     }
 
     @Test
@@ -121,12 +108,10 @@ public class TestS3Uploader
         Files.copy(new File(Resources.getResource("pending.json.snappy").toURI()), pendingFile);
 
         assertTrue(pendingFile.exists());
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, stats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
         uploader.start();
         assertFalse(pendingFile.exists());
         assertTrue(storageSystem.hasReceivedFile(pendingFile));
-
-        checkStats(stats, 0, 1, 0);
     }
 
     @Test
@@ -136,13 +121,11 @@ public class TestS3Uploader
         Files.copy(new File(Resources.getResource("invalidjson.snappy").toURI()), invalidJsonFile);
 
         assertTrue(invalidJsonFile.exists());
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, stats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
         uploader.start();
         assertFalse(invalidJsonFile.exists());
         assertTrue(new File(tempStageDir.getPath() + "/failed", invalidJsonFile.getName()).exists());
         assertFalse(storageSystem.hasReceivedFile(invalidJsonFile));
-
-        checkStats(stats, 0, 0, 1);
     }
 
     @Test
@@ -152,13 +135,11 @@ public class TestS3Uploader
         Files.copy(new File(Resources.getResource("invalidjson2.snappy").toURI()), invalidJsonFile);
 
         assertTrue(invalidJsonFile.exists());
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, stats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
         uploader.start();
         assertFalse(invalidJsonFile.exists());
         assertTrue(new File(tempStageDir.getPath() + "/failed", invalidJsonFile.getName()).exists());
         assertFalse(storageSystem.hasReceivedFile(invalidJsonFile));
-
-        checkStats(stats, 0, 0, 1);
     }
 
     @Test
@@ -173,13 +154,12 @@ public class TestS3Uploader
         assertEquals(storageSystem.getAttempts(pendingFile), 0);
         //attempt 1 to upload from staging directory fails and file is moved to retry directory
         assertTrue(pendingFile.exists());
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, stats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
         uploader.start();
         assertFalse(pendingFile.exists());
         assertTrue(new File(retryDir, pendingFile.getName()).exists());
         assertFalse(storageSystem.hasReceivedFile(pendingFile));
         assertEquals(storageSystem.getAttempts(pendingFile), 1);
-        checkStats(stats, 1, 0, 0);
 
         //attempt 2: file is moved to staging from retry directory, and fails and hence gets back to retry directory
         executor.elapseTime(1, TimeUnit.MINUTES);
@@ -187,7 +167,6 @@ public class TestS3Uploader
         assertTrue(new File(retryDir, pendingFile.getName()).exists());
         assertFalse(storageSystem.hasReceivedFile(pendingFile));
         assertEquals(storageSystem.getAttempts(pendingFile), 2);
-        checkStats(stats, 2, 0, 0);
 
         //retryExecutor hasn't run again
         executor.elapseTime(1, TimeUnit.MINUTES);
@@ -195,7 +174,6 @@ public class TestS3Uploader
         assertTrue(new File(retryDir, pendingFile.getName()).exists());
         assertFalse(storageSystem.hasReceivedFile(pendingFile));
         assertEquals(storageSystem.getAttempts(pendingFile), 2);
-        checkStats(stats, 2, 0, 0);
 
         //attempt 3: file is moved to staging from retry directory, succeeds and hence is deleted from local directories
         executor.elapseTime(2, TimeUnit.MINUTES);
@@ -203,14 +181,12 @@ public class TestS3Uploader
         assertFalse(new File(retryDir, pendingFile.getName()).exists());
         assertTrue(storageSystem.hasReceivedFile(pendingFile));
         assertEquals(storageSystem.getAttempts(pendingFile), 3);
-
-        checkStats(stats, 2, 1, 0);
     }
 
     @Test
     public void testInvalidFilesInRetryDirectory() throws Exception
     {
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, stats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor);
         uploader.start();
 
         executor.elapseTime(1, TimeUnit.MINUTES);
@@ -241,15 +217,6 @@ public class TestS3Uploader
         assertFalse(new File(tempStageDir.getPath(), invalidFile.getName()).exists());
 
         assertTrue(directory.exists());
-
-        checkStats(stats, 0, 0, 2);
-    }
-
-    private void checkStats(CollectorStats stats, int uploadFailed, int uploadSucceeded, int fileError)
-    {
-        assertEquals(stats.getUploadFailureStats().getTotalCount(), uploadFailed);
-        assertEquals(stats.getUploadSuccessStats().getTotalCount(), uploadSucceeded);
-        assertEquals(stats.getFileErrorStats().getTotalCount(), fileError);
     }
 
     private class DummyStorageSystem

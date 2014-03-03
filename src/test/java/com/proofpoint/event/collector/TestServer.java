@@ -161,37 +161,6 @@ public class TestServer
     }
 
     @Test
-    public void testGetTapCounts()
-            throws Exception
-    {
-        StringResponse response = client.execute(prepareGet()
-                .setUri(urlFor("/v1/tap/stats"))
-                .build(),
-                createStringResponseHandler()
-        );
-
-        assertEquals(response.getStatusCode(), Status.OK.getStatusCode());
-        assertEquals(response.getHeader(CONTENT_TYPE), APPLICATION_JSON);
-
-        Object actual = OBJECT_CODEC.fromJson(response.getBody());
-        Object expected = OBJECT_CODEC.fromJson("{\"queue\":{},\"flows\":{}}");
-        assertEquals(actual, expected);
-    }
-
-    @Test
-    public void testClearTapCounts()
-            throws Exception
-    {
-        StatusResponse response = client.execute(prepareDelete()
-                .setUri(urlFor("/v1/tap/stats"))
-                .build(), createStatusResponseHandler()
-        );
-
-        assertEquals(response.getStatusCode(), Status.NO_CONTENT.getStatusCode());
-    }
-
-
-    @Test
     public void testGetSpoolCounts()
             throws Exception
     {

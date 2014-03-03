@@ -16,14 +16,13 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
-import com.proofpoint.event.collector.EventCounters.CounterState;
+import com.proofpoint.event.collector.EventCollectorStats.Status;
 import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.FlowPolicy;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
@@ -47,7 +46,7 @@ import static com.google.common.base.Objects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
-public class EventTapWriter implements EventWriter, EventTapStats
+public class EventTapWriter implements EventWriter
 {
     @VisibleForTesting
     static final String FLOW_ID_PROPERTY_NAME = "flowId";
@@ -58,6 +57,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
     private final ScheduledExecutorService executorService;
     private final BatchProcessorFactory batchProcessorFactory;
     private final EventTapFlowFactory eventTapFlowFactory;
+    private final EventCollectorStats eventCollectorStats;
 
     private final AtomicReference<Map<String, EventTypePolicy>> eventTypePolicies = new AtomicReference<Map<String, EventTypePolicy>>(
             ImmutableMap.<String, EventTypePolicy>of());
@@ -66,21 +66,20 @@ public class EventTapWriter implements EventWriter, EventTapStats
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
 
-    private final EventCounters<List<String>> queueCounters = new EventCounters<List<String>>();
-    private final EventCounters<List<String>> flowCounters = new EventCounters<List<String>>();
-
     @Inject
     public EventTapWriter(@ServiceType("eventTap") ServiceSelector selector,
             @EventTap ScheduledExecutorService executorService,
             BatchProcessorFactory batchProcessorFactory,
             EventTapFlowFactory eventTapFlowFactory,
-            EventTapConfig config)
+            EventTapConfig config,
+            EventCollectorStats eventCollectorStats)
     {
         this.selector = checkNotNull(selector, "selector is null");
         this.executorService = checkNotNull(executorService, "executorService is null");
         this.flowRefreshDuration = checkNotNull(config, "config is null").getEventTapRefreshDuration();
         this.batchProcessorFactory = checkNotNull(batchProcessorFactory, "batchProcessorFactory is null");
         this.eventTapFlowFactory = checkNotNull(eventTapFlowFactory, "eventTapFlowFactory is null");
+        this.eventCollectorStats = checkNotNull(eventCollectorStats, "eventCollectorStats is null");
     }
 
     @PostConstruct
@@ -129,7 +128,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
         try {
             Map<String, EventTypePolicy> existingPolicies = eventTypePolicies.get();
             Map<String, Map<String, FlowInfo>> existingFlows = flows;
-            ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.<String, EventTypePolicy>builder();
+            ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.builder();
 
             Map<String, Map<String, FlowInfo>> newFlows = constructFlowInfoFromDiscovery();
             if (existingFlows.equals(newFlows)) {
@@ -164,34 +163,11 @@ public class EventTapWriter implements EventWriter, EventTapStats
         }
     }
 
-    public Map<String, CounterState> getQueueCounters()
-    {
-        return queueCounters.getCounts();
-    }
-
-    @Override
-    public void resetQueueCounters()
-    {
-        queueCounters.resetCounts();
-    }
-
-    @Override
-    public Map<String, CounterState> getFlowCounters()
-    {
-        return flowCounters.getCounts();
-    }
-
-    @Override
-    public void resetFlowCounters()
-    {
-        flowCounters.resetCounts();
-    }
-
     private Map<String, Map<String, FlowInfo>> constructFlowInfoFromDiscovery()
     {
         List<ServiceDescriptor> descriptors = selector.selectAllServices();
         // First level is EventType, second is flowId
-        Map<String, Map<String, FlowInfo.Builder>> flows = new HashMap<String, Map<String, FlowInfo.Builder>>();
+        Map<String, Map<String, FlowInfo.Builder>> flows = new HashMap<>();
 
         for (ServiceDescriptor descriptor : descriptors) {
             Map<String, String> properties = descriptor.getProperties();
@@ -323,21 +299,14 @@ public class EventTapWriter implements EventWriter, EventTapStats
         return batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), batchHandler, createBatchProcessorObserver(eventType, flowId));
     }
 
-    private BatchProcessor.Observer createBatchProcessorObserver(String eventType, String flowId)
+    private BatchProcessor.Observer createBatchProcessorObserver(final String eventType, final String flowId)
     {
-        final List<String> key = ImmutableList.of(eventType, flowId);
         return new BatchProcessor.Observer()
         {
             @Override
-            public void onRecordsLost(int count)
+            public void onRecordsDropped(int count)
             {
-                queueCounters.recordLost(key, count);
-            }
-
-            @Override
-            public void onRecordsReceived(int count)
-            {
-                queueCounters.recordReceived(key, count);
+                eventCollectorStats.outboundEvents(eventType, flowId, Status.DROPPED).update(count);
             }
         };
     }
@@ -357,20 +326,21 @@ public class EventTapWriter implements EventWriter, EventTapStats
         return new EventTapFlow.Observer()
         {
             @Override
-            public void onRecordsSent(URI uri, int count)
+            public void onRecordsDelivered(int count)
             {
-                flowCounters.recordReceived(createKey(uri), count);
+                eventCollectorStats.outboundEvents(eventType, flowId, Status.DELIVERED).update(count);
             }
 
             @Override
-            public void onRecordsLost(URI uri, int count)
+            public void onRecordsLost(int count)
             {
-                flowCounters.recordLost(createKey(uri), count);
+                eventCollectorStats.outboundEvents(eventType, flowId, Status.LOST).update(count);
             }
 
-            private List<String> createKey(URI uri)
+            @Override
+            public void onRecordsRejected(URI uri, int count)
             {
-                return ImmutableList.of(eventType, flowId, uri.toString());
+                eventCollectorStats.outboundEvents(eventType, flowId, uri.toString(), Status.REJECTED).update(count);
             }
         };
     }

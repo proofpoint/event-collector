@@ -15,30 +15,29 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.base.Charsets;
-import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.io.Files;
-import com.proofpoint.event.client.InMemoryEventClient;
-import com.proofpoint.testing.FileUtils;
-import com.proofpoint.testing.SerialScheduledExecutorService;
+import com.proofpoint.stats.CounterStat;
 import org.joda.time.DateTime;
 import org.testng.annotations.BeforeMethod;
-import org.testng.annotations.BeforeSuite;
 import org.testng.annotations.Test;
 
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
-import java.io.File;
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
-import static com.proofpoint.event.collector.ProcessStats.HourlyEventCount;
+import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.UNSUPPORTED;
+import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.VALID;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
@@ -46,132 +45,102 @@ import static org.testng.Assert.assertTrue;
 
 public class TestEventResource
 {
+    private CounterStat counterStatForValidType;
+    private CounterStat counterStatForUnsupportedType;
     private InMemoryEventWriter writer;
-    private InMemoryEventClient eventClient;
-    private SerialScheduledExecutorService executor;
-
-    @BeforeSuite
-    public void ensureCleanWorkingDirectory()
-    {
-        File statsDirectory = new File("var/stats");
-        if (statsDirectory.exists()) {
-            FileUtils.deleteDirectoryContents(statsDirectory);
-        }
-    }
+    private EventCollectorStats eventCollectorStats;
 
     @BeforeMethod
     public void setup()
     {
+        counterStatForValidType = new CounterStat();
+        counterStatForUnsupportedType = new CounterStat();
         writer = new InMemoryEventWriter();
-        eventClient = new InMemoryEventClient();
-        executor = new SerialScheduledExecutorService();
+        eventCollectorStats = mock(EventCollectorStats.class);
+
+        when(eventCollectorStats.incomingEvents(anyString(), eq(VALID))).thenReturn(counterStatForValidType);
+        when(eventCollectorStats.incomingEvents(anyString(), eq(UNSUPPORTED))).thenReturn(counterStatForUnsupportedType);
     }
 
     @Test
     public void testPost()
             throws IOException
     {
-        try {
-            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"),
-                    executor, eventClient);
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"), eventCollectorStats);
 
-            ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
-            Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
+        Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
 
-            Response response = resource.post(ImmutableList.of(event));
+        List<Event> events = ImmutableList.of(event);
+        Response response = resource.post(events);
 
-            assertEquals(response.getStatus(), Status.ACCEPTED.getStatusCode());
-            assertNull(response.getEntity());
-            assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
+        assertEquals(response.getStatus(), Status.ACCEPTED.getStatusCode());
+        assertNull(response.getEntity());
+        assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
 
-            assertEquals(writer.getEvents(), ImmutableList.of(event));
-            checkProcessStats("Test", writer.getEvents().size());
-        }
-        finally {
-            ensureCleanWorkingDirectory();
-        }
+        assertEquals(writer.getEvents(), events);
+
+        verifyCount(1, 0);
+        verify(eventCollectorStats).incomingEvents("Test", VALID);
+        verifyNoMoreInteractions(eventCollectorStats);
     }
 
     @Test
-    public void testPostInvalidType()
+    public void testPostUnsupportedType()
             throws IOException
     {
-        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"),
-                executor, eventClient);
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"), eventCollectorStats);
+
         ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
-        Event badEvent1 = new Event("TestBad1", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
-        Event badEvent2 = new Event("TestBad2", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
-        Response response = resource.post(ImmutableList.of(badEvent2, badEvent1));
+        Event event1 = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        Event event2 = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        Event badEvent = new Event("TestBad", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+
+        List<Event> events = ImmutableList.of(event1, event2, badEvent);
+        Response response = resource.post(events);
 
         assertEquals(response.getStatus(), Status.BAD_REQUEST.getStatusCode());
         assertNotNull(response.getEntity());
-        assertTrue(response.getEntity().toString().startsWith("Invalid event type(s): "));
-        assertTrue(response.getEntity().toString().contains("TestBad1"));
-        assertTrue(response.getEntity().toString().contains("TestBad2"));
+        assertTrue(response.getEntity().toString().startsWith("Unsupported event type(s): "));
+        assertTrue(response.getEntity().toString().contains("TestBad"));
+
+        verifyCount(2, 1);
+        verify(eventCollectorStats, times(2)).incomingEvents("Test", VALID);
+        verify(eventCollectorStats).incomingEvents("TestBad", UNSUPPORTED);
+        verifyNoMoreInteractions(eventCollectorStats);
     }
 
     @Test
     public void testAcceptAllEvents()
             throws IOException
     {
-        String eventType = UUID.randomUUID().toString();
-        try {
-            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(),
-                    executor, eventClient);
+        String eventTypeA = UUID.randomUUID().toString();
+        String eventTypeB = UUID.randomUUID().toString();
 
-            ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
-            Event event = new Event(eventType, UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(), eventCollectorStats);
 
-            Response response = resource.post(ImmutableList.of(event));
+        ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
+        Event eventWithTypeA = new Event(eventTypeA, UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        Event eventWithTypeB = new Event(eventTypeB, UUID.randomUUID().toString(), "test.local", new DateTime(), data);
 
-            assertEquals(response.getStatus(), Status.ACCEPTED.getStatusCode());
-            assertNull(response.getEntity());
-            assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
+        List<Event> events = ImmutableList.of(eventWithTypeA, eventWithTypeB);
+        Response response = resource.post(events);
 
-            assertEquals(writer.getEvents(), ImmutableList.of(event));
-            checkProcessStats(eventType, writer.getEvents().size());
-        }
-        finally {
-            ensureCleanWorkingDirectory();
-        }
+        assertEquals(response.getStatus(), Status.ACCEPTED.getStatusCode());
+        assertNull(response.getEntity());
+        assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
+
+        assertEquals(writer.getEvents(), events);
+
+        verifyCount(2, 0);
+        verify(eventCollectorStats).incomingEvents(eventTypeA, VALID);
+        verify(eventCollectorStats).incomingEvents(eventTypeB, VALID);
+        verifyNoMoreInteractions(eventCollectorStats);
     }
 
-    private void checkProcessStats(String eventType, int count)
-            throws IOException
+    private void verifyCount(int validTypeCount, int unsupportedTypeCount)
     {
-        executor.elapseTime(1, TimeUnit.MINUTES);
-        checkStatsInFile("var/stats/" + eventType + "/current.txt", count);
-
-        executor.elapseTime(1, TimeUnit.HOURS);
-        checkStatsInFile("var/stats/" + eventType + "/hourly.txt", count);
-
-        executor.elapseTime(1, TimeUnit.HOURS);
-        checkStatsInFile("var/stats/" + eventType + "/hourly.txt", 0);
-
-        executor.elapseTime(1, TimeUnit.DAYS);
-        List<Object> events = eventClient.getEvents();
-        assertEquals(((HourlyEventCount) events.get(0)).getCount(), count);
-        assertEquals(((HourlyEventCount) events.get(0)).getEventType(), eventType);
-
-        assertEquals(((HourlyEventCount) events.get(1)).getCount(), 0);
-        assertEquals(((HourlyEventCount) events.get(1)).getEventType(), eventType);
-    }
-
-    private void checkStatsInFile(String fileName, int count)
-            throws IOException
-    {
-        File file = new File(fileName);
-        assertTrue(file.exists());
-
-        List<String> lines = Files.readLines(file, Charsets.UTF_8);
-
-        assertTrue(lines != null && !lines.isEmpty(), String.format("lines of %s are unexpectedly '%s'", fileName, lines));
-        String line = lines.get(lines.size() - 1);
-
-        Iterator<String> iterator = Splitter.on(" ").split(line).iterator();
-        String date = iterator.next();
-        long value = Long.parseLong(iterator.next());
-
-        assertEquals(value, count);
+        assertEquals(counterStatForValidType.getTotalCount(), validTypeCount);
+        assertEquals(counterStatForUnsupportedType.getTotalCount(), unsupportedTypeCount);
     }
 }

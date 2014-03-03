@@ -39,7 +39,7 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
     private final BlockingQueue<T> queue;
     private final ExecutorService executor;
     private final Observer observer;
-    private final AtomicReference<Future<?>> future = new AtomicReference<Future<?>>();
+    private final AtomicReference<Future<?>> future = new AtomicReference<>();
 
     public AsyncBatchProcessor(String name, BatchHandler<T> handler, BatchProcessorConfig config, Observer observer)
     {
@@ -48,7 +48,7 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
 
         this.handler = handler;
         this.maxBatchSize = checkNotNull(config, "config is null").getMaxBatchSize();
-        this.queue = new ArrayBlockingQueue<T>(config.getQueueSize());
+        this.queue = new ArrayBlockingQueue<>(config.getQueueSize());
 
         this.executor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat(format("batch-processor-%s", name)).build());
         this.observer = checkNotNull(observer, "observer is null");
@@ -99,8 +99,7 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
         if (!queue.offer(entry)) {
             // queue is full: drop current message
             handler.notifyEntriesDropped(1);
-            observer.onRecordsLost(1);
+            observer.onRecordsDropped(1);
         }
-        observer.onRecordsReceived(1);
     }
 }

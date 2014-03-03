@@ -22,12 +22,7 @@ public interface BatchProcessor<T>
     Observer NULL_OBSERVER = new Observer()
     {
         @Override
-        public void onRecordsLost(int count)
-        {
-        }
-
-        @Override
-        public void onRecordsReceived(int count)
+        public void onRecordsDropped(int count)
         {
         }
     };
@@ -47,8 +42,6 @@ public interface BatchProcessor<T>
 
     interface Observer
     {
-        void onRecordsLost(int count);
-
-        void onRecordsReceived(int count);
+        void onRecordsDropped(int count);
     }
 }

@@ -18,16 +18,12 @@ package com.proofpoint.event.collector;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.inject.TypeLiteral;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
-import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
-import com.proofpoint.http.client.ResponseHandler;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.units.Duration;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
-import org.mockito.ArgumentCaptor;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
@@ -135,7 +131,7 @@ public class TestHttpEventTapFlowFactory
         List<Request> requests = httpClient.getRequests();
         assertEquals(requests.size(), 1);
         if (observer == this.observer) {
-            verify(observer).onRecordsSent(any(URI.class), anyInt());
+            verify(observer).onRecordsDelivered(anyInt());
             verifyNoMoreInteractions(observer);
         }
 
@@ -147,7 +143,7 @@ public class TestHttpEventTapFlowFactory
         assertEquals(requests.size(), taps.size() * (retryCount + 1));
 
         if (observer == this.observer) {
-            verify(observer).onRecordsLost(any(URI.class), anyInt());
+            verify(observer).onRecordsLost(anyInt());
             verifyNoMoreInteractions(observer);
         }
     }

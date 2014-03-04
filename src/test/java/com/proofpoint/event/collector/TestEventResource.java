@@ -18,6 +18,8 @@ package com.proofpoint.event.collector;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.proofpoint.reporting.Key;
+import com.proofpoint.stats.CounterStat;
 import com.proofpoint.testing.FileUtils;
 import org.joda.time.DateTime;
 import org.testng.annotations.BeforeMethod;
@@ -30,6 +32,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.UUID;
 
+import static org.mockito.Mockito.mock;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
@@ -37,7 +40,9 @@ import static org.testng.Assert.assertTrue;
 
 public class TestEventResource
 {
+    private static final CounterStat MOCK_COUNTER_STAT = mock(CounterStat.class);
     private InMemoryEventWriter writer;
+    private EventResourceStats eventResourceStats;
 
     @BeforeSuite
     public void ensureCleanWorkingDirectory()
@@ -52,6 +57,14 @@ public class TestEventResource
     public void setup()
     {
         writer = new InMemoryEventWriter();
+        eventResourceStats = new EventResourceStats()
+        {
+            @Override
+            public CounterStat incomingEvent(@Key("eventType") String eventType, @Key("eventStatus") EventStatus eventStatus)
+            {
+                return MOCK_COUNTER_STAT;
+            }
+        };
     }
 
     @Test
@@ -59,7 +72,7 @@ public class TestEventResource
             throws IOException
     {
         try {
-            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"));
+            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"), eventResourceStats);
 
             ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
             Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
@@ -78,10 +91,10 @@ public class TestEventResource
     }
 
     @Test
-    public void testPostInvalidType()
+    public void testPostUnsupportedType()
             throws IOException
     {
-        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"));
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"), eventResourceStats);
 
         ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
         Event badEvent1 = new Event("TestBad1", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
@@ -90,7 +103,7 @@ public class TestEventResource
 
         assertEquals(response.getStatus(), Status.BAD_REQUEST.getStatusCode());
         assertNotNull(response.getEntity());
-        assertTrue(response.getEntity().toString().startsWith("Invalid event type(s): "));
+        assertTrue(response.getEntity().toString().startsWith("Unsupported event type(s): "));
         assertTrue(response.getEntity().toString().contains("TestBad1"));
         assertTrue(response.getEntity().toString().contains("TestBad2"));
     }
@@ -101,7 +114,7 @@ public class TestEventResource
     {
         String eventType = UUID.randomUUID().toString();
         try {
-            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig());
+            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(), eventResourceStats);
 
             ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
             Event event = new Event(eventType, UUID.randomUUID().toString(), "test.local", new DateTime(), data);

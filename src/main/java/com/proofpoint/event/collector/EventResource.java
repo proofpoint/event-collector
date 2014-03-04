@@ -31,16 +31,20 @@ import java.util.List;
 import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.proofpoint.event.collector.EventResourceStats.EventStatus.UNSUPPORTED;
+import static com.proofpoint.event.collector.EventResourceStats.EventStatus.VALID;
 
 @Path("/v2/event")
 public class EventResource
 {
     private final Set<EventWriter> writers;
     private final Set<String> acceptedEventTypes;
+    private final EventResourceStats eventResourceStats;
 
     @Inject
-    public EventResource(Set<EventWriter> writers, ServerConfig config)
+    public EventResource(Set<EventWriter> writers, ServerConfig config, EventResourceStats eventResourceStats)
     {
+        this.eventResourceStats = eventResourceStats;
         this.writers = checkNotNull(writers, "writers are null");
         this.acceptedEventTypes = ImmutableSet.copyOf(checkNotNull(config, "config is null").getAcceptedEventTypes());
     }
@@ -56,14 +60,18 @@ public class EventResource
                 for (EventWriter writer : writers) {
                     writer.write(event);
                 }
+
+                eventResourceStats.incomingEvent(event.getType(), VALID).update(1);
             }
             else {
                 badEvents.add(event.getType());
+
+                eventResourceStats.incomingEvent(event.getType(), UNSUPPORTED).update(1);
             }
         }
 
         if (!badEvents.isEmpty()) {
-            String errorMessage = "Invalid event type(s): " + Joiner.on(", ").join(badEvents);
+            String errorMessage = "Unsupported event type(s): " + Joiner.on(", ").join(badEvents);
             return Response.status(Status.BAD_REQUEST).entity(errorMessage).build();
         }
 

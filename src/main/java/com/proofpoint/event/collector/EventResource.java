@@ -24,6 +24,7 @@ import com.google.common.collect.Sets;
 import com.google.inject.Inject;
 import com.proofpoint.event.client.EventClient;
 
+import javax.annotation.PreDestroy;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
@@ -36,6 +37,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 @Path("/v2/event")
 public class EventResource
 {
@@ -45,9 +48,10 @@ public class EventResource
     private final EventClient eventClient;
     private final MapMaker maker = new MapMaker();
     private ConcurrentMap<String, ProcessStats> stats = maker.makeMap();
+    private final HttpServerController httpServerController;
 
     @Inject
-    public EventResource(Set<EventWriter> writers, ServerConfig config, ScheduledExecutorService executor, EventClient eventClient)
+    public EventResource(Set<EventWriter> writers, ServerConfig config, ScheduledExecutorService executor, EventClient eventClient, HttpServerController httpServerController)
     {
         Preconditions.checkNotNull(writers, "writer must not be null");
         this.writers = writers;
@@ -55,6 +59,7 @@ public class EventResource
         this.stats = Maps.newConcurrentMap();
         this.executor = executor;
         this.eventClient = eventClient;
+        this.httpServerController = checkNotNull(httpServerController, "httpServerController is null");
     }
 
     @POST
@@ -96,5 +101,14 @@ public class EventResource
             eventStats.start();
         }
         eventStats.processed(1);
+    }
+
+    @PreDestroy
+    public void stop()
+    {
+        httpServerController.stop();
+        for (EventWriter writer : writers) {
+            writer.stop();
+        }
     }
 }

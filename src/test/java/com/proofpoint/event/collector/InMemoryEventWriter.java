@@ -36,4 +36,10 @@ public class InMemoryEventWriter implements EventWriter
     {
         return ImmutableList.copyOf(events);
     }
+
+    @Override
+    public void stop()
+    {
+        events.clear();
+    }
 }

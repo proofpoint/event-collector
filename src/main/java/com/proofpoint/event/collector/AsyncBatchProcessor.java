@@ -18,28 +18,28 @@ package com.proofpoint.event.collector;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.log.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static java.lang.String.format;
 
-public class AsyncBatchProcessor<T> implements BatchProcessor<T>
+public class AsyncBatchProcessor<T>
+        implements BatchProcessor<T>
 {
     private static final Logger log = Logger.get(AsyncBatchProcessor.class);
     private final BatchHandler<T> handler;
-    private final int maxBatchSize;
-    private final BlockingQueue<T> queue;
+    private final EventQueue<T> queue;
     private final ExecutorService executor;
     private final Observer observer;
-    private final AtomicReference<Future<?>> future = new AtomicReference<Future<?>>();
+    private final AtomicReference<Future<?>> future = new AtomicReference<>();
+    private final int batchSize;
+    private final AtomicBoolean shutDownFlag = new AtomicBoolean(false);
 
     public AsyncBatchProcessor(String name, BatchHandler<T> handler, BatchProcessorConfig config, Observer observer)
     {
@@ -47,8 +47,8 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
         checkNotNull(handler, "handler is null");
 
         this.handler = handler;
-        this.maxBatchSize = checkNotNull(config, "config is null").getMaxBatchSize();
-        this.queue = new ArrayBlockingQueue<T>(config.getQueueSize());
+        this.queue = new EventQueue(config);
+        batchSize = checkNotNull(config, "config is null").getMaxBatchSize();
 
         this.executor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat(format("batch-processor-%s", name)).build());
         this.observer = checkNotNull(observer, "observer is null");
@@ -62,18 +62,13 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
             @Override
             public void run()
             {
-                while (!Thread.interrupted()) {
-                    final List<T> entries = new ArrayList<T>(maxBatchSize);
-
+                while (true) {
                     try {
-                        T first = queue.take();
-                        entries.add(first);
-                        queue.drainTo(entries, maxBatchSize - 1);
-
+                        List<T> entries = queue.take(batchSize);
                         handler.processBatch(entries);
                     }
                     catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
+                        break;
                     }
                     catch (Exception e) {
                         log.error(e, "error occurred during batch processing");
@@ -86,17 +81,17 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
     @Override
     public void stop()
     {
-        future.get().cancel(true);
-        executor.shutdownNow();
+        shutDownFlag.set(true);
+        queue.stop();
     }
 
     @Override
     public void put(T entry)
     {
-        checkState(future.get() != null && !future.get().isCancelled(), "Processor is not running");
+        checkState(!shutDownFlag.get(), "Processor is not running");
         checkNotNull(entry, "entry is null");
 
-        if (!queue.offer(entry)) {
+        if (!queue.put(entry)) {
             // queue is full: drop current message
             handler.notifyEntriesDropped(1);
             observer.onRecordsLost(1);

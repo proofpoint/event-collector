@@ -36,7 +36,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
-import static org.testng.Assert.fail;
 
 public class TestAsyncBatchProcessor
 {
@@ -166,12 +165,12 @@ public class TestAsyncBatchProcessor
         }
     }
 
-    @Test
-    public void testStopsWhenStopCalled()
+    @Test (expectedExceptions = IllegalStateException.class, expectedExceptionsMessageRegExp = "Processor is not running")
+    public void testDoesNotAcceptNewEventsAfterStop()
             throws InterruptedException
     {
         BlockingBatchHandler blockingHandler = blockingHandler();
-        BatchProcessor<Event> processor = new AsyncBatchProcessor<Event>(
+        BatchProcessor<Event> processor = new AsyncBatchProcessor<>(
                 "foo", blockingHandler, new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100), observer
         );
 
@@ -190,13 +189,7 @@ public class TestAsyncBatchProcessor
             blockingHandler.unlock();
         }
 
-        try {
-            processor.put(event("bar"));
-            fail();
-        }
-        catch (IllegalStateException ex) {
-            assertEquals(ex.getMessage(), "Processor is not running");
-        }
+        processor.put(event("bar"));
     }
 
     @Test

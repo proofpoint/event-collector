@@ -103,7 +103,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
         }, (long) flowRefreshDuration.toMillis(), (long) flowRefreshDuration.toMillis(), TimeUnit.MILLISECONDS);
     }
 
-    @PreDestroy
+    @Override
     public synchronized void stop()
     {
         for (Map.Entry<String, EventTypePolicy> entry : eventTypePolicies.get().entrySet()) {

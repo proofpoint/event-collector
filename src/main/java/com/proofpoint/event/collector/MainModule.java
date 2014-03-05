@@ -71,6 +71,7 @@ public class MainModule
         newSetBinder(binder, EventWriter.class).addBinding().to(Key.get(SpoolingEventWriter.class)).in(Scopes.SINGLETON);
 
         binder.bind(EventResource.class).in(Scopes.SINGLETON);
+        binder.bind(HttpServerController.class).in(Scopes.SINGLETON);
 
         binder.bind(StoredObjectCombiner.class).in(Scopes.SINGLETON);
         newExporter(binder).export(StoredObjectCombiner.class).withGeneratedName();

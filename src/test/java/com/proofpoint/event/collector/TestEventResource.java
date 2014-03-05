@@ -22,6 +22,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.io.Files;
 import com.proofpoint.event.client.InMemoryEventClient;
+import com.proofpoint.event.collector.ProcessStats.HourlyEventCount;
+import com.proofpoint.http.server.HttpServer;
 import com.proofpoint.testing.FileUtils;
 import com.proofpoint.testing.SerialScheduledExecutorService;
 import org.joda.time.DateTime;
@@ -38,7 +40,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import static com.proofpoint.event.collector.ProcessStats.HourlyEventCount;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
@@ -49,6 +52,8 @@ public class TestEventResource
     private InMemoryEventWriter writer;
     private InMemoryEventClient eventClient;
     private SerialScheduledExecutorService executor;
+    private HttpServerController controller;
+    private HttpServer server;
 
     @BeforeSuite
     public void ensureCleanWorkingDirectory()
@@ -65,6 +70,9 @@ public class TestEventResource
         writer = new InMemoryEventWriter();
         eventClient = new InMemoryEventClient();
         executor = new SerialScheduledExecutorService();
+
+        server = mock(HttpServer.class);
+        controller = new HttpServerController(server);
     }
 
     @Test
@@ -73,7 +81,7 @@ public class TestEventResource
     {
         try {
             EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"),
-                    executor, eventClient);
+                    executor, eventClient, controller);
 
             ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
             Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
@@ -97,7 +105,7 @@ public class TestEventResource
             throws IOException
     {
         EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"),
-                executor, eventClient);
+                executor, eventClient, controller);
         ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
         Event badEvent1 = new Event("TestBad1", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
         Event badEvent2 = new Event("TestBad2", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
@@ -117,7 +125,7 @@ public class TestEventResource
         String eventType = UUID.randomUUID().toString();
         try {
             EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(),
-                    executor, eventClient);
+                    executor, eventClient, controller);
 
             ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
             Event event = new Event(eventType, UUID.randomUUID().toString(), "test.local", new DateTime(), data);
@@ -130,6 +138,33 @@ public class TestEventResource
 
             assertEquals(writer.getEvents(), ImmutableList.of(event));
             checkProcessStats(eventType, writer.getEvents().size());
+        }
+        finally {
+            ensureCleanWorkingDirectory();
+        }
+    }
+
+    @Test
+    public void testShutdown() throws Exception
+    {
+        try {
+            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"),
+                    executor, eventClient, controller);
+
+            ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
+            Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+
+            Response response = resource.post(ImmutableList.of(event));
+
+            assertEquals(response.getStatus(), Status.ACCEPTED.getStatusCode());
+            assertNull(response.getEntity());
+            assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
+
+            assertEquals(writer.getEvents(), ImmutableList.of(event));
+
+            resource.stop();
+            verify(server).stop();
+            assertTrue(writer.getEvents().isEmpty());
         }
         finally {
             ensureCleanWorkingDirectory();

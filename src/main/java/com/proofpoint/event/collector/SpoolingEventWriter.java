@@ -103,13 +103,17 @@ public class SpoolingEventWriter
         executor.scheduleAtFixedRate(closer, 0, (long) CHECK_DELAY.toMillis(), TimeUnit.MILLISECONDS);
     }
 
-    @PreDestroy
-    public void destroy()
-            throws IOException
+    @Override
+    public void stop()
     {
         executor.shutdown();
         for (OutputPartition partition : outputFiles.asMap().values()) {
-            partition.close();
+            try {
+                partition.close();
+            }
+            catch (IOException e) {
+                log.error(e, "error closing partition for type %s", partition.eventPartition.getEventType());
+            }
         }
     }
 

@@ -25,6 +25,7 @@ import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.FlowPolicy;
+import com.proofpoint.event.collector.FlowTapStats.Status;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 import org.weakref.jmx.Managed;
@@ -58,6 +59,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
     private final ScheduledExecutorService executorService;
     private final BatchProcessorFactory batchProcessorFactory;
     private final EventTapFlowFactory eventTapFlowFactory;
+    private final FlowTapStats flowTapStats;
 
     private final AtomicReference<Map<String, EventTypePolicy>> eventTypePolicies = new AtomicReference<Map<String, EventTypePolicy>>(
             ImmutableMap.<String, EventTypePolicy>of());
@@ -66,21 +68,23 @@ public class EventTapWriter implements EventWriter, EventTapStats
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
 
-    private final EventCounters<List<String>> queueCounters = new EventCounters<List<String>>();
-    private final EventCounters<List<String>> flowCounters = new EventCounters<List<String>>();
+    private final EventCounters<List<String>> queueCounters = new EventCounters<>();
+    private final EventCounters<List<String>> flowCounters = new EventCounters<>();
 
     @Inject
     public EventTapWriter(@ServiceType("eventTap") ServiceSelector selector,
             @EventTap ScheduledExecutorService executorService,
             BatchProcessorFactory batchProcessorFactory,
             EventTapFlowFactory eventTapFlowFactory,
-            EventTapConfig config)
+            EventTapConfig config,
+            FlowTapStats flowTapStats)
     {
         this.selector = checkNotNull(selector, "selector is null");
         this.executorService = checkNotNull(executorService, "executorService is null");
         this.flowRefreshDuration = checkNotNull(config, "config is null").getEventTapRefreshDuration();
         this.batchProcessorFactory = checkNotNull(batchProcessorFactory, "batchProcessorFactory is null");
         this.eventTapFlowFactory = checkNotNull(eventTapFlowFactory, "eventTapFlowFactory is null");
+        this.flowTapStats = checkNotNull(flowTapStats, "flowTapStats is null");
     }
 
     @PostConstruct
@@ -129,7 +133,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
         try {
             Map<String, EventTypePolicy> existingPolicies = eventTypePolicies.get();
             Map<String, Map<String, FlowInfo>> existingFlows = flows;
-            ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.<String, EventTypePolicy>builder();
+            ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.builder();
 
             Map<String, Map<String, FlowInfo>> newFlows = constructFlowInfoFromDiscovery();
             if (existingFlows.equals(newFlows)) {
@@ -191,7 +195,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
     {
         List<ServiceDescriptor> descriptors = selector.selectAllServices();
         // First level is EventType, second is flowId
-        Map<String, Map<String, FlowInfo.Builder>> flows = new HashMap<String, Map<String, FlowInfo.Builder>>();
+        Map<String, Map<String, FlowInfo.Builder>> flows = new HashMap<>();
 
         for (ServiceDescriptor descriptor : descriptors) {
             Map<String, String> properties = descriptor.getProperties();
@@ -323,7 +327,7 @@ public class EventTapWriter implements EventWriter, EventTapStats
         return batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), batchHandler, createBatchProcessorObserver(eventType, flowId));
     }
 
-    private BatchProcessor.Observer createBatchProcessorObserver(String eventType, String flowId)
+    private BatchProcessor.Observer createBatchProcessorObserver(final String eventType, final String flowId)
     {
         final List<String> key = ImmutableList.of(eventType, flowId);
         return new BatchProcessor.Observer()
@@ -332,12 +336,14 @@ public class EventTapWriter implements EventWriter, EventTapStats
             public void onRecordsLost(int count)
             {
                 queueCounters.recordLost(key, count);
+                flowTapStats.FlowQueue(eventType, flowId, Status.LOST).update(count);
             }
 
             @Override
             public void onRecordsReceived(int count)
             {
                 queueCounters.recordReceived(key, count);
+                flowTapStats.FlowQueue(eventType, flowId, Status.RECEIVED).update(count);
             }
         };
     }
@@ -360,12 +366,14 @@ public class EventTapWriter implements EventWriter, EventTapStats
             public void onRecordsSent(URI uri, int count)
             {
                 flowCounters.recordReceived(createKey(uri), count);
+                flowTapStats.FlowTap(eventType, flowId, uri.toString(), Status.SENT).update(count);
             }
 
             @Override
             public void onRecordsLost(URI uri, int count)
             {
                 flowCounters.recordLost(createKey(uri), count);
+                flowTapStats.FlowTap(eventType, flowId, uri.toString(), Status.LOST).update(count);
             }
 
             private List<String> createKey(URI uri)

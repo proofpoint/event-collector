@@ -29,6 +29,8 @@ import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
 import com.proofpoint.log.Logger;
+import com.proofpoint.reporting.Key;
+import com.proofpoint.stats.CounterStat;
 import com.proofpoint.testing.SerialScheduledExecutorService;
 import org.joda.time.DateTime;
 import org.testng.annotations.BeforeMethod;
@@ -98,6 +100,8 @@ public class TestEventTapWriter
     private static final ServiceDescriptor qtapB2a = qtapB2;
     private static final ServiceDescriptor qtapB2b = createQosServiceDescriptor(typeB, flowId2, instanceB);
     private static final ServiceDescriptor qtapC = createQosServiceDescriptor(typeC, flowId1, instanceA);
+    private static final CounterStat MOCK_COUNTER_STAT = mock(CounterStat.class);
+
 
     private ServiceSelector serviceSelector;
     private Map<String, Boolean> currentProcessors;
@@ -110,6 +114,7 @@ public class TestEventTapWriter
     private Multimap<List<String>, MockEventTapFlow> qosEventTapFlows;
     private EventTapConfig eventTapConfig;
     private EventTapWriter eventTapWriter;
+    private FlowTapStats flowTapStats;
 
     @BeforeMethod
     public void setup()
@@ -123,41 +128,56 @@ public class TestEventTapWriter
         qosEventTapFlows = LinkedListMultimap.create();     // Insertion order per-key matters
         eventTapConfig = new EventTapConfig();
         serviceSelector = mock(ServiceSelector.class);
+        flowTapStats = new FlowTapStats()
+        {
+            @Override
+            public CounterStat FlowQueue(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("status") Status status)
+            {
+                return MOCK_COUNTER_STAT;
+            }
+
+            @Override
+            public CounterStat FlowTap(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("uri") String uri, @Key("status") Status status)
+            {
+                return MOCK_COUNTER_STAT;
+            }
+        };
+
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig);
+                eventTapConfig, flowTapStats);
         eventTapWriter.start();
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "selector is null")
     public void testConstructorNullSelector()
     {
-        new EventTapWriter(null, executorService, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig());
+        new EventTapWriter(null, executorService, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig(), flowTapStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "executorService is null")
     public void testConstructorNullExecutorService()
     {
-        new EventTapWriter(serviceSelector, null, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig());
+        new EventTapWriter(serviceSelector, null, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig(), flowTapStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "batchProcessorFactory is null")
     public void testConstructorNullBatchProcessorFactory()
     {
-        new EventTapWriter(serviceSelector, executorService, null, eventTapFlowFactory, new EventTapConfig());
+        new EventTapWriter(serviceSelector, executorService, null, eventTapFlowFactory, new EventTapConfig(), flowTapStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventTapFlowFactory is null")
     public void testConstructorNullEventTapFlowFactory()
     {
-        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, null, new EventTapConfig());
+        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, null, new EventTapConfig(), flowTapStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
     {
-        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, eventTapFlowFactory, null);
+        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, eventTapFlowFactory, null, flowTapStats);
     }
 
     @Test

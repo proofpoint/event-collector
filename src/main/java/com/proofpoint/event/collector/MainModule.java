@@ -87,6 +87,8 @@ public class MainModule
 
         reportBinder(binder).bindReportCollection(EventResourceStats.class).withGeneratedName();
 
+        reportBinder(binder).bindReportCollection(FlowTapStats.class).withGeneratedName();
+
         discoveryBinder(binder).bindHttpAnnouncement("collector");
     }
 

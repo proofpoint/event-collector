@@ -76,7 +76,7 @@ class HttpEventTapFlow implements EventTapFlow
         this.observer = checkNotNull(observer, "observer is null");
         this.retryCount = retryCount;
         if (this.retryCount > 0) {
-            this.retryDelayMillis = (long) checkNotNull(retryDelay, "retryDelay is null").toMillis();
+            this.retryDelayMillis = checkNotNull(retryDelay, "retryDelay is null").toMillis();
         }
         else {
             this.retryDelayMillis = 0;

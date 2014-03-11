@@ -13,42 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.proofpoint.event.collector;
 
-import java.util.List;
+import com.proofpoint.reporting.Key;
+import com.proofpoint.stats.CounterStat;
 
-public interface BatchProcessor<T>
+public interface FlowTapStats
 {
-    Observer NULL_OBSERVER = new Observer()
+    CounterStat flowQueue(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("status") Status status);
+
+    CounterStat flowTap(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("uri") String uri, @Key("status") Status status);
+
+    public enum Status
     {
+        SENT, LOST, RECEIVED;
+
         @Override
-        public void onRecordsLost(int count)
+        public String toString()
         {
+            return name().toLowerCase();
         }
-
-        @Override
-        public void onRecordsReceived(int count)
-        {
-        }
-    };
-
-    void start();
-
-    void stop();
-
-    void put(T entry);
-
-    interface BatchHandler<T>
-    {
-        void processBatch(List<T> entries);
-
-        void notifyEntriesDropped(int count);
-    }
-
-    interface Observer
-    {
-        void onRecordsLost(int count);
-
-        void onRecordsReceived(int count);
     }
 }

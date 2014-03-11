@@ -23,14 +23,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.io.Closeables;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
-import com.proofpoint.event.collector.stats.CollectorStats;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 import org.iq80.snappy.SnappyInputStream;
 
-import javax.annotation.PreDestroy;
 import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import java.io.BufferedReader;
 import java.io.File;
@@ -41,8 +40,8 @@ import java.net.URI;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
-
 import java.util.concurrent.TimeUnit;
+
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.json.JsonCodec.jsonCodec;
 
@@ -61,15 +60,13 @@ public class S3Uploader
     private final File retryFileDir;
     private final Duration retryPeriod;
     private final Duration retryDelay;
-    private final CollectorStats stats;
 
     @Inject
     public S3Uploader(StorageSystem storageSystem,
             ServerConfig config,
             EventPartitioner partitioner,
             @UploaderExecutorService ExecutorService uploadExecutor,
-            @PendingFileExecutorService ScheduledExecutorService retryExecutor,
-            CollectorStats stats)
+            @PendingFileExecutorService ScheduledExecutorService retryExecutor)
     {
         this.storageSystem = storageSystem;
         this.localStagingDirectory = config.getLocalStagingDirectory();
@@ -81,7 +78,6 @@ public class S3Uploader
         this.retryFileDir = new File(localStagingDirectory.getPath(), "retry");
         this.retryPeriod = config.getRetryPeriod();
         this.retryDelay = config.getRetryDelay();
-        this.stats = stats;
 
         //noinspection ResultOfMethodCallIgnored
         localStagingDirectory.mkdirs();
@@ -132,7 +128,6 @@ public class S3Uploader
 
                 try {
                     upload(partition, file);
-                    stats.uploadSucceeded();
                 }
                 catch (Exception e) {
                     log.error(e, "upload failed: %s: %s. Sending for retry", partition, file);
@@ -238,13 +233,11 @@ public class S3Uploader
     private void handleFailure(File file)
     {
         moveToFailed(file);
-        stats.fileError();
     }
 
     private void handleRetry(EventPartition partition, File file, String message)
     {
         moveToRetry(file);
-        stats.uploadFailed();
     }
 
     private void moveToFailed(File file)

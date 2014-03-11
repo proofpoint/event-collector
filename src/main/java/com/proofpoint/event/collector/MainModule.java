@@ -34,7 +34,6 @@ import com.proofpoint.event.collector.combiner.S3StorageSystem;
 import com.proofpoint.event.collector.combiner.ScheduledCombiner;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObjectCombiner;
-import com.proofpoint.event.collector.stats.CollectorStats;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -46,7 +45,7 @@ import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
 import static com.proofpoint.event.client.EventBinder.eventBinder;
-import static com.proofpoint.event.collector.ProcessStats.HourlyEventCount;
+import static com.proofpoint.reporting.ReportBinder.reportBinder;
 import static org.weakref.jmx.guice.ExportBinder.newExporter;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
@@ -86,10 +85,9 @@ public class MainModule
 
         binder.bind(EventWriterStatsResource.class).in(Scopes.SINGLETON);
 
-        eventBinder(binder).bindEventClient(HourlyEventCount.class);
+        reportBinder(binder).bindReportCollection(EventResourceStats.class).withGeneratedName();
 
-        binder.bind(CollectorStats.class).in(Scopes.SINGLETON);
-        newExporter(binder).export(CollectorStats.class).withGeneratedName();
+        reportBinder(binder).bindReportCollection(FlowTapStats.class).withGeneratedName();
 
         discoveryBinder(binder).bindHttpAnnouncement("collector");
     }

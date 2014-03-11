@@ -16,13 +16,9 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.MapMaker;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.inject.Inject;
-import com.proofpoint.event.client.EventClient;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.POST;
@@ -33,28 +29,24 @@ import javax.ws.rs.core.Response.Status;
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ScheduledExecutorService;
+
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.proofpoint.event.collector.EventResourceStats.EventStatus.UNSUPPORTED;
+import static com.proofpoint.event.collector.EventResourceStats.EventStatus.VALID;
 
 @Path("/v2/event")
 public class EventResource
 {
     private final Set<EventWriter> writers;
     private final Set<String> acceptedEventTypes;
-    private final ScheduledExecutorService executor;
-    private final EventClient eventClient;
-    private final MapMaker maker = new MapMaker();
-    private ConcurrentMap<String, ProcessStats> stats = maker.makeMap();
+    private final EventResourceStats eventResourceStats;
 
     @Inject
-    public EventResource(Set<EventWriter> writers, ServerConfig config, ScheduledExecutorService executor, EventClient eventClient)
+    public EventResource(Set<EventWriter> writers, ServerConfig config, EventResourceStats eventResourceStats)
     {
-        Preconditions.checkNotNull(writers, "writer must not be null");
-        this.writers = writers;
-        this.acceptedEventTypes = ImmutableSet.copyOf(config.getAcceptedEventTypes());
-        this.stats = Maps.newConcurrentMap();
-        this.executor = executor;
-        this.eventClient = eventClient;
+        this.eventResourceStats = eventResourceStats;
+        this.writers = checkNotNull(writers, "writers are null");
+        this.acceptedEventTypes = ImmutableSet.copyOf(checkNotNull(config, "config is null").getAcceptedEventTypes());
     }
 
     @POST
@@ -68,33 +60,26 @@ public class EventResource
                 for (EventWriter writer : writers) {
                     writer.write(event);
                 }
-                increment(event.getType());
+
+                eventResourceStats.incomingEvent(event.getType(), VALID).update(1);
             }
             else {
                 badEvents.add(event.getType());
+
+                eventResourceStats.incomingEvent(event.getType(), UNSUPPORTED).update(1);
             }
         }
-        if (!badEvents.isEmpty()) {
-            String errorMessage = "Invalid event type(s): " + Joiner.on(", ").join(badEvents);
-            return Response.status(Status.BAD_REQUEST).entity(errorMessage).build();
 
+        if (!badEvents.isEmpty()) {
+            String errorMessage = "Unsupported event type(s): " + Joiner.on(", ").join(badEvents);
+            return Response.status(Status.BAD_REQUEST).entity(errorMessage).build();
         }
+
         return Response.status(Response.Status.ACCEPTED).build();
     }
 
     private boolean acceptedEventType(String type)
     {
         return acceptedEventTypes.isEmpty() || acceptedEventTypes.contains(type);
-    }
-
-    private void increment(String eventType)
-    {
-        ProcessStats eventStats = stats.get(eventType);
-        if (eventStats == null) {
-            stats.putIfAbsent(eventType, new ProcessStats(executor, eventClient, eventType));
-            eventStats = stats.get(eventType);
-            eventStats.start();
-        }
-        eventStats.processed(1);
     }
 }

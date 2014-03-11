@@ -13,42 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.proofpoint.event.collector;
 
-import java.util.List;
+import com.proofpoint.reporting.Key;
+import com.proofpoint.stats.CounterStat;
 
-public interface BatchProcessor<T>
+public interface EventResourceStats
 {
-    Observer NULL_OBSERVER = new Observer()
+    // EventResourceStats.IncomingEvent.Count (Tags: eventType=blah, eventStatus=valid)
+    CounterStat incomingEvent(@Key("eventType") String eventType, @Key("eventStatus") EventStatus eventStatus);
+
+    public enum EventStatus
     {
+        VALID, UNSUPPORTED;
+
         @Override
-        public void onRecordsLost(int count)
+        public String toString()
         {
+            return name().toLowerCase();
         }
-
-        @Override
-        public void onRecordsReceived(int count)
-        {
-        }
-    };
-
-    void start();
-
-    void stop();
-
-    void put(T entry);
-
-    interface BatchHandler<T>
-    {
-        void processBatch(List<T> entries);
-
-        void notifyEntriesDropped(int count);
-    }
-
-    interface Observer
-    {
-        void onRecordsLost(int count);
-
-        void onRecordsReceived(int count);
     }
 }

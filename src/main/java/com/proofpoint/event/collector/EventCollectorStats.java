@@ -21,7 +21,7 @@ import com.proofpoint.stats.CounterStat;
 
 public interface EventCollectorStats
 {
-    // EventCollector.IncomingEvent.Count (Tags: eventType=blah, eventStatus=valid)
+    // EventCollector.IncomingEvents.Count (Tags: eventType=blah, eventStatus=valid)
     CounterStat incomingEvents(@Key("eventType") String eventType, @Key("eventStatus") EventStatus eventStatus);
 
     CounterStat outboundEvents(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("outboundStatus") Status status);

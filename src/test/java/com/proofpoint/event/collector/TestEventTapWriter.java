@@ -52,9 +52,8 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
@@ -726,7 +725,7 @@ public class TestEventTapWriter
         // Cause exception, which we expect to be handled
         updateTaps(new RuntimeException("Thrown deliberately"));
         executorService.elapseTime(
-                (long) eventTapConfig.getEventTapRefreshDuration().toMillis(),
+                eventTapConfig.getEventTapRefreshDuration().toMillis(),
                 TimeUnit.MILLISECONDS);
         verify(serviceSelector, atLeastOnce()).selectAllServices();
 
@@ -734,7 +733,7 @@ public class TestEventTapWriter
         // created to handle the new tap after one period.
         updateTaps(tapA);
         executorService.elapseTime(
-                (long) eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
+                eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
                 TimeUnit.MILLISECONDS);
         assertFalse(batchProcessors.containsKey(batchProcessorName));
         executorService.elapseTime(1, TimeUnit.MILLISECONDS);
@@ -785,23 +784,15 @@ public class TestEventTapWriter
         String batchProcessorName = extractProcessorName(tapA);
         String eventType = extractEventType(tapA);
         String flowId = extractFlowId(tapA);
-        String uri = extractUri(tapA);
 
         MockBatchProcessor<Event> processor = batchProcessors.get(batchProcessorName).iterator().next();
 
-        writeEvents(eventsA[0]);
-        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
-
         processor.succeed = false;
+        writeEvents(eventsA[0]);
 
-        writeEvents(eventsA[1]);
         verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DROPPED);
-        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+        verifyNoMoreInteractions(eventCollectorStats);
+        verifyCount(0, 1, 0, 0);
     }
 
     @Test
@@ -810,23 +801,15 @@ public class TestEventTapWriter
         updateThenRefreshFlowsThenCheck(tapA);
         String eventType = extractEventType(tapA);
         String flowId = extractFlowId(tapA);
-        String uri = extractUri(tapA);
 
         MockEventTapFlow eventTapFlow = nonQosEventTapFlows.get(ImmutableList.of(eventType, flowId)).iterator().next();
 
-        writeEvents(eventsA[0]);
-        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
-
         eventTapFlow.setToLoseEvent();
-        writeEvents(eventsA[1]);
+        writeEvents(eventsA[0]);
 
         verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.LOST);
-        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+        verifyNoMoreInteractions(eventCollectorStats);
+        verifyCount(0, 0, 1, 0);
     }
 
     @Test
@@ -839,21 +822,12 @@ public class TestEventTapWriter
 
         MockEventTapFlow eventTapFlow = nonQosEventTapFlows.get(ImmutableList.of(eventType, flowId)).iterator().next();
 
-        writeEvents(eventsA[0]);
-        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
-
         eventTapFlow.setToRejectEvent();
-        writeEvents(eventsA[1]);
+        writeEvents(eventsA[0]);
 
         verify(eventCollectorStats).outboundEvents(eventType, flowId, uri, Status.REJECTED);
-        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
-
-        assertEquals(2, counterForDelivered.getTotalCount() + counterForRejected.getTotalCount() + counterForLost.getTotalCount());
+        verifyNoMoreInteractions(eventCollectorStats);
+        verifyCount(0, 0, 0, 1);
     }
 
     @Test
@@ -862,20 +836,20 @@ public class TestEventTapWriter
         updateThenRefreshFlowsThenCheck(tapA);
         String eventType = extractEventType(tapA);
         String flowId = extractFlowId(tapA);
-        String uri = extractUri(tapA);
 
         writeEvents(eventsA[0]);
+        
         verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+        verifyNoMoreInteractions(eventCollectorStats);
+        verifyCount(1, 0, 0, 0);
+    }
 
-        writeEvents(eventsA[1]);
-
-        verify(eventCollectorStats, times(2)).outboundEvents(eventType, flowId, Status.DELIVERED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
-        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+    private void verifyCount(int deliveredCount, int droppedCount, int lostCount, int rejectedCount)
+    {
+        assertEquals(counterForDelivered.getTotalCount(), deliveredCount);
+        assertEquals(counterForDropped.getTotalCount(), droppedCount);
+        assertEquals(counterForLost.getTotalCount(), lostCount);
+        assertEquals(counterForRejected.getTotalCount(), rejectedCount);
     }
 
     private void updateThenRefreshFlowsThenCheck(ServiceDescriptor... taps)

@@ -40,6 +40,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
@@ -97,6 +98,8 @@ public class TestEventResource
             assertEquals(counterStatForUnsupportedType.getTotalCount(), 0);
             verify(eventCollectorStats).incomingEvents("Test", VALID);
             verify(eventCollectorStats, never()).incomingEvents("Test", UNSUPPORTED);
+
+            verifyNoMoreInteractions(eventCollectorStats);
         }
         finally {
             ensureCleanWorkingDirectory();
@@ -126,6 +129,8 @@ public class TestEventResource
         assertEquals(counterStatForUnsupportedType.getTotalCount(), 1);
         verify(eventCollectorStats, times(2)).incomingEvents("Test", VALID);
         verify(eventCollectorStats).incomingEvents("TestBad", UNSUPPORTED);
+
+        verifyNoMoreInteractions(eventCollectorStats);
     }
 
     @Test
@@ -154,6 +159,8 @@ public class TestEventResource
             assertEquals(counterStatForUnsupportedType.getTotalCount(), 0);
             verify(eventCollectorStats).incomingEvents(eventTypeA, VALID);
             verify(eventCollectorStats).incomingEvents(eventTypeB, VALID);
+
+            verifyNoMoreInteractions(eventCollectorStats);
         }
         finally {
             ensureCleanWorkingDirectory();

@@ -328,7 +328,7 @@ public class EventTapWriter implements EventWriter
             @Override
             public void onRecordsDelivered(int count)
             {
-                checkNotNull(checkNotNull(eventCollectorStats, "eventCollectorStats is null").outboundEvents(eventType, flowId, Status.DELIVERED), "outboundEvents is null").update(count);
+                eventCollectorStats.outboundEvents(eventType, flowId, Status.DELIVERED).update(count);
             }
 
             @Override

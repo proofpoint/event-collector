@@ -87,7 +87,7 @@ class HttpEventTapFlow implements EventTapFlow
     @Override
     public void processBatch(List<Event> entries)
     {
-        List<URI> taps = null;
+        List<URI> taps;
 
         for (int i = 0; i <= retryCount; ++i) {
             taps = this.taps.get();
@@ -106,9 +106,6 @@ class HttpEventTapFlow implements EventTapFlow
             }
         }
 
-        // The events were not sent, track them.
-        // NOTE: Since attempts to all destinations failed, it doesn't matter which
-        //       destination the failure is assigned to. Just pick a random one.
         onRecordsLost(entries.size());
     }
 

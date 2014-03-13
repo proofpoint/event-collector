@@ -48,14 +48,11 @@ public class EventTapModule implements Module
         binder.bind(EventTapFlowFactory.class).to(HttpEventTapFlowFactory.class);
         binder.bind(HttpEventTapFlowFactory.class).in(SINGLETON);
         binder.bind(EventTapWriter.class).in(SINGLETON);
-        binder.bind(EventTapStats.class).to(EventTapWriter.class);
 
         httpClientBinder(binder).bindHttpClient("EventTap", EventTap.class);
 
         newExporter(binder).export(EventTapWriter.class).withGeneratedName();
         newSetBinder(binder, EventWriter.class).addBinding().to(Key.get(EventTapWriter.class)).in(SINGLETON);
-
-        binder.bind(EventTapStatsResource.class).in(SINGLETON);
     }
 
     @Provides

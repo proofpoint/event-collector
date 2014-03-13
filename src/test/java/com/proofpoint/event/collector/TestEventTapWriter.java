@@ -20,13 +20,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.Sets;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceState;
 import com.proofpoint.discovery.client.testing.StaticServiceSelector;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
-import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
 import com.proofpoint.log.Logger;
 import com.proofpoint.testing.SerialScheduledExecutorService;
@@ -757,24 +755,6 @@ public class TestEventTapWriter
         forTap(tapB).verifyEvents(eventsB[0]);
     }
 
-    @Test
-    public void testQueueCounters()
-    {
-        updateThenRefreshFlowsThenCheck(tapA);
-        String batchProcessorName = extractProcessorName(tapA);
-        String queueCounterName = extractQueueCounterName(tapA);
-
-        MockBatchProcessor<Event> processors = batchProcessors.get(batchProcessorName).iterator().next();
-        writeEvents(eventsA[0]);
-        checkCounters(eventTapWriter.getQueueCounters(), queueCounterName, 1, 0);
-        assertCountersOnlyExistWithTheseNames(eventTapWriter.getQueueCounters(), queueCounterName);
-
-        processors.succeed = false;
-        writeEvents(eventsA[1]);
-        checkCounters(eventTapWriter.getQueueCounters(), queueCounterName, 2, 1);
-        assertCountersOnlyExistWithTheseNames(eventTapWriter.getQueueCounters(), queueCounterName);
-    }
-
     private void updateThenRefreshFlowsThenCheck(ServiceDescriptor... taps)
     {
         // Figure out which of the processors should have been destroyed.
@@ -937,27 +917,9 @@ public class TestEventTapWriter
         return new EventTapFlowVerifier(urisBuilder.build(), eventType, flowId, qosEnabled);
     }
 
-    private static void checkCounters(Map<String, CounterState> counters, String type, int received, int lost)
-    {
-        CounterState counterState = counters.get(type);
-        assertEquals(counterState.getReceived(), received);
-        assertEquals(counterState.getLost(), lost);
-    }
-
-    private static void assertCountersOnlyExistWithTheseNames(Map<String, CounterState> counters, String... types)
-    {
-        assertEquals(Sets.difference(counters.keySet(), ImmutableSet.copyOf(types)), ImmutableSet.of());
-    }
-
     private static String extractProcessorName(ServiceDescriptor tap)
     {
         return format("%s{%s}", tap.getProperties().get("eventType"),
-                tap.getProperties().get(EventTapWriter.FLOW_ID_PROPERTY_NAME));
-    }
-
-    private static String extractQueueCounterName(ServiceDescriptor tap)
-    {
-        return format("[%s, %s]", tap.getProperties().get("eventType"),
                 tap.getProperties().get(EventTapWriter.FLOW_ID_PROPERTY_NAME));
     }
 

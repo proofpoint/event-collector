@@ -16,14 +16,12 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
-import com.proofpoint.event.collector.EventCounters.CounterState;
 import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.FlowPolicy;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
@@ -47,7 +45,7 @@ import static com.google.common.base.Objects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
-public class EventTapWriter implements EventWriter, EventTapStats
+public class EventTapWriter implements EventWriter
 {
     @VisibleForTesting
     static final String FLOW_ID_PROPERTY_NAME = "flowId";
@@ -65,9 +63,6 @@ public class EventTapWriter implements EventWriter, EventTapStats
 
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
-
-    private final EventCounters<List<String>> queueCounters = new EventCounters<List<String>>();
-    private final EventCounters<List<String>> flowCounters = new EventCounters<List<String>>();
 
     @Inject
     public EventTapWriter(@ServiceType("eventTap") ServiceSelector selector,
@@ -162,29 +157,6 @@ public class EventTapWriter implements EventWriter, EventTapStats
         for (FlowPolicy flowPolicy : getPolicyForEvent(event).flowPolicies.values()) {
             flowPolicy.processor.put(event);
         }
-    }
-
-    public Map<String, CounterState> getQueueCounters()
-    {
-        return queueCounters.getCounts();
-    }
-
-    @Override
-    public void resetQueueCounters()
-    {
-        queueCounters.resetCounts();
-    }
-
-    @Override
-    public Map<String, CounterState> getFlowCounters()
-    {
-        return flowCounters.getCounts();
-    }
-
-    @Override
-    public void resetFlowCounters()
-    {
-        flowCounters.resetCounts();
     }
 
     private Map<String, Map<String, FlowInfo>> constructFlowInfoFromDiscovery()
@@ -325,19 +297,16 @@ public class EventTapWriter implements EventWriter, EventTapStats
 
     private BatchProcessor.Observer createBatchProcessorObserver(String eventType, String flowId)
     {
-        final List<String> key = ImmutableList.of(eventType, flowId);
         return new BatchProcessor.Observer()
         {
             @Override
             public void onRecordsLost(int count)
             {
-                queueCounters.recordLost(key, count);
             }
 
             @Override
             public void onRecordsReceived(int count)
             {
-                queueCounters.recordReceived(key, count);
             }
         };
     }
@@ -359,18 +328,11 @@ public class EventTapWriter implements EventWriter, EventTapStats
             @Override
             public void onRecordsSent(URI uri, int count)
             {
-                flowCounters.recordReceived(createKey(uri), count);
             }
 
             @Override
             public void onRecordsLost(URI uri, int count)
             {
-                flowCounters.recordLost(createKey(uri), count);
-            }
-
-            private List<String> createKey(URI uri)
-            {
-                return ImmutableList.of(eventType, flowId, uri.toString());
             }
         };
     }

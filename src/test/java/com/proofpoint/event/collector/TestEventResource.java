@@ -19,15 +19,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.proofpoint.stats.CounterStat;
-import com.proofpoint.testing.FileUtils;
 import org.joda.time.DateTime;
 import org.testng.annotations.BeforeMethod;
-import org.testng.annotations.BeforeSuite;
 import org.testng.annotations.Test;
 
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
-import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
@@ -37,7 +34,6 @@ import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.VAL
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -53,15 +49,6 @@ public class TestEventResource
     private CounterStat counterStatForUnsupportedType;
     private InMemoryEventWriter writer;
     private EventCollectorStats eventCollectorStats;
-
-    @BeforeSuite
-    public void ensureCleanWorkingDirectory()
-    {
-        File statsDirectory = new File("var/stats");
-        if (statsDirectory.exists()) {
-            FileUtils.deleteDirectoryContents(statsDirectory);
-        }
-    }
 
     @BeforeMethod
     public void setup()
@@ -79,31 +66,23 @@ public class TestEventResource
     public void testPost()
             throws IOException
     {
-        try {
-            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"), eventCollectorStats);
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"), eventCollectorStats);
 
-            ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
-            Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
+        Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), data);
 
-            List<Event> events = ImmutableList.of(event);
-            Response response = resource.post(events);
+        List<Event> events = ImmutableList.of(event);
+        Response response = resource.post(events);
 
-            assertEquals(response.getStatus(), Status.ACCEPTED.getStatusCode());
-            assertNull(response.getEntity());
-            assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
+        assertEquals(response.getStatus(), Status.ACCEPTED.getStatusCode());
+        assertNull(response.getEntity());
+        assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
 
-            assertEquals(writer.getEvents(), events);
+        assertEquals(writer.getEvents(), events);
 
-            assertEquals(counterStatForValidType.getTotalCount(), 1);
-            assertEquals(counterStatForUnsupportedType.getTotalCount(), 0);
-            verify(eventCollectorStats).incomingEvents("Test", VALID);
-            verify(eventCollectorStats, never()).incomingEvents("Test", UNSUPPORTED);
-
-            verifyNoMoreInteractions(eventCollectorStats);
-        }
-        finally {
-            ensureCleanWorkingDirectory();
-        }
+        verifyCounti(1, 0);
+        verify(eventCollectorStats).incomingEvents("Test", VALID);
+        verifyNoMoreInteractions(eventCollectorStats);
     }
 
     @Test
@@ -125,11 +104,9 @@ public class TestEventResource
         assertTrue(response.getEntity().toString().startsWith("Unsupported event type(s): "));
         assertTrue(response.getEntity().toString().contains("TestBad"));
 
-        assertEquals(counterStatForValidType.getTotalCount(), 2);
-        assertEquals(counterStatForUnsupportedType.getTotalCount(), 1);
+        verifyCounti(2, 1);
         verify(eventCollectorStats, times(2)).incomingEvents("Test", VALID);
         verify(eventCollectorStats).incomingEvents("TestBad", UNSUPPORTED);
-
         verifyNoMoreInteractions(eventCollectorStats);
     }
 
@@ -139,31 +116,31 @@ public class TestEventResource
     {
         String eventTypeA = UUID.randomUUID().toString();
         String eventTypeB = UUID.randomUUID().toString();
-        try {
-            EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(), eventCollectorStats);
 
-            ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
-            Event eventWithTypeA = new Event(eventTypeA, UUID.randomUUID().toString(), "test.local", new DateTime(), data);
-            Event eventWithTypeB = new Event(eventTypeB, UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(), eventCollectorStats);
 
-            List<Event> events = ImmutableList.of(eventWithTypeA, eventWithTypeB);
-            Response response = resource.post(events);
+        ImmutableMap<String, String> data = ImmutableMap.of("foo", "bar", "hello", "world");
+        Event eventWithTypeA = new Event(eventTypeA, UUID.randomUUID().toString(), "test.local", new DateTime(), data);
+        Event eventWithTypeB = new Event(eventTypeB, UUID.randomUUID().toString(), "test.local", new DateTime(), data);
 
-            assertEquals(response.getStatus(), Status.ACCEPTED.getStatusCode());
-            assertNull(response.getEntity());
-            assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
+        List<Event> events = ImmutableList.of(eventWithTypeA, eventWithTypeB);
+        Response response = resource.post(events);
 
-            assertEquals(writer.getEvents(), events);
+        assertEquals(response.getStatus(), Status.ACCEPTED.getStatusCode());
+        assertNull(response.getEntity());
+        assertNull(response.getMetadata().get("Content-Type")); // content type is set by jersey based on @Produces
 
-            assertEquals(counterStatForValidType.getTotalCount(), 2);
-            assertEquals(counterStatForUnsupportedType.getTotalCount(), 0);
-            verify(eventCollectorStats).incomingEvents(eventTypeA, VALID);
-            verify(eventCollectorStats).incomingEvents(eventTypeB, VALID);
+        assertEquals(writer.getEvents(), events);
 
-            verifyNoMoreInteractions(eventCollectorStats);
-        }
-        finally {
-            ensureCleanWorkingDirectory();
-        }
+        verifyCounti(2, 0);
+        verify(eventCollectorStats).incomingEvents(eventTypeA, VALID);
+        verify(eventCollectorStats).incomingEvents(eventTypeB, VALID);
+        verifyNoMoreInteractions(eventCollectorStats);
+    }
+
+    private void verifyCounti(int validTypeCount, int unsupportedTypeCount)
+    {
+        assertEquals(counterStatForValidType.getTotalCount(), validTypeCount);
+        assertEquals(counterStatForUnsupportedType.getTotalCount(), unsupportedTypeCount);
     }
 }

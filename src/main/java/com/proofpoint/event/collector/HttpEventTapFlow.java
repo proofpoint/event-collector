@@ -76,7 +76,7 @@ class HttpEventTapFlow implements EventTapFlow
         this.observer = checkNotNull(observer, "observer is null");
         this.retryCount = retryCount;
         if (this.retryCount > 0) {
-            this.retryDelayMillis = (long) checkNotNull(retryDelay, "retryDelay is null").toMillis();
+            this.retryDelayMillis = checkNotNull(retryDelay, "retryDelay is null").toMillis();
         }
         else {
             this.retryDelayMillis = 0;
@@ -109,7 +109,7 @@ class HttpEventTapFlow implements EventTapFlow
         // The events were not sent, track them.
         // NOTE: Since attempts to all destinations failed, it doesn't matter which
         //       destination the failure is assigned to. Just pick a random one.
-        onRecordsLost(taps.get(RANDOM.nextInt(taps.size())), entries.size());
+        onRecordsLost(entries.size());
     }
 
     @Override
@@ -201,7 +201,7 @@ class HttpEventTapFlow implements EventTapFlow
             {
                 if (fromStatusCode(response.getStatusCode()).getFamily() == SUCCESSFUL) {
                     log.debug("Posted %s events", entries.size());
-                    onRecordsSent(uri, entries.size());
+                    onRecordsDelivered(entries.size());
                     return true;
                 }
                 else if (fromStatusCode(response.getStatusCode()).getFamily() == CLIENT_ERROR) {
@@ -229,21 +229,21 @@ class HttpEventTapFlow implements EventTapFlow
         });
     }
 
-    private void onRecordsSent(URI tap, int eventCount)
+    private void onRecordsDelivered(int eventCount)
     {
-        observer.onRecordsSent(tap, eventCount);
+        observer.onRecordsDelivered(eventCount);
     }
 
-    private void onRecordsLost(URI tap, int eventCount)
+    private void onRecordsLost(int eventCount)
     {
         droppedEntries.getAndAdd(eventCount);
-        observer.onRecordsLost(tap, eventCount);
+        observer.onRecordsLost(eventCount);
     }
 
     private void onRecordsRejected(URI tap, int eventCount)
     {
         droppedEntries.getAndAdd(eventCount);
-        observer.onRecordsLost(tap, eventCount);
+        observer.onRecordsRejected(tap, eventCount);
     }
 
     @VisibleForTesting

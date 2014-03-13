@@ -24,6 +24,24 @@ public interface EventCollectorStats
     // EventCollector.IncomingEvent.Count (Tags: eventType=blah, eventStatus=valid)
     CounterStat incomingEvents(@Key("eventType") String eventType, @Key("eventStatus") EventStatus eventStatus);
 
+    CounterStat outboundEvents(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("outboundStatus") Status status);
+
+    CounterStat outboundEvents(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("uri") String uri, @Key("outboundStatus") Status status);
+
+    public enum Status
+    {
+        DROPPED,              // events dropped due to queue overflow
+        DELIVERED,           // events successfully delivered to the consumer
+        LOST,               // events couldn't be delivered because all taps returned 5XX (server) error
+        REJECTED;          // events couldn't be delivered because a tap rejected with 4XX (client) error
+
+        @Override
+        public String toString()
+        {
+            return name().toLowerCase();
+        }
+    }
+
     public enum EventStatus
     {
         VALID, UNSUPPORTED;

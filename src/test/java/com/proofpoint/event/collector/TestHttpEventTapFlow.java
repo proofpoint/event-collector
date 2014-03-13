@@ -39,12 +39,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Objects.firstNonNull;
-import static java.lang.String.format;
-import static java.net.URI.create;
-import static java.util.UUID.randomUUID;
-import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
-import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
-import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -54,6 +48,11 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertNotEquals;
 import static org.testng.Assert.assertTrue;
+import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
+import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
+import static java.lang.String.format;
+import static java.net.URI.create;
+import static java.util.UUID.randomUUID;
 
 public class TestHttpEventTapFlow
 {
@@ -159,8 +158,8 @@ public class TestHttpEventTapFlow
         // The first time a message is sent to a tap, the firstBatch flag is set.
         // Subsequent times, the firstBatch flag is clear. This is true of each of the taps
         // within the same flow.
-        Set<URI> remainingFirstTaps = new HashSet<URI>(multipleTaps);
-        Set<URI> remainingSecondTaps = new HashSet<URI>(multipleTaps);
+        Set<URI> remainingFirstTaps = new HashSet<>(multipleTaps);
+        Set<URI> remainingSecondTaps = new HashSet<>(multipleTaps);
 
         for (int i = 0; !remainingSecondTaps.isEmpty(); ++i) {
             assertTrue(i < 10000);
@@ -378,9 +377,7 @@ public class TestHttpEventTapFlow
     {
         eventTapFlow.processBatch(events);
 
-        ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
-        verify(observer, times(1)).onRecordsSent(uriArgumentCaptor.capture(), eq(events.size()));
-        assertTrue(taps.contains(uriArgumentCaptor.getValue()));
+        verify(observer, times(1)).onRecordsDelivered(eq(events.size()));
         verifyNoMoreInteractions(observer);
     }
 
@@ -391,8 +388,7 @@ public class TestHttpEventTapFlow
         httpClient.respondWithException();
         eventTapFlow.processBatch(events);
 
-        ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
-        verify(observer, times(1)).onRecordsLost(any(URI.class), eq(events.size()));
+        verify(observer, times(1)).onRecordsLost(eq(events.size()));
         verifyNoMoreInteractions(observer);
     }
 
@@ -403,9 +399,7 @@ public class TestHttpEventTapFlow
         httpClient.respondWithServerError();
         eventTapFlow.processBatch(events);
 
-        ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
-        verify(observer, times(1)).onRecordsLost(uriArgumentCaptor.capture(), eq(events.size()));
-        assertTrue(taps.contains(uriArgumentCaptor.getValue()));
+        verify(observer, times(1)).onRecordsLost(eq(events.size()));
         verifyNoMoreInteractions(observer);
     }
 
@@ -416,7 +410,7 @@ public class TestHttpEventTapFlow
         eventTapFlow.processBatch(events);
 
         ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
-        verify(observer, times(1)).onRecordsLost(uriArgumentCaptor.capture(), eq(events.size()));
+        verify(observer, times(1)).onRecordsRejected(uriArgumentCaptor.capture(), eq(events.size()));
         assertTrue(taps.contains(uriArgumentCaptor.getValue()));
         verifyNoMoreInteractions(observer);
     }
@@ -424,7 +418,7 @@ public class TestHttpEventTapFlow
     private void clearFirstBatchHeaders(HttpEventTapFlow eventTapFlow, Set<URI> taps)
     {
         // Keep sending events until each tap receives a message.
-        Set<URI> remainingTaps = new HashSet<URI>(taps);
+        Set<URI> remainingTaps = new HashSet<>(taps);
         httpClient.clearRequests();
         for (int i = 0; !remainingTaps.isEmpty(); ++i) {
             assertTrue(i < 10000);
@@ -439,7 +433,7 @@ public class TestHttpEventTapFlow
 
     private static Map<URI, Integer> extractUris(Collection<Request> requests)
     {
-        Map<URI, Integer> results = new HashMap<URI, Integer>();
+        Map<URI, Integer> results = new HashMap<>();
         for (Request request : requests) {
             URI uri = request.getUri();
             results.put(uri, firstNonNull(results.get(uri), Integer.valueOf(0)) + 1);

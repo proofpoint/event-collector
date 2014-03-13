@@ -85,11 +85,11 @@ public class TestAsyncBatchProcessor
 
         processor.put(event("foo"));
 
-        assertCounterValues(1, 0);
+        assertCounterValues(0);
 
         processor.put(event("foo"));
         processor.put(event("foo"));
-        assertCounterValues(3, 0);
+        assertCounterValues(0);
     }
 
     @Test
@@ -115,12 +115,12 @@ public class TestAsyncBatchProcessor
             // This will remain in the queue because the processing
             // thread has not yet been resumed
             processor.put(event("foo"));
-            assertCounterValues(2, 0);
+            assertCounterValues(0);
             assertEquals(blockingHandler.getDroppedEntries(), 0);
 
             // The queue is now full, this message will be dropped.
             processor.put(event("foo"));
-            assertCounterValues(3, 1);
+            assertCounterValues(1);
             assertEquals(blockingHandler.getDroppedEntries(), 1);
         }
         finally {
@@ -232,14 +232,10 @@ public class TestAsyncBatchProcessor
         assertEquals(blockingHandler.getCallsToProcessBatch(), 2);
     }
 
-    private void assertCounterValues(long transferred, long lost)
+    private void assertCounterValues(long lost)
     {
-        ArgumentCaptor<Integer> receivedCaptor = ArgumentCaptor.forClass(Integer.class);
-        verify(observer, atLeast(0)).onRecordsReceived(receivedCaptor.capture());
-        assertEquals(totalCount(receivedCaptor.getAllValues()), transferred);
-
         ArgumentCaptor<Integer> lostCaptor = ArgumentCaptor.forClass(Integer.class);
-        verify(observer, atLeast(0)).onRecordsLost(lostCaptor.capture());
+        verify(observer, atLeast(0)).onRecordsDropped(lostCaptor.capture());
         assertEquals(totalCount(lostCaptor.getAllValues()), lost);
     }
 

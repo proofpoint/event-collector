@@ -25,13 +25,19 @@ public interface EventTapFlow extends BatchHandler<Event>
     Observer NULL_OBSERVER = new Observer()
     {
         @Override
-        public void onRecordsSent(URI uri, int count)
+        public void onRecordsDelivered(int count)
         {
         }
 
         @Override
-        public void onRecordsLost(URI uri, int count)
+        public void onRecordsLost(int count)
         {
+        }
+
+        @Override
+        public void onRecordsRejected(URI uri, int count)
+        {
+
         }
     };
 
@@ -41,8 +47,10 @@ public interface EventTapFlow extends BatchHandler<Event>
 
     interface Observer
     {
-        void onRecordsSent(URI uri, int count);
+        void onRecordsDelivered(int count);
 
-        void onRecordsLost(URI uri, int count);
+        void onRecordsLost(int count);
+
+        void onRecordsRejected(URI uri, int count);
     }
 }

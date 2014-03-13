@@ -25,8 +25,10 @@ import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceState;
 import com.proofpoint.discovery.client.testing.StaticServiceSelector;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
+import com.proofpoint.event.collector.EventCollectorStats.Status;
 import com.proofpoint.event.collector.EventTapFlow.Observer;
 import com.proofpoint.log.Logger;
+import com.proofpoint.stats.CounterStat;
 import com.proofpoint.testing.SerialScheduledExecutorService;
 import org.joda.time.DateTime;
 import org.testng.annotations.BeforeMethod;
@@ -44,11 +46,16 @@ import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Objects.firstNonNull;
 import static com.google.common.base.Strings.nullToEmpty;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertFalse;
@@ -97,6 +104,10 @@ public class TestEventTapWriter
     private static final ServiceDescriptor qtapB2b = createQosServiceDescriptor(typeB, flowId2, instanceB);
     private static final ServiceDescriptor qtapC = createQosServiceDescriptor(typeC, flowId1, instanceA);
 
+    private CounterStat counterForDelivered;
+    private CounterStat counterForDropped;
+    private CounterStat counterForRejected;
+    private CounterStat counterForLost;
     private ServiceSelector serviceSelector;
     private Map<String, Boolean> currentProcessors;
     private SerialScheduledExecutorService executorService;
@@ -108,10 +119,15 @@ public class TestEventTapWriter
     private Multimap<List<String>, MockEventTapFlow> qosEventTapFlows;
     private EventTapConfig eventTapConfig;
     private EventTapWriter eventTapWriter;
+    private EventCollectorStats eventCollectorStats;
 
     @BeforeMethod
     public void setup()
     {
+        counterForDropped = new CounterStat();
+        counterForLost = new CounterStat();
+        counterForDelivered = new CounterStat();
+        counterForRejected = new CounterStat();
         serviceSelector = new StaticServiceSelector(ImmutableSet.<ServiceDescriptor>of());
         currentProcessors = ImmutableMap.of();
         executorService = new SerialScheduledExecutorService();
@@ -121,41 +137,48 @@ public class TestEventTapWriter
         qosEventTapFlows = LinkedListMultimap.create();     // Insertion order per-key matters
         eventTapConfig = new EventTapConfig();
         serviceSelector = mock(ServiceSelector.class);
+        eventCollectorStats = mock(EventCollectorStats.class);
+
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.DELIVERED))).thenReturn(counterForDelivered);
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.DROPPED))).thenReturn(counterForDropped);
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.LOST))).thenReturn(counterForLost);
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), anyString(), eq(Status.REJECTED))).thenReturn(counterForRejected);
+
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig);
+                eventTapConfig, eventCollectorStats);
         eventTapWriter.start();
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "selector is null")
     public void testConstructorNullSelector()
     {
-        new EventTapWriter(null, executorService, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig());
+        new EventTapWriter(null, executorService, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig(), eventCollectorStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "executorService is null")
     public void testConstructorNullExecutorService()
     {
-        new EventTapWriter(serviceSelector, null, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig());
+        new EventTapWriter(serviceSelector, null, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig(), eventCollectorStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "batchProcessorFactory is null")
     public void testConstructorNullBatchProcessorFactory()
     {
-        new EventTapWriter(serviceSelector, executorService, null, eventTapFlowFactory, new EventTapConfig());
+        new EventTapWriter(serviceSelector, executorService, null, eventTapFlowFactory, new EventTapConfig(), eventCollectorStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventTapFlowFactory is null")
     public void testConstructorNullEventTapFlowFactory()
     {
-        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, null, new EventTapConfig());
+        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, null, new EventTapConfig(), eventCollectorStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
     {
-        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, eventTapFlowFactory, null);
+        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, eventTapFlowFactory, null, eventCollectorStats);
     }
 
     @Test
@@ -755,6 +778,106 @@ public class TestEventTapWriter
         forTap(tapB).verifyEvents(eventsB[0]);
     }
 
+    @Test
+    public void testMetricForDroppedEvents()
+    {
+        updateThenRefreshFlowsThenCheck(tapA);
+        String batchProcessorName = extractProcessorName(tapA);
+        String eventType = extractEventType(tapA);
+        String flowId = extractFlowId(tapA);
+        String uri = extractUri(tapA);
+
+        MockBatchProcessor<Event> processor = batchProcessors.get(batchProcessorName).iterator().next();
+
+        writeEvents(eventsA[0]);
+        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+
+        processor.succeed = false;
+
+        writeEvents(eventsA[1]);
+        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DROPPED);
+        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+    }
+
+    @Test
+    public void testMetricForLostEvents()
+    {
+        updateThenRefreshFlowsThenCheck(tapA);
+        String eventType = extractEventType(tapA);
+        String flowId = extractFlowId(tapA);
+        String uri = extractUri(tapA);
+
+        MockEventTapFlow eventTapFlow = nonQosEventTapFlows.get(ImmutableList.of(eventType, flowId)).iterator().next();
+
+        writeEvents(eventsA[0]);
+        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+
+        eventTapFlow.setToLoseEvent();
+        writeEvents(eventsA[1]);
+
+        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.LOST);
+        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+    }
+
+    @Test
+    public void testMetricForRejectedEvents()
+    {
+        updateThenRefreshFlowsThenCheck(tapA);
+        String eventType = extractEventType(tapA);
+        String flowId = extractFlowId(tapA);
+        String uri = extractUri(tapA);
+
+        MockEventTapFlow eventTapFlow = nonQosEventTapFlows.get(ImmutableList.of(eventType, flowId)).iterator().next();
+
+        writeEvents(eventsA[0]);
+        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+
+        eventTapFlow.setToRejectEvent();
+        writeEvents(eventsA[1]);
+
+        verify(eventCollectorStats).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
+
+        assertEquals(2, counterForDelivered.getTotalCount() + counterForRejected.getTotalCount() + counterForLost.getTotalCount());
+    }
+
+    @Test
+    public void testMetricForDeliveredEvents()
+    {
+        updateThenRefreshFlowsThenCheck(tapA);
+        String eventType = extractEventType(tapA);
+        String flowId = extractFlowId(tapA);
+        String uri = extractUri(tapA);
+
+        writeEvents(eventsA[0]);
+        verify(eventCollectorStats).outboundEvents(eventType, flowId, Status.DELIVERED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+
+        writeEvents(eventsA[1]);
+
+        verify(eventCollectorStats, times(2)).outboundEvents(eventType, flowId, Status.DELIVERED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.DROPPED);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, Status.LOST);
+        verify(eventCollectorStats, never()).outboundEvents(eventType, flowId, uri, Status.REJECTED);
+    }
+
     private void updateThenRefreshFlowsThenCheck(ServiceDescriptor... taps)
     {
         // Figure out which of the processors should have been destroyed.
@@ -923,6 +1046,21 @@ public class TestEventTapWriter
                 tap.getProperties().get(EventTapWriter.FLOW_ID_PROPERTY_NAME));
     }
 
+    private static String extractEventType(ServiceDescriptor tap)
+    {
+        return tap.getProperties().get("eventType");
+    }
+
+    private static String extractFlowId(ServiceDescriptor tap)
+    {
+        return tap.getProperties().get(EventTapWriter.FLOW_ID_PROPERTY_NAME);
+    }
+
+    private static String extractUri(ServiceDescriptor tap)
+    {
+        return tap.getProperties().get("http");
+    }
+
     private static ServiceDescriptor createServiceDescriptor(String eventType, Map<String, String> properties)
     {
         String nodeId = randomUUID().toString();
@@ -1020,9 +1158,8 @@ public class TestEventTapWriter
                 handler.processBatch(ImmutableList.of(entry));
             }
             else {
-                observer.onRecordsLost(1);
+                observer.onRecordsDropped(1);
             }
-            observer.onRecordsReceived(1);
         }
     }
 
@@ -1055,7 +1192,7 @@ public class TestEventTapWriter
         private EventTapFlow createEventTapFlow(Multimap<List<String>, MockEventTapFlow> eventTapFlows, String eventType, String flowId, Set<URI> taps, Observer observer)
         {
             List<String> key = ImmutableList.of(eventType, flowId);
-            MockEventTapFlow eventTapFlow = new MockEventTapFlow(taps);
+            MockEventTapFlow eventTapFlow = new MockEventTapFlow(taps, observer);
             eventTapFlows.put(key, eventTapFlow);
             return eventTapFlow;
         }
@@ -1065,12 +1202,52 @@ public class TestEventTapWriter
     {
         private Set<URI> taps;
         private List<Event> events;
-        private long droppedEntries = 0;
+        private Status status;
 
-        public MockEventTapFlow(Set<URI> taps)
+        private final Observer observer;
+
+        private enum Status
+        {
+            DELIVERED           // events successfully delivered to the consumer
+                    {
+                        @Override
+                        public void observe(Observer observer, URI next, int count)
+                        {
+                            observer.onRecordsDelivered(count);
+                        }
+                    },
+            LOST                 // events couldn't be delivered because all taps returned 5XX error
+                    {
+                        @Override
+                        public void observe(Observer observer, URI next, int count)
+                        {
+                            observer.onRecordsLost(count);
+                        }
+                    },
+            REJECTED             // events couldn't be delivered because a tap rejected with 4XX error
+                    {
+                        @Override
+                        public void observe(Observer observer, URI uri, int count)
+                        {
+                            observer.onRecordsRejected(uri, count);
+                        }
+                    };
+
+            @Override
+            public String toString()
+            {
+                return name().toLowerCase();
+            }
+
+            public abstract void observe(Observer observer, URI next, int count);
+        }
+
+        public MockEventTapFlow(Set<URI> taps, Observer observer)
         {
             this.taps = taps;
             this.events = new LinkedList<>();
+            this.observer = observer;
+            this.status = Status.DELIVERED;
         }
 
         @Override
@@ -1089,12 +1266,13 @@ public class TestEventTapWriter
         public void processBatch(List<Event> entries)
         {
             events.addAll(entries);
+
+            status.observe(observer, taps.iterator().next(), entries.size());
         }
 
         @Override
         public void notifyEntriesDropped(int count)
         {
-            droppedEntries += count;
         }
 
         public List<Event> getEvents()
@@ -1102,9 +1280,14 @@ public class TestEventTapWriter
             return ImmutableList.copyOf(events);
         }
 
-        public long getDroppedEntries()
+        public void setToLoseEvent()
         {
-            return droppedEntries;
+            status = Status.LOST;
+        }
+
+        public void setToRejectEvent()
+        {
+            status = Status.REJECTED;
         }
     }
 
@@ -1136,11 +1319,6 @@ public class TestEventTapWriter
             assertEquals(eventTapFlow.getTaps(), taps, context());
             assertEqualsNoOrder(eventTapFlow.getEvents().toArray(), ImmutableList.copyOf(events).toArray(), context());
             return this;
-        }
-
-        public EventTapFlowVerifier verifyNoEvents()
-        {
-            return verifyEvents();
         }
 
         public EventTapFlowVerifier verifyNoFlow()

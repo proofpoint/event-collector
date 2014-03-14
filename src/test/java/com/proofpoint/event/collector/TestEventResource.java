@@ -80,7 +80,7 @@ public class TestEventResource
 
         assertEquals(writer.getEvents(), events);
 
-        verifyCounti(1, 0);
+        verifyCount(1, 0);
         verify(eventCollectorStats).incomingEvents("Test", VALID);
         verifyNoMoreInteractions(eventCollectorStats);
     }
@@ -104,7 +104,7 @@ public class TestEventResource
         assertTrue(response.getEntity().toString().startsWith("Unsupported event type(s): "));
         assertTrue(response.getEntity().toString().contains("TestBad"));
 
-        verifyCounti(2, 1);
+        verifyCount(2, 1);
         verify(eventCollectorStats, times(2)).incomingEvents("Test", VALID);
         verify(eventCollectorStats).incomingEvents("TestBad", UNSUPPORTED);
         verifyNoMoreInteractions(eventCollectorStats);
@@ -132,13 +132,13 @@ public class TestEventResource
 
         assertEquals(writer.getEvents(), events);
 
-        verifyCounti(2, 0);
+        verifyCount(2, 0);
         verify(eventCollectorStats).incomingEvents(eventTypeA, VALID);
         verify(eventCollectorStats).incomingEvents(eventTypeB, VALID);
         verifyNoMoreInteractions(eventCollectorStats);
     }
 
-    private void verifyCounti(int validTypeCount, int unsupportedTypeCount)
+    private void verifyCount(int validTypeCount, int unsupportedTypeCount)
     {
         assertEquals(counterStatForValidType.getTotalCount(), validTypeCount);
         assertEquals(counterStatForUnsupportedType.getTotalCount(), unsupportedTypeCount);

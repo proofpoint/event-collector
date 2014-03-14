@@ -31,9 +31,9 @@ public interface EventCollectorStats
     public enum Status
     {
         DROPPED,              // events dropped due to queue overflow
-        DELIVERED,           // events successfully delivered to the consumer
-        LOST,               // events couldn't be delivered because all taps returned 5XX (server) error
-        REJECTED;          // events couldn't be delivered because a tap rejected with 4XX (client) error
+        DELIVERED,            // events successfully delivered to the consumer
+        LOST,                 // events couldn't be delivered because all taps returned 5XX (server) error
+        REJECTED;             // events couldn't be delivered because a tap rejected with 4XX (client) error
 
         @Override
         public String toString()

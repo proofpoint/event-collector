@@ -33,13 +33,12 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.proofpoint.event.collector.EventTapFlow.NULL_OBSERVER;
-import static java.util.UUID.randomUUID;
-import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.testng.Assert.assertEquals;
+import static java.util.UUID.randomUUID;
 
 public class TestHttpEventTapFlowFactory
 {
@@ -56,32 +55,34 @@ public class TestHttpEventTapFlowFactory
     private JsonCodec<List<Event>> jsonCodec;
     private HttpEventTapFlowFactory factory;
     private Observer observer;
+    private EventCollectorStats eventCollectorStats;
 
     @BeforeMethod
     public void setup()
     {
         httpClient = new MockHttpClient();
         jsonCodec = JsonCodec.listJsonCodec(Event.class);
-        factory = new HttpEventTapFlowFactory(httpClient, jsonCodec, config);
+        eventCollectorStats = mock(EventCollectorStats.class);
+        factory = new HttpEventTapFlowFactory(httpClient, jsonCodec, config, eventCollectorStats);
         observer = mock(Observer.class);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "httpClient is null")
-    public void testConsturctorNullHttpClient()
+    public void testConstructorNullHttpClient()
     {
-        new HttpEventTapFlowFactory(null, jsonCodec, config);
+        new HttpEventTapFlowFactory(null, jsonCodec, config, eventCollectorStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventCodec is null")
     public void testConstructorNullEventCodec()
     {
-        new HttpEventTapFlowFactory(httpClient, null, config);
+        new HttpEventTapFlowFactory(httpClient, null, config, eventCollectorStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
     {
-        new HttpEventTapFlowFactory(httpClient, jsonCodec, null);
+        new HttpEventTapFlowFactory(httpClient, jsonCodec, null, eventCollectorStats);
     }
 
     @Test

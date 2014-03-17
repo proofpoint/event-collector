@@ -34,11 +34,13 @@ public class HttpEventTapFlowFactory implements EventTapFlowFactory
     private final JsonCodec<List<Event>> eventsCodec;
     private final int qosRetryCount;
     private final Duration qosRetryDelay;
+    private final EventCollectorStats eventCollectorStats;
 
     @Inject
     public HttpEventTapFlowFactory(@EventTap HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
-            EventTapConfig config)
+            EventTapConfig config, EventCollectorStats eventCollectorStats)
     {
+        this.eventCollectorStats = checkNotNull(eventCollectorStats, "eventCollectorStats is null");
         this.httpClient = checkNotNull(httpClient, "httpClient is null");
         this.eventsCodec = checkNotNull(eventsCodec, "eventCodec is null");
         this.qosRetryCount = checkNotNull(config, "config is null").getEventTapQosRetryCount();
@@ -48,24 +50,24 @@ public class HttpEventTapFlowFactory implements EventTapFlowFactory
     @Override
     public EventTapFlow createEventTapFlow(String eventType, String flowId, Set<URI> taps, Observer observer)
     {
-        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, 0, null, observer);
+        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, 0, null, observer, eventCollectorStats);
     }
 
     @Override
     public EventTapFlow createEventTapFlow(String eventType, String flowId, Set<URI> taps)
     {
-        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, 0, null, NULL_OBSERVER);
+        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, 0, null, NULL_OBSERVER, eventCollectorStats);
     }
 
     @Override
     public EventTapFlow createQosEventTapFlow(String eventType, String flowId, Set<URI> taps, Observer observer)
     {
-        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, qosRetryCount, qosRetryDelay, observer);
+        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, qosRetryCount, qosRetryDelay, observer, eventCollectorStats);
     }
 
     @Override
     public EventTapFlow createQosEventTapFlow(String eventType, String flowId, Set<URI> taps)
     {
-        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, qosRetryCount, qosRetryDelay, NULL_OBSERVER);
+        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, qosRetryCount, qosRetryDelay, NULL_OBSERVER, eventCollectorStats);
     }
 }

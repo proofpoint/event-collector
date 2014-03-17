@@ -35,12 +35,12 @@ public class BatchProcessorFactoryImpl implements BatchProcessorFactory
     @Override
     public <T> BatchProcessor<T> createBatchProcessor(String name, BatchHandler<T> batchHandler, Observer observer)
     {
-        return new AsyncBatchProcessor<T>(name, batchHandler, config, observer);
+        return new AsyncBatchProcessor<T>(name, batchHandler, config);
     }
 
     @Override
     public <T> BatchProcessor<T> createBatchProcessor(String name, BatchHandler<T> batchHandler)
     {
-        return new AsyncBatchProcessor<T>(name, batchHandler, config, BatchProcessor.NULL_OBSERVER);
+        return new AsyncBatchProcessor<T>(name, batchHandler, config);
     }
 }

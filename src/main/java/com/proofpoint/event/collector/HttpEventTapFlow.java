@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.MapMaker;
 import com.google.common.collect.Sets;
+import com.proofpoint.event.collector.EventCollectorStats.Status;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.http.client.Response;
@@ -65,10 +66,12 @@ class HttpEventTapFlow implements EventTapFlow
     private final Observer observer;
     private final Set<URI> unestablishedTaps = Sets.newSetFromMap(new MapMaker().<URI, Boolean>makeMap());
     private final AtomicLong droppedEntries = new AtomicLong(0);
+    private final EventCollectorStats eventCollectorStats;
 
     public HttpEventTapFlow(HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
-            String eventType, String flowId, Set<URI> taps, int retryCount, Duration retryDelay, Observer observer)
+            String eventType, String flowId, Set<URI> taps, int retryCount, Duration retryDelay, Observer observer, EventCollectorStats eventCollectorStats)
     {
+        this.eventCollectorStats = checkNotNull(eventCollectorStats, "eventCollectorStats is null");
         this.httpClient = checkNotNull(httpClient, "httpClient is null");
         this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
         this.eventType = checkNotNull(eventType, "eventType is null");
@@ -113,6 +116,7 @@ class HttpEventTapFlow implements EventTapFlow
     public void notifyEntriesDropped(int count)
     {
         droppedEntries.getAndAdd(count);
+        checkNotNull(checkNotNull(eventCollectorStats, "eventCollectorStats is null").outboundEvents(eventType, flowId, Status.DROPPED), "counter is null").update(count);
     }
 
     @Override

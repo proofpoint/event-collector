@@ -21,8 +21,6 @@ import com.google.common.collect.ImmutableSet;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
-import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
-import com.proofpoint.event.collector.EventCollectorStats.Status;
 import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.FlowPolicy;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
@@ -57,7 +55,6 @@ public class EventTapWriter implements EventWriter
     private final ScheduledExecutorService executorService;
     private final BatchProcessorFactory batchProcessorFactory;
     private final EventTapFlowFactory eventTapFlowFactory;
-    private final EventCollectorStats eventCollectorStats;
 
     private final AtomicReference<Map<String, EventTypePolicy>> eventTypePolicies = new AtomicReference<Map<String, EventTypePolicy>>(
             ImmutableMap.<String, EventTypePolicy>of());
@@ -71,15 +68,13 @@ public class EventTapWriter implements EventWriter
             @EventTap ScheduledExecutorService executorService,
             BatchProcessorFactory batchProcessorFactory,
             EventTapFlowFactory eventTapFlowFactory,
-            EventTapConfig config,
-            EventCollectorStats eventCollectorStats)
+            EventTapConfig config)
     {
         this.selector = checkNotNull(selector, "selector is null");
         this.executorService = checkNotNull(executorService, "executorService is null");
         this.flowRefreshDuration = checkNotNull(config, "config is null").getEventTapRefreshDuration();
         this.batchProcessorFactory = checkNotNull(batchProcessorFactory, "batchProcessorFactory is null");
         this.eventTapFlowFactory = checkNotNull(eventTapFlowFactory, "eventTapFlowFactory is null");
-        this.eventCollectorStats = checkNotNull(eventCollectorStats, "eventCollectorStats is null");
     }
 
     @PostConstruct
@@ -239,13 +234,13 @@ public class EventTapWriter implements EventWriter
                 log.debug("**-> making new policy because %s", existingFlowPolicy == null ? "existing is null" : "qos changed");
                 EventTapFlow eventTapFlow;
                 if (updatedFlowInfo.qosEnabled) {
-                    eventTapFlow = createQosEventTapFlow(eventType, flowId, destinations);
+                    eventTapFlow = eventTapFlowFactory.createQosEventTapFlow(eventType, flowId, destinations);
                 }
                 else {
-                    eventTapFlow = createNonQosEventTapFlow(eventType, flowId, destinations);
+                    eventTapFlow = eventTapFlowFactory.createEventTapFlow(eventType, flowId, destinations);
                 }
                 log.debug("  -> made flow with destinations %s", destinations);
-                BatchProcessor<Event> batchProcessor = createBatchProcessor(eventType, flowId, eventTapFlow);
+                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), eventTapFlow);
                 policyBuilder.addFlowPolicy(flowId, batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled);
                 batchProcessor.start();
             }
@@ -292,57 +287,6 @@ public class EventTapWriter implements EventWriter
     private EventTypePolicy getPolicyForEvent(Event event)
     {
         return firstNonNull(eventTypePolicies.get().get(event.getType()), NULL_EVENT_TYPE_POLICY);
-    }
-
-    private BatchProcessor<Event> createBatchProcessor(String eventType, String flowId, BatchHandler<Event> batchHandler)
-    {
-        return batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), batchHandler, createBatchProcessorObserver(eventType, flowId));
-    }
-
-    private BatchProcessor.Observer createBatchProcessorObserver(final String eventType, final String flowId)
-    {
-        return new BatchProcessor.Observer()
-        {
-            @Override
-            public void onRecordsDropped(int count)
-            {
-                eventCollectorStats.outboundEvents(eventType, flowId, Status.DROPPED).update(count);
-            }
-        };
-    }
-
-    private EventTapFlow createNonQosEventTapFlow(String eventType, String flowId, Set<URI> taps)
-    {
-        return eventTapFlowFactory.createEventTapFlow(eventType, flowId, taps, createEventTapFlowObserver(eventType, flowId));
-    }
-
-    private EventTapFlow createQosEventTapFlow(String eventType, String flowId, Set<URI> taps)
-    {
-        return eventTapFlowFactory.createQosEventTapFlow(eventType, flowId, taps, createEventTapFlowObserver(eventType, flowId));
-    }
-
-    private EventTapFlow.Observer createEventTapFlowObserver(final String eventType, final String flowId)
-    {
-        return new EventTapFlow.Observer()
-        {
-            @Override
-            public void onRecordsDelivered(int count)
-            {
-                eventCollectorStats.outboundEvents(eventType, flowId, Status.DELIVERED).update(count);
-            }
-
-            @Override
-            public void onRecordsLost(int count)
-            {
-                eventCollectorStats.outboundEvents(eventType, flowId, Status.LOST).update(count);
-            }
-
-            @Override
-            public void onRecordsRejected(URI uri, int count)
-            {
-                eventCollectorStats.outboundEvents(eventType, flowId, uri.toString(), Status.REJECTED).update(count);
-            }
-        };
     }
 
     private void stopBatchProcessor(String eventType, String flowId, BatchProcessor<Event> processor)

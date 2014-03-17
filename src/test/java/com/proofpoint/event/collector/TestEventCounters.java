@@ -32,7 +32,7 @@ public class TestEventCounters
             throws Exception
     {
         counter = new Counter();
-        counters = new EventCounters<String>();
+        counters = new EventCounters<>();
     }
 
     @Test

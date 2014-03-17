@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.MapMaker;
 import com.google.common.collect.Sets;
+import com.proofpoint.event.collector.EventCollectorStats.Status;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.http.client.Response;
@@ -62,18 +63,18 @@ class HttpEventTapFlow implements EventTapFlow
     private final String eventType;
     private final String flowId;
     private final AtomicReference<List<URI>> taps = new AtomicReference<List<URI>>(ImmutableList.<URI>of());
-    private final Observer observer;
     private final Set<URI> unestablishedTaps = Sets.newSetFromMap(new MapMaker().<URI, Boolean>makeMap());
     private final AtomicLong droppedEntries = new AtomicLong(0);
+    private final EventCollectorStats eventCollectorStats;
 
     public HttpEventTapFlow(HttpClient httpClient, JsonCodec<List<Event>> eventsCodec,
-            String eventType, String flowId, Set<URI> taps, int retryCount, Duration retryDelay, Observer observer)
+            String eventType, String flowId, Set<URI> taps, int retryCount, Duration retryDelay, EventCollectorStats eventCollectorStats)
     {
+        this.eventCollectorStats = checkNotNull(eventCollectorStats, "eventCollectorStats is null");
         this.httpClient = checkNotNull(httpClient, "httpClient is null");
         this.eventsCodec = checkNotNull(eventsCodec, "eventsCodec is null");
         this.eventType = checkNotNull(eventType, "eventType is null");
         this.flowId = checkNotNull(flowId, "flowId is null");
-        this.observer = checkNotNull(observer, "observer is null");
         this.retryCount = retryCount;
         if (this.retryCount > 0) {
             this.retryDelayMillis = checkNotNull(retryDelay, "retryDelay is null").toMillis();
@@ -113,6 +114,7 @@ class HttpEventTapFlow implements EventTapFlow
     public void notifyEntriesDropped(int count)
     {
         droppedEntries.getAndAdd(count);
+        eventCollectorStats.outboundEvents(eventType, flowId, Status.DROPPED).update(count);
     }
 
     @Override
@@ -228,19 +230,19 @@ class HttpEventTapFlow implements EventTapFlow
 
     private void onRecordsDelivered(int eventCount)
     {
-        observer.onRecordsDelivered(eventCount);
+        eventCollectorStats.outboundEvents(eventType, flowId, Status.DELIVERED).update(eventCount);
     }
 
     private void onRecordsLost(int eventCount)
     {
         droppedEntries.getAndAdd(eventCount);
-        observer.onRecordsLost(eventCount);
+        eventCollectorStats.outboundEvents(eventType, flowId, Status.LOST).update(eventCount);
     }
 
     private void onRecordsRejected(URI tap, int eventCount)
     {
         droppedEntries.getAndAdd(eventCount);
-        observer.onRecordsRejected(tap, eventCount);
+        eventCollectorStats.outboundEvents(eventType, flowId, tap.toString(), Status.REJECTED).update(eventCount);
     }
 
     @VisibleForTesting

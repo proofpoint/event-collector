@@ -18,10 +18,11 @@ package com.proofpoint.event.collector;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.proofpoint.event.collector.EventTapFlow.Observer;
+import com.proofpoint.event.collector.EventCollectorStats.Status;
 import com.proofpoint.http.client.BodyGenerator;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.json.JsonCodec;
+import com.proofpoint.stats.CounterStat;
 import com.proofpoint.units.Duration;
 import org.joda.time.DateTime;
 import org.mockito.ArgumentCaptor;
@@ -39,11 +40,12 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Objects.firstNonNull;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertNotEquals;
@@ -62,73 +64,89 @@ public class TestHttpEventTapFlow
     private static final Set<URI> multipleTaps = ImmutableSet.of(create("http://n2.event.tap/post"), create("http://n3.event.tap/post"));
     private static final Set<URI> taps = multipleTaps;
     private static final int retryCount = 10;
+    private static final String ARBITRARY_EVENT_TYPE = "EventType";
+    private static final String ARBITRARY_FLOW_ID = "FlowId";
     private final List<Event> events = ImmutableList.of(
-            new Event("EventType", randomUUID().toString(), "foo.com", DateTime.now(), ImmutableMap.<String, Object>of()),
+            new Event(ARBITRARY_EVENT_TYPE, randomUUID().toString(), "foo.com", DateTime.now(), ImmutableMap.<String, Object>of()),
             new Event("EventTYpe", randomUUID().toString(), "foo.com", DateTime.now(), ImmutableMap.<String, Object>of()));
     private MockHttpClient httpClient;
-    private Observer observer;
     private HttpEventTapFlow singleEventTapFlow;
     private HttpEventTapFlow multipleEventTapFlow;
     private HttpEventTapFlow multipleEventTapFlowWithRetry;
     private HttpEventTapFlow eventTapFlow;              // Tests that don't care if they are single or multiple.
+    private EventCollectorStats eventCollectorStats;
+    private CounterStat counterForDroppedEvents;
+    private CounterStat counterForDelivered;
+    private CounterStat counterForRejected;
+    private CounterStat counterForLost;
 
     @BeforeMethod
     private void setup()
     {
         httpClient = new MockHttpClient();
-        observer = mock(Observer.class);
-        singleEventTapFlow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowId", singleTap, 0, null, observer);
-        multipleEventTapFlow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowId", multipleTaps, 0, null, observer);
-        multipleEventTapFlowWithRetry = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowId", multipleTaps, retryCount, new Duration(1, TimeUnit.MILLISECONDS), observer);
+        counterForDroppedEvents = new CounterStat();
+        counterForLost = new CounterStat();
+        counterForDelivered = new CounterStat();
+        counterForRejected = new CounterStat();
+
+        eventCollectorStats = mock(EventCollectorStats.class);
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.DROPPED))).thenReturn(counterForDroppedEvents);
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.DELIVERED))).thenReturn(counterForDelivered);
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.LOST))).thenReturn(counterForLost);
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), anyString(), eq(Status.REJECTED))).thenReturn(counterForRejected);
+
+        singleEventTapFlow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, ARBITRARY_EVENT_TYPE, "FlowId", singleTap, 0, null, eventCollectorStats);
+        multipleEventTapFlow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, ARBITRARY_EVENT_TYPE, "FlowId", multipleTaps, 0, null, eventCollectorStats);
+        multipleEventTapFlowWithRetry = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, ARBITRARY_EVENT_TYPE, "FlowId", multipleTaps, retryCount, new Duration(1, TimeUnit.MILLISECONDS), eventCollectorStats);
         eventTapFlow = multipleEventTapFlow;
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "httpClient is null")
     public void testConstructorNullHttpClient()
     {
-        new HttpEventTapFlow(null, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, 0, null, observer);
+        new HttpEventTapFlow(null, EVENT_LIST_JSON_CODEC, ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, taps, 0, null, eventCollectorStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventsCodec is null")
     public void testConstructorNullEventsCodec()
     {
-        new HttpEventTapFlow(httpClient, null, "EventType", "FlowID", taps, 0, null, observer);
+        new HttpEventTapFlow(httpClient, null, ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, taps, 0, null, eventCollectorStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventType is null")
     public void testConstructorNullEventType()
     {
-        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, null, "FlowID", taps, 0, null, observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, null, ARBITRARY_FLOW_ID, taps, 0, null, eventCollectorStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "flowId is null")
     public void testConstructorNullFlowId()
     {
-        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", null, taps, 0, null, observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, ARBITRARY_EVENT_TYPE, null, taps, 0, null, eventCollectorStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "taps is null")
     public void testConstructorNullTaps()
     {
-        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", null, 0, null, observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, null, 0, null, eventCollectorStats);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "taps is empty")
     public void testConstructorEmptyTaps()
     {
-        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", ImmutableSet.<URI>of(), 0, null, observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, ImmutableSet.<URI>of(), 0, null, eventCollectorStats);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "retryDelay is null")
     public void testConstructorNullRetryDelay()
     {
-        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", ImmutableSet.<URI>of(), 1, null, observer);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, ImmutableSet.<URI>of(), 1, null, eventCollectorStats);
     }
 
-    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "observer is null")
-    public void testConstructorNullObserver()
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventCollectorStats is null")
+    public void testConstructorNullEventCollectorStats()
     {
-        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, "EventType", "FlowID", taps, 0, null, null);
+        new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, taps, 0, null, null);
     }
 
     @Test
@@ -372,47 +390,61 @@ public class TestHttpEventTapFlow
     }
 
     @Test
-    public void testObserverOnSuccess()
+    public void testMetricsOnSuccessRecordsDeliveredEvents()
             throws Exception
     {
         eventTapFlow.processBatch(events);
 
-        verify(observer, times(1)).onRecordsDelivered(eq(events.size()));
-        verifyNoMoreInteractions(observer);
+        verify(eventCollectorStats).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, Status.DELIVERED);
+        verifyNoMoreInteractions(eventCollectorStats);
+        verifyCount(events.size(), 0, 0, 0);
     }
 
     @Test
-    public void testObserverOnFailure()
+    public void testMetricsOnExceptionRecordsLostEvents()
             throws Exception
     {
         httpClient.respondWithException();
         eventTapFlow.processBatch(events);
 
-        verify(observer, times(1)).onRecordsLost(eq(events.size()));
-        verifyNoMoreInteractions(observer);
+        verify(eventCollectorStats).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, Status.LOST);
+        verifyNoMoreInteractions(eventCollectorStats);
+        verifyCount(0, 0, events.size(), 0);
     }
 
     @Test
-    public void testObserverOnServerError()
+    public void testMetricsOnServerErrorRecordsLostEvents()
             throws Exception
     {
         httpClient.respondWithServerError();
         eventTapFlow.processBatch(events);
 
-        verify(observer, times(1)).onRecordsLost(eq(events.size()));
-        verifyNoMoreInteractions(observer);
+        verify(eventCollectorStats).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, Status.LOST);
+        verifyNoMoreInteractions(eventCollectorStats);
+        verifyCount(0, 0, events.size(), 0);
     }
 
     @Test
-    public void testObserverOnClientError()
+    public void testMetricsOnClientErrorRecordsRejectedEvents()
     {
         httpClient.respondWithClientError();
         eventTapFlow.processBatch(events);
 
-        ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
-        verify(observer, times(1)).onRecordsRejected(uriArgumentCaptor.capture(), eq(events.size()));
-        assertTrue(taps.contains(uriArgumentCaptor.getValue()));
-        verifyNoMoreInteractions(observer);
+        ArgumentCaptor<String> uriArgumentCaptor = ArgumentCaptor.forClass(String.class);
+
+        verify(eventCollectorStats).outboundEvents(eq(ARBITRARY_EVENT_TYPE), eq(ARBITRARY_FLOW_ID), uriArgumentCaptor.capture(), eq(Status.REJECTED));
+        verifyNoMoreInteractions(eventCollectorStats);
+        verifyCount(0, 0, 0, events.size());
+    }
+
+    @Test
+    public void testMetricsOnQueueOverflowRecordsDroppedEvents()
+    {
+        multipleEventTapFlowWithRetry.notifyEntriesDropped(10);
+
+        verify(eventCollectorStats).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, Status.DROPPED);
+        verifyNoMoreInteractions(eventCollectorStats);
+        verifyCount(0, 10, 0, 0);
     }
 
     private void clearFirstBatchHeaders(HttpEventTapFlow eventTapFlow, Set<URI> taps)
@@ -470,4 +502,11 @@ public class TestHttpEventTapFlow
         assertEqualsNoOrder(request.getHeaders().get(X_PROOFPOINT_QOS).toArray(), headerBuilder.build().toArray());
     }
 
+    private void verifyCount(int deliveredCount, int droppedCount, int lostCount, int rejectedCount)
+    {
+        assertEquals(counterForDelivered.getTotalCount(), deliveredCount);
+        assertEquals(counterForDroppedEvents.getTotalCount(), droppedCount);
+        assertEquals(counterForLost.getTotalCount(), lostCount);
+        assertEquals(counterForRejected.getTotalCount(), rejectedCount);
+    }
 }

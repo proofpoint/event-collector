@@ -15,7 +15,6 @@
  */
 package com.proofpoint.event.collector;
 
-import com.proofpoint.event.collector.EventTapFlow.Observer;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.units.Duration;
@@ -26,7 +25,6 @@ import java.util.List;
 import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.proofpoint.event.collector.EventTapFlow.NULL_OBSERVER;
 
 public class HttpEventTapFlowFactory implements EventTapFlowFactory
 {
@@ -48,26 +46,14 @@ public class HttpEventTapFlowFactory implements EventTapFlowFactory
     }
 
     @Override
-    public EventTapFlow createEventTapFlow(String eventType, String flowId, Set<URI> taps, Observer observer)
-    {
-        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, 0, null, observer, eventCollectorStats);
-    }
-
-    @Override
     public EventTapFlow createEventTapFlow(String eventType, String flowId, Set<URI> taps)
     {
-        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, 0, null, NULL_OBSERVER, eventCollectorStats);
-    }
-
-    @Override
-    public EventTapFlow createQosEventTapFlow(String eventType, String flowId, Set<URI> taps, Observer observer)
-    {
-        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, qosRetryCount, qosRetryDelay, observer, eventCollectorStats);
+        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, 0, null, eventCollectorStats);
     }
 
     @Override
     public EventTapFlow createQosEventTapFlow(String eventType, String flowId, Set<URI> taps)
     {
-        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, qosRetryCount, qosRetryDelay, NULL_OBSERVER, eventCollectorStats);
+        return new HttpEventTapFlow(httpClient, eventsCodec, eventType, flowId, taps, qosRetryCount, qosRetryDelay, eventCollectorStats);
     }
 }

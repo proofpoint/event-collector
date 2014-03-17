@@ -18,9 +18,10 @@ package com.proofpoint.event.collector;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.proofpoint.event.collector.EventTapFlow.Observer;
+import com.proofpoint.event.collector.EventCollectorStats.Status;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.json.JsonCodec;
+import com.proofpoint.stats.CounterStat;
 import com.proofpoint.units.Duration;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
@@ -32,11 +33,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import static com.proofpoint.event.collector.EventTapFlow.NULL_OBSERVER;
-import static org.mockito.Matchers.anyInt;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static java.util.UUID.randomUUID;
 
@@ -54,17 +54,28 @@ public class TestHttpEventTapFlowFactory
     private MockHttpClient httpClient;
     private JsonCodec<List<Event>> jsonCodec;
     private HttpEventTapFlowFactory factory;
-    private Observer observer;
     private EventCollectorStats eventCollectorStats;
+    private CounterStat counterForDroppedEvents;
+    private CounterStat counterForLost;
+    private CounterStat counterForDelivered;
 
     @BeforeMethod
     public void setup()
     {
         httpClient = new MockHttpClient();
         jsonCodec = JsonCodec.listJsonCodec(Event.class);
+        counterForDroppedEvents = mock(CounterStat.class);
+        counterForLost = mock(CounterStat.class);
+        counterForDelivered = mock(CounterStat.class);
+        CounterStat counterForRejected = mock(CounterStat.class);
+
         eventCollectorStats = mock(EventCollectorStats.class);
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.DROPPED))).thenReturn(counterForDroppedEvents);
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.DELIVERED))).thenReturn(counterForDelivered);
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.LOST))).thenReturn(counterForLost);
+        when(eventCollectorStats.outboundEvents(anyString(), anyString(), anyString(), eq(Status.REJECTED))).thenReturn(counterForRejected);
+
         factory = new HttpEventTapFlowFactory(httpClient, jsonCodec, config, eventCollectorStats);
-        observer = mock(Observer.class);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "httpClient is null")
@@ -89,8 +100,8 @@ public class TestHttpEventTapFlowFactory
     public void testNonQosCreate()
             throws Exception
     {
-        testCreatedEventTapFlow(factory.createEventTapFlow(eventTypeA, flowIdA, tapsA, observer),
-                eventTypeA, flowIdA, tapsA, 0, observer);
+        testCreatedEventTapFlow(factory.createEventTapFlow(eventTypeA, flowIdA, tapsA),
+                eventTypeA, flowIdA, tapsA, 0);
     }
 
     @Test
@@ -98,15 +109,15 @@ public class TestHttpEventTapFlowFactory
             throws Exception
     {
         testCreatedEventTapFlow(factory.createEventTapFlow(eventTypeB, flowIdB, tapsB),
-                eventTypeB, flowIdB, tapsB, 0, NULL_OBSERVER);
+                eventTypeB, flowIdB, tapsB, 0);
     }
 
     @Test
     public void testQosCreate()
             throws Exception
     {
-        testCreatedEventTapFlow(factory.createQosEventTapFlow(eventTypeA, flowIdA, tapsA, observer),
-                eventTypeA, flowIdA, tapsA,  qosRetryCount, observer);
+        testCreatedEventTapFlow(factory.createQosEventTapFlow(eventTypeA, flowIdA, tapsA),
+                eventTypeA, flowIdA, tapsA,  qosRetryCount);
     }
 
     @Test
@@ -114,10 +125,10 @@ public class TestHttpEventTapFlowFactory
             throws Exception
     {
         testCreatedEventTapFlow(factory.createQosEventTapFlow(eventTypeB, flowIdB, tapsB),
-                eventTypeB, flowIdB, tapsB, qosRetryCount, NULL_OBSERVER);
+                eventTypeB, flowIdB, tapsB, qosRetryCount);
     }
 
-    private void testCreatedEventTapFlow(EventTapFlow eventTapFlow, String eventType, String flowId, Set<URI> taps, int retryCount, Observer observer)
+    private void testCreatedEventTapFlow(EventTapFlow eventTapFlow, String eventType, String flowId, Set<URI> taps, int retryCount)
             throws Exception
     {
         List<Event> events = ImmutableList.of(createEvent(eventType));
@@ -131,10 +142,6 @@ public class TestHttpEventTapFlowFactory
         eventTapFlow.processBatch(events);
         List<Request> requests = httpClient.getRequests();
         assertEquals(requests.size(), 1);
-        if (observer == this.observer) {
-            verify(observer).onRecordsDelivered(anyInt());
-            verifyNoMoreInteractions(observer);
-        }
 
         httpClient.clearRequests();
         httpClient.respondWithException();
@@ -143,10 +150,6 @@ public class TestHttpEventTapFlowFactory
         requests = httpClient.getRequests();
         assertEquals(requests.size(), taps.size() * (retryCount + 1));
 
-        if (observer == this.observer) {
-            verify(observer).onRecordsLost(anyInt());
-            verifyNoMoreInteractions(observer);
-        }
     }
 
     private Event createEvent(String eventType)

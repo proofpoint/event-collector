@@ -114,7 +114,7 @@ class HttpEventTapFlow implements EventTapFlow
     public void notifyEntriesDropped(int count)
     {
         droppedEntries.getAndAdd(count);
-        checkNotNull(checkNotNull(eventCollectorStats, "eventCollectorStats is null").outboundEvents(eventType, flowId, Status.DROPPED), "counter is null").update(count);
+        eventCollectorStats.outboundEvents(eventType, flowId, Status.DROPPED).update(count);
     }
 
     @Override

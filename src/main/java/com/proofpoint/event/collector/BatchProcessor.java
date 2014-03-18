@@ -19,14 +19,6 @@ import java.util.List;
 
 public interface BatchProcessor<T>
 {
-    Observer NULL_OBSERVER = new Observer()
-    {
-        @Override
-        public void onRecordsDropped(int count)
-        {
-        }
-    };
-
     void start();
 
     void stop();
@@ -38,10 +30,5 @@ public interface BatchProcessor<T>
         void processBatch(List<T> entries);
 
         void notifyEntriesDropped(int count);
-    }
-
-    interface Observer
-    {
-        void onRecordsDropped(int count);
     }
 }

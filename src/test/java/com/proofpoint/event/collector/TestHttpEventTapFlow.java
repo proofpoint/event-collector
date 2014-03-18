@@ -437,6 +437,16 @@ public class TestHttpEventTapFlow
         verifyCount(0, 0, 0, events.size());
     }
 
+    @Test
+    public void testMetricsOnQueueOverflowRecordsDroppedEvents()
+    {
+        multipleEventTapFlowWithRetry.notifyEntriesDropped(10);
+
+        verify(eventCollectorStats).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, Status.DROPPED);
+        verifyNoMoreInteractions(eventCollectorStats);
+        verifyCount(0, 10, 0, 0);
+    }
+
     private void clearFirstBatchHeaders(HttpEventTapFlow eventTapFlow, Set<URI> taps)
     {
         // Keep sending events until each tap receives a message.

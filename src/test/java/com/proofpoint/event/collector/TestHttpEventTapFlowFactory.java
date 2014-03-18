@@ -96,6 +96,12 @@ public class TestHttpEventTapFlowFactory
         new HttpEventTapFlowFactory(httpClient, jsonCodec, null, eventCollectorStats);
     }
 
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventCollectorStats is null")
+    public void testConstructorNullEventCollectorStats()
+    {
+        new HttpEventTapFlowFactory(httpClient, jsonCodec, config, null);
+    }
+
     @Test
     public void testNonQosCreate()
             throws Exception

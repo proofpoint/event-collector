@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableSet;
 import com.proofpoint.discovery.client.ServiceDescriptor;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
-import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.FlowPolicy;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
@@ -235,13 +234,13 @@ public class EventTapWriter implements EventWriter
                 log.debug("**-> making new policy because %s", existingFlowPolicy == null ? "existing is null" : "qos changed");
                 EventTapFlow eventTapFlow;
                 if (updatedFlowInfo.qosEnabled) {
-                    eventTapFlow = createQosEventTapFlow(eventType, flowId, destinations);
+                    eventTapFlow = eventTapFlowFactory.createQosEventTapFlow(eventType, flowId, destinations);
                 }
                 else {
-                    eventTapFlow = createNonQosEventTapFlow(eventType, flowId, destinations);
+                    eventTapFlow = eventTapFlowFactory.createEventTapFlow(eventType, flowId, destinations);
                 }
                 log.debug("  -> made flow with destinations %s", destinations);
-                BatchProcessor<Event> batchProcessor = createBatchProcessor(eventType, flowId, eventTapFlow);
+                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), eventTapFlow);
                 policyBuilder.addFlowPolicy(flowId, batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled);
                 batchProcessor.start();
             }
@@ -288,21 +287,6 @@ public class EventTapWriter implements EventWriter
     private EventTypePolicy getPolicyForEvent(Event event)
     {
         return firstNonNull(eventTypePolicies.get().get(event.getType()), NULL_EVENT_TYPE_POLICY);
-    }
-
-    private BatchProcessor<Event> createBatchProcessor(String eventType, String flowId, BatchHandler<Event> batchHandler)
-    {
-        return batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), batchHandler);
-    }
-
-    private EventTapFlow createNonQosEventTapFlow(String eventType, String flowId, Set<URI> taps)
-    {
-        return eventTapFlowFactory.createEventTapFlow(eventType, flowId, taps);
-    }
-
-    private EventTapFlow createQosEventTapFlow(String eventType, String flowId, Set<URI> taps)
-    {
-        return eventTapFlowFactory.createQosEventTapFlow(eventType, flowId, taps);
     }
 
     private void stopBatchProcessor(String eventType, String flowId, BatchProcessor<Event> processor)

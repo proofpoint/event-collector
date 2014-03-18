@@ -16,12 +16,14 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.AbstractFuture;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.http.client.RequestStats;
 import com.proofpoint.http.client.Response;
 import com.proofpoint.http.client.ResponseHandler;
 
+import javax.annotation.Nullable;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -30,7 +32,8 @@ import static org.mockito.Mockito.when;
 import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 import static javax.ws.rs.core.Response.Status.SERVICE_UNAVAILABLE;
 
-class MockHttpClient implements HttpClient
+class MockHttpClient
+        implements HttpClient
 {
     private Exception exception;
     private int exceptionCount;
@@ -67,6 +70,12 @@ class MockHttpClient implements HttpClient
         }
 
         return responseHandler.handle(request, response);
+    }
+
+    @Override
+    public <T, E extends Exception> HttpResponseFuture<T> executeAsync(Request request, ResponseHandler<T, E> responseHandler)
+    {
+        return new MockHttpResponseFuture();
     }
 
     public List<Request> getRequests()
@@ -133,5 +142,28 @@ class MockHttpClient implements HttpClient
         when(response.getStatusCode()).thenReturn(SERVICE_UNAVAILABLE.getStatusCode());
         when(response.getStatusMessage()).thenReturn(SERVICE_UNAVAILABLE.getReasonPhrase());
         return response;
+    }
+
+    static class MockHttpResponseFuture<T>
+            extends AbstractFuture<T>
+            implements HttpResponseFuture<T>
+    {
+        @Override
+        public String getState()
+        {
+            return "state";
+        }
+
+        @Override
+        public boolean setException(Throwable throwable)
+        {
+            return super.setException(throwable);
+        }
+
+        @Override
+        public boolean set(@Nullable T value)
+        {
+            return super.set(value);
+        }
     }
 }

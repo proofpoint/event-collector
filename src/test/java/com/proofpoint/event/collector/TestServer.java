@@ -24,10 +24,10 @@ import com.proofpoint.bootstrap.Bootstrap;
 import com.proofpoint.bootstrap.LifeCycleManager;
 import com.proofpoint.discovery.client.testing.TestingDiscoveryModule;
 import com.proofpoint.event.client.JsonEventModule;
-import com.proofpoint.http.client.ApacheHttpClient;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.StatusResponseHandler.StatusResponse;
 import com.proofpoint.http.client.StringResponseHandler.StringResponse;
+import com.proofpoint.http.client.jetty.JettyHttpClient;
 import com.proofpoint.http.server.testing.TestingHttpServer;
 import com.proofpoint.http.server.testing.TestingHttpServerModule;
 import com.proofpoint.jaxrs.JaxrsModule;
@@ -107,7 +107,7 @@ public class TestServer
         server = injector.getInstance(TestingHttpServer.class);
         eventTapWriter = injector.getInstance(EventTapWriter.class);
         eventTapWriter.start();
-        client = new ApacheHttpClient();
+        client = new JettyHttpClient();
 
     }
 

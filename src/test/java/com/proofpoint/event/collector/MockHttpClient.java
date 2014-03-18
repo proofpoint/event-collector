@@ -30,7 +30,8 @@ import static org.mockito.Mockito.when;
 import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 import static javax.ws.rs.core.Response.Status.SERVICE_UNAVAILABLE;
 
-class MockHttpClient implements HttpClient
+class MockHttpClient
+        implements HttpClient
 {
     private Exception exception;
     private int exceptionCount;
@@ -67,6 +68,12 @@ class MockHttpClient implements HttpClient
         }
 
         return responseHandler.handle(request, response);
+    }
+
+    @Override
+    public <T, E extends Exception> HttpResponseFuture<T> executeAsync(Request request, ResponseHandler<T, E> responseHandler)
+    {
+        throw new UnsupportedOperationException();
     }
 
     public List<Request> getRequests()

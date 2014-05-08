@@ -88,6 +88,8 @@ public class MainModule
 
         reportBinder(binder).bindReportCollection(EventCollectorStats.class).as(new ObjectNameBuilder(EventCollectorStats.class.getPackage().getName()).withProperty("type", "EventCollector").build());
 
+        reportBinder(binder).bindReportCollection(S3UploaderStats.class).as(new ObjectNameBuilder(S3UploaderStats.class.getPackage().getName()).withProperty("type", "S3Uploader").build());
+
         discoveryBinder(binder).bindHttpAnnouncement("collector");
     }
 

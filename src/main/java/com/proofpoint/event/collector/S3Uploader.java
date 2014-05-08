@@ -21,6 +21,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.io.Closeables;
+import com.proofpoint.event.collector.S3UploaderStats.Status;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
 import com.proofpoint.json.JsonCodec;
@@ -42,6 +43,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.json.JsonCodec.jsonCodec;
 
@@ -60,13 +62,14 @@ public class S3Uploader
     private final File retryFileDir;
     private final Duration retryPeriod;
     private final Duration retryDelay;
+    private final S3UploaderStats s3UploaderStats;
 
     @Inject
     public S3Uploader(StorageSystem storageSystem,
             ServerConfig config,
             EventPartitioner partitioner,
             @UploaderExecutorService ExecutorService uploadExecutor,
-            @PendingFileExecutorService ScheduledExecutorService retryExecutor)
+            @PendingFileExecutorService ScheduledExecutorService retryExecutor, S3UploaderStats s3UploaderStats)
     {
         this.storageSystem = storageSystem;
         this.localStagingDirectory = config.getLocalStagingDirectory();
@@ -78,6 +81,7 @@ public class S3Uploader
         this.retryFileDir = new File(localStagingDirectory.getPath(), "retry");
         this.retryPeriod = config.getRetryPeriod();
         this.retryDelay = config.getRetryDelay();
+        this.s3UploaderStats = checkNotNull(s3UploaderStats, "s3UploaderStats is null");
 
         //noinspection ResultOfMethodCallIgnored
         localStagingDirectory.mkdirs();
@@ -128,10 +132,11 @@ public class S3Uploader
 
                 try {
                     upload(partition, file);
+                    s3UploaderStats.uploadFiles(partition.getEventType(), Status.UPLOADED).update(1);
                 }
                 catch (Exception e) {
                     log.error(e, "upload failed: %s: %s. Sending for retry", partition, file);
-                    handleRetry(partition, file, e.getMessage());
+                    handleRetry(partition, file);
                 }
             }
         });
@@ -233,11 +238,13 @@ public class S3Uploader
     private void handleFailure(File file)
     {
         moveToFailed(file);
+        s3UploaderStats.uploadFiles(Status.CORRUPT).update(1);
     }
 
-    private void handleRetry(EventPartition partition, File file, String message)
+    private void handleRetry(EventPartition partition, File file)
     {
         moveToRetry(file);
+        s3UploaderStats.uploadFiles(partition.getEventType(), Status.UPLOAD_FAILURE).update(1);
     }
 
     private void moveToFailed(File file)

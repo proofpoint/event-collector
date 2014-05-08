@@ -12,7 +12,7 @@
     <parent>
         <groupId>com.proofpoint.platform</groupId>
         <artifactId>rest-server-base</artifactId>
-        <version>0.92</version>
+        <version>0.95</version>
     </parent>
 
     <licenses>
@@ -208,6 +208,7 @@
             <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
+
         <dependency>
             <groupId>com.proofpoint.platform</groupId>
             <artifactId>reporting-client</artifactId>

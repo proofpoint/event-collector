@@ -20,6 +20,7 @@ import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.transfer.TransferManager;
+import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.Binder;
 import com.google.inject.Key;
@@ -87,6 +88,8 @@ public class MainModule
         binder.bind(EventWriterStatsResource.class).in(Scopes.SINGLETON);
 
         reportBinder(binder).bindReportCollection(EventCollectorStats.class).as(new ObjectNameBuilder(EventCollectorStats.class.getPackage().getName()).withProperty("type", "EventCollector").build());
+
+        reportBinder(binder).bindReportCollection(S3UploaderStats.class).as(new ObjectNameBuilder(S3UploaderStats.class.getPackage().getName()).withProperty("type", "S3Uploader").build());
 
         discoveryBinder(binder).bindHttpAnnouncement("collector");
     }
@@ -178,5 +181,11 @@ public class MainModule
         }
 
         return newSingleThreadScheduledExecutor(threadFactoryBuilder.build());
+    }
+
+    @Provides
+    @Singleton
+    private Ticker providesTicker() {
+        return Ticker.systemTicker();
     }
 }

@@ -61,12 +61,12 @@ public class EventResource
                     writer.write(event);
                 }
 
-                eventCollectorStats.incomingEvents(event.getType(), VALID).update(1);
+                eventCollectorStats.incomingEvents(event.getType(), VALID).add(1);
             }
             else {
                 badEvents.add(event.getType());
 
-                eventCollectorStats.incomingEvents(event.getType(), UNSUPPORTED).update(1);
+                eventCollectorStats.incomingEvents(event.getType(), UNSUPPORTED).add(1);
             }
         }
 

@@ -20,6 +20,7 @@ import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.transfer.TransferManager;
+import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.Binder;
 import com.google.inject.Key;
@@ -180,5 +181,11 @@ public class MainModule
         }
 
         return newSingleThreadScheduledExecutor(threadFactoryBuilder.build());
+    }
+
+    @Provides
+    @Singleton
+    private Ticker providesTicker() {
+        return Ticker.systemTicker();
     }
 }

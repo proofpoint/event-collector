@@ -20,8 +20,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
+import com.google.common.base.Ticker;
 import com.google.common.io.Closeables;
-import com.proofpoint.event.collector.S3UploaderStats.Status;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
 import com.proofpoint.json.JsonCodec;
@@ -44,14 +45,20 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.proofpoint.event.collector.S3UploaderStats.Status.CORRUPT;
+import static com.proofpoint.event.collector.S3UploaderStats.Status.FAILURE;
+import static com.proofpoint.event.collector.S3UploaderStats.Status.SUCCESS;
+import static com.proofpoint.event.collector.S3UploaderStats.Status.UPLOADED;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.json.JsonCodec.jsonCodec;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 public class S3Uploader
         implements Uploader
 {
     private static final Logger log = Logger.get(S3Uploader.class);
     private static final JsonCodec<Event> codec = jsonCodec(Event.class);
+    private static final String UNKNOWN_EVENT_TYPE = "unknown";
     private final StorageSystem storageSystem;
     private final File localStagingDirectory;
     private final ExecutorService uploadExecutor;
@@ -63,13 +70,16 @@ public class S3Uploader
     private final Duration retryPeriod;
     private final Duration retryDelay;
     private final S3UploaderStats s3UploaderStats;
+    private final Ticker ticker;
 
     @Inject
     public S3Uploader(StorageSystem storageSystem,
             ServerConfig config,
             EventPartitioner partitioner,
             @UploaderExecutorService ExecutorService uploadExecutor,
-            @PendingFileExecutorService ScheduledExecutorService retryExecutor, S3UploaderStats s3UploaderStats)
+            @PendingFileExecutorService ScheduledExecutorService retryExecutor
+            , S3UploaderStats s3UploaderStats
+            , Ticker ticker)
     {
         this.storageSystem = storageSystem;
         this.localStagingDirectory = config.getLocalStagingDirectory();
@@ -82,6 +92,7 @@ public class S3Uploader
         this.retryPeriod = config.getRetryPeriod();
         this.retryDelay = config.getRetryDelay();
         this.s3UploaderStats = checkNotNull(s3UploaderStats, "s3UploaderStats is null");
+        this.ticker = checkNotNull(ticker, "ticker is null");
 
         //noinspection ResultOfMethodCallIgnored
         localStagingDirectory.mkdirs();
@@ -132,7 +143,9 @@ public class S3Uploader
 
                 try {
                     upload(partition, file);
-                    s3UploaderStats.uploadFiles(partition.getEventType(), Status.UPLOADED).update(1);
+                    String eventType = partition.getEventType();
+                    s3UploaderStats.processedFiles(eventType, UPLOADED).update(1);
+                    s3UploaderStats.uploadAttempts(eventType, SUCCESS).update(1);
                 }
                 catch (Exception e) {
                     log.error(e, "upload failed: %s: %s. Sending for retry", partition, file);
@@ -160,7 +173,11 @@ public class S3Uploader
                 file.getName());
         StoredObject target = new StoredObject(location);
 
+        Stopwatch stopwatch = Stopwatch.createStarted(ticker);
         storageSystem.putObject(target.getLocation(), file);
+        stopwatch.stop();
+
+        s3UploaderStats.processedTime(partition.getEventType()).add(new Duration(stopwatch.elapsed(MILLISECONDS), MILLISECONDS));
 
         if (!file.delete()) {
             log.warn("failed to delete local staging file: %s", file.getAbsolutePath());
@@ -238,13 +255,13 @@ public class S3Uploader
     private void handleFailure(File file)
     {
         moveToFailed(file);
-        s3UploaderStats.uploadFiles(Status.CORRUPT).update(1);
+        s3UploaderStats.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT).update(1);
     }
 
     private void handleRetry(EventPartition partition, File file)
     {
         moveToRetry(file);
-        s3UploaderStats.uploadFiles(partition.getEventType(), Status.UPLOAD_FAILURE).update(1);
+        s3UploaderStats.uploadAttempts(partition.getEventType(), FAILURE).update(1);
     }
 
     private void moveToFailed(File file)

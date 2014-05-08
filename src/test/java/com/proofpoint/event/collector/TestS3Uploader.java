@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.io.Files;
 import com.google.common.io.Resources;
+import com.google.common.testing.FakeTicker;
 import com.proofpoint.event.collector.combiner.CombinedStoredObject;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
@@ -38,18 +39,22 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.proofpoint.event.collector.S3UploaderStats.Status.CORRUPT;
+import static com.proofpoint.event.collector.S3UploaderStats.Status.FAILURE;
+import static com.proofpoint.event.collector.S3UploaderStats.Status.SUCCESS;
 import static com.proofpoint.event.collector.S3UploaderStats.Status.UPLOADED;
-import static com.proofpoint.event.collector.S3UploaderStats.Status.UPLOAD_FAILURE;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertTrue;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 public class TestS3Uploader
 {
     private static final String ARBITRARY_EVENT_TYPE = "TapPrsMessage";
+    private static final String UNKNOWN_EVENT_TYPE = "unknown";
+    private static final Duration UPLOAD_DURATION = new Duration(3L, MILLISECONDS);
+
     private File tempStageDir;
     private S3Uploader uploader;
     private DummyStorageSystem storageSystem;
@@ -57,12 +62,13 @@ public class TestS3Uploader
     private SerialScheduledExecutorService executor;
     private TestingReportCollectionFactory testingReportCollectionFactory;
     private S3UploaderStats s3UploaderStats;
+    private FakeTicker ticker;
 
     @BeforeMethod
     public void setup()
     {
-        storageSystem = new DummyStorageSystem();
-
+        ticker = new FakeTicker();
+        storageSystem = new DummyStorageSystem(ticker, UPLOAD_DURATION);
         tempStageDir = Files.createTempDir();
         tempStageDir.deleteOnExit();
 
@@ -81,106 +87,131 @@ public class TestS3Uploader
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "s3UploaderStats is null")
     public void testConstructorNullS3UploaderStats()
     {
-        new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, null);
+        new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, null, ticker);
     }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "ticker is null")
+    public void testConstructorNullTicker()
+    {
+        new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, null);
+    }
+
     @Test
     public void testSuccessOnFailedDirExists()
     {
         new File(tempStageDir.getPath(), "failed").mkdir();
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, ticker);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class)
-    public void testFailureOnFailedFileExists() throws IOException
+    public void testFailureOnFailedFileExists()
+            throws IOException
     {
         new File(tempStageDir.getPath(), "failed").createNewFile();
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, ticker);
     }
 
     @Test
     public void testSuccessOnRetryDirExists()
     {
         new File(tempStageDir.getPath(), "retry").mkdir();
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, ticker);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class)
-    public void testFailureOnRetryFileExists() throws IOException
+    public void testFailureOnRetryFileExists()
+            throws IOException
     {
         new File(tempStageDir.getPath(), "retry").createNewFile();
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, ticker);
     }
 
     @Test
-    public void testSuccessOnDirectoriesInStaging() throws IOException
+    public void testSuccessOnDirectoriesInStaging()
+            throws IOException
     {
         new File(tempStageDir.getPath(), "directory").mkdir();
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, ticker);
         uploader.start();
     }
 
     @Test
-    public void testUploadPendingFiles() throws Exception
+    public void testUploadPendingFiles()
+            throws Exception
     {
         File pendingFile = new File(tempStageDir, "pending.json.snappy");
         Files.copy(new File(Resources.getResource("pending.json.snappy").toURI()), pendingFile);
 
         assertTrue(pendingFile.exists());
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, ticker);
         uploader.start();
         assertFalse(pendingFile.exists());
         assertTrue(storageSystem.hasReceivedFile(pendingFile));
 
-        verify(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class)).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOADED);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class));
+        S3UploaderStats s3UploaderStatsArgumentVerifier = testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class);
+        verify(s3UploaderStatsArgumentVerifier).processedFiles(ARBITRARY_EVENT_TYPE, UPLOADED);
+        verify(s3UploaderStatsArgumentVerifier).uploadAttempts(ARBITRARY_EVENT_TYPE, SUCCESS);
+        verify(s3UploaderStatsArgumentVerifier).processedTime(ARBITRARY_EVENT_TYPE);
+        verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
 
-        verify(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOADED)).update(1);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOADED));
-
+        S3UploaderStats s3UploaderStatsReportCollection = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class);
+        verify(s3UploaderStatsReportCollection.processedFiles(ARBITRARY_EVENT_TYPE, UPLOADED)).update(1);
+        verify(s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, SUCCESS)).update(1);
+        verify(s3UploaderStatsReportCollection.processedTime(ARBITRARY_EVENT_TYPE)).add(UPLOAD_DURATION);
+        verifyNoMoreInteractions(s3UploaderStatsReportCollection.processedFiles(ARBITRARY_EVENT_TYPE, UPLOADED));
+        verifyNoMoreInteractions(s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, SUCCESS));
+        verifyNoMoreInteractions(s3UploaderStatsReportCollection.processedTime(ARBITRARY_EVENT_TYPE));
     }
 
     @Test
-    public void testUploadPendingFilesFailure() throws Exception
+    public void testUploadPendingFilesFailure()
+            throws Exception
     {
         File invalidJsonFile = new File(tempStageDir, "invalidjson.snappy");
         Files.copy(new File(Resources.getResource("invalidjson.snappy").toURI()), invalidJsonFile);
 
         assertTrue(invalidJsonFile.exists());
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, ticker);
         uploader.start();
         assertFalse(invalidJsonFile.exists());
         assertTrue(new File(tempStageDir.getPath() + "/failed", invalidJsonFile.getName()).exists());
         assertFalse(storageSystem.hasReceivedFile(invalidJsonFile));
 
-        verify(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class)).uploadFiles(CORRUPT);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class));
+        S3UploaderStats s3UploaderStatsArgumentVerifier = testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class);
+        verify(s3UploaderStatsArgumentVerifier).processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT);
+        verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
 
-        verify(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(CORRUPT)).update(1);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(CORRUPT));
+        S3UploaderStats s3UploaderStatsReportCollection = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class);
+        verify(s3UploaderStatsReportCollection.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT)).update(1);
+        verifyNoMoreInteractions(s3UploaderStatsReportCollection.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT));
     }
 
     @Test
-    public void testFailsOnVerifyFile() throws Exception
+    public void testFailsOnVerifyFile()
+            throws Exception
     {
         File invalidJsonFile = new File(tempStageDir, "invalidjson2.snappy");
         Files.copy(new File(Resources.getResource("invalidjson2.snappy").toURI()), invalidJsonFile);
 
         assertTrue(invalidJsonFile.exists());
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, ticker);
         uploader.start();
         assertFalse(invalidJsonFile.exists());
         assertTrue(new File(tempStageDir.getPath() + "/failed", invalidJsonFile.getName()).exists());
         assertFalse(storageSystem.hasReceivedFile(invalidJsonFile));
 
-        verify(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class)).uploadFiles(CORRUPT);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class));
+        S3UploaderStats s3UploaderStatsArgumentVerifier = testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class);
+        verify(s3UploaderStatsArgumentVerifier).processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT);
+        verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
 
-        verify(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(CORRUPT)).update(1);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(CORRUPT));
+        S3UploaderStats s3UploaderStatsReportCollection = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class);
+        verify(s3UploaderStatsReportCollection.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT)).update(1);
+        verifyNoMoreInteractions(s3UploaderStatsReportCollection.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT));
     }
 
     @Test
-    public void testRetryUntilSuccess() throws Exception
+    public void testRetryUntilSuccess()
+            throws Exception
     {
         storageSystem.succeedOnAttempt(3);
         File pendingFile = new File(tempStageDir, "pending.json.snappy");
@@ -191,18 +222,12 @@ public class TestS3Uploader
         assertEquals(storageSystem.getAttempts(pendingFile), 0);
         //attempt 1 to upload from staging directory fails and file is moved to retry directory
         assertTrue(pendingFile.exists());
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats);
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, ticker);
         uploader.start();
         assertFalse(pendingFile.exists());
         assertTrue(new File(retryDir, pendingFile.getName()).exists());
         assertFalse(storageSystem.hasReceivedFile(pendingFile));
         assertEquals(storageSystem.getAttempts(pendingFile), 1);
-
-        verify(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class)).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOAD_FAILURE);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class));
-
-        verify(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOAD_FAILURE)).update(1);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOAD_FAILURE));
 
         //attempt 2: file is moved to staging from retry directory, and fails and hence gets back to retry directory
         executor.elapseTime(1, TimeUnit.MINUTES);
@@ -210,12 +235,6 @@ public class TestS3Uploader
         assertTrue(new File(retryDir, pendingFile.getName()).exists());
         assertFalse(storageSystem.hasReceivedFile(pendingFile));
         assertEquals(storageSystem.getAttempts(pendingFile), 2);
-
-        verify(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class), times(2)).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOAD_FAILURE);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class));
-
-        verify(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOAD_FAILURE), times(2)).update(1);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOAD_FAILURE));
 
         //retryExecutor hasn't run again
         executor.elapseTime(1, TimeUnit.MINUTES);
@@ -230,18 +249,34 @@ public class TestS3Uploader
         assertFalse(new File(retryDir, pendingFile.getName()).exists());
         assertTrue(storageSystem.hasReceivedFile(pendingFile));
         assertEquals(storageSystem.getAttempts(pendingFile), 3);
-
-        verify(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class)).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOADED);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class));
-
-        verify(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOADED)).update(1);
-        verifyNoMoreInteractions(testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).uploadFiles(ARBITRARY_EVENT_TYPE, UPLOADED));
     }
 
     @Test
-    public void testInvalidFilesInRetryDirectory() throws Exception
+    public void testPulseMetricsForUploadAttempts()
+            throws Exception
     {
-        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats);
+        storageSystem.succeedOnAttempt(2);
+        File pendingFile = new File(tempStageDir, "pending.json.snappy");
+        Files.copy(new File(Resources.getResource("pending.json.snappy").toURI()), pendingFile);
+
+        //attempt 1 to upload from staging directory fails and file is moved to retry directory
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, ticker);
+        uploader.start();
+
+        S3UploaderStats s3UploaderStatsArgumentVerifier = testingReportCollectionFactory.getArgumentVerifier(S3UploaderStats.class);
+        verify(s3UploaderStatsArgumentVerifier).uploadAttempts(ARBITRARY_EVENT_TYPE, FAILURE);
+        verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
+
+        S3UploaderStats s3UploaderStatsReportCollection = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class);
+        verify(s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, FAILURE)).update(1);
+        verifyNoMoreInteractions(s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, FAILURE));
+    }
+
+    @Test
+    public void testInvalidFilesInRetryDirectory()
+            throws Exception
+    {
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), executor, executor, s3UploaderStats, ticker);
         uploader.start();
 
         executor.elapseTime(1, TimeUnit.MINUTES);
@@ -277,9 +312,17 @@ public class TestS3Uploader
     private class DummyStorageSystem
             implements StorageSystem
     {
+        private final FakeTicker ticker;
+        private final Duration uploadDuration;
         private Set<String> receivedFiles = Sets.newHashSet();
         private Map<String, Integer> retryCounts = Maps.newHashMap();
         private int succeedOnAttempt = 1;
+
+        public DummyStorageSystem(FakeTicker ticker, Duration uploadDuration)
+        {
+            this.ticker = ticker;
+            this.uploadDuration = uploadDuration;
+        }
 
         public boolean hasReceivedFile(File file)
         {
@@ -304,6 +347,7 @@ public class TestS3Uploader
             retryCounts.put(source.getName(), currentAttempt);
 
             if (currentAttempt == succeedOnAttempt) {
+                ticker.advance(uploadDuration.toMillis(), uploadDuration.getUnit());
                 receivedFiles.add(source.getName());
                 return new StoredObject(URI.create("s3://dummyUri/bucket/day/hour"));
             }

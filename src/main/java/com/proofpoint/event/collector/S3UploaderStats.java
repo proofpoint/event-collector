@@ -18,19 +18,23 @@ package com.proofpoint.event.collector;
 
 import com.proofpoint.reporting.Key;
 import com.proofpoint.stats.CounterStat;
+import com.proofpoint.stats.TimeStat;
 
 public interface S3UploaderStats
 {
-    // S3Uploader.uploadFiles.Count (Tags: eventType=blah, eventStatus=valid)
-    CounterStat uploadFiles(@Key("eventType") String eventType, @Key("status") Status status);
+    // S3Uploader.processedFiles.Count (Tags: eventType=blah, status=bar)
+    CounterStat processedFiles(@Key("eventType") String eventType, @Key("status") Status status);
 
-    CounterStat uploadFiles( @Key("status") Status corrupt);
+    TimeStat processedTime(@Key("eventType") String eventType);
+
+    CounterStat uploadAttempts(@Key("eventType") String eventType, @Key("status") Status status);
 
     public enum Status
     {
         UPLOADED,             // file successfully uploaded to S3
         CORRUPT,              // error reading or verifying file before upload, will not be uploaded
-        UPLOAD_FAILURE;       // file will be retry for upload
+        SUCCESS,              // upload attempt succeeded
+        FAILURE;              // upload attempt failed, file will be retry for upload
 
         @Override
         public String toString()

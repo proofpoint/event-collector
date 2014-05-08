@@ -114,7 +114,7 @@ class HttpEventTapFlow implements EventTapFlow
     public void notifyEntriesDropped(int count)
     {
         droppedEntries.getAndAdd(count);
-        eventCollectorStats.outboundEvents(eventType, flowId, Status.DROPPED).update(count);
+        eventCollectorStats.outboundEvents(eventType, flowId, Status.DROPPED).add(count);
     }
 
     @Override
@@ -230,19 +230,19 @@ class HttpEventTapFlow implements EventTapFlow
 
     private void onRecordsDelivered(int eventCount)
     {
-        eventCollectorStats.outboundEvents(eventType, flowId, Status.DELIVERED).update(eventCount);
+        eventCollectorStats.outboundEvents(eventType, flowId, Status.DELIVERED).add(eventCount);
     }
 
     private void onRecordsLost(int eventCount)
     {
         droppedEntries.getAndAdd(eventCount);
-        eventCollectorStats.outboundEvents(eventType, flowId, Status.LOST).update(eventCount);
+        eventCollectorStats.outboundEvents(eventType, flowId, Status.LOST).add(eventCount);
     }
 
     private void onRecordsRejected(URI tap, int eventCount)
     {
         droppedEntries.getAndAdd(eventCount);
-        eventCollectorStats.outboundEvents(eventType, flowId, tap.toString(), Status.REJECTED).update(eventCount);
+        eventCollectorStats.outboundEvents(eventType, flowId, tap.toString(), Status.REJECTED).add(eventCount);
     }
 
     @VisibleForTesting

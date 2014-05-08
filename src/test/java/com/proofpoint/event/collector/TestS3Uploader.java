@@ -155,8 +155,8 @@ public class TestS3Uploader
         verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
 
         S3UploaderStats s3UploaderStatsReportCollection = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class);
-        verify(s3UploaderStatsReportCollection.processedFiles(ARBITRARY_EVENT_TYPE, UPLOADED)).update(1);
-        verify(s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, SUCCESS)).update(1);
+        verify(s3UploaderStatsReportCollection.processedFiles(ARBITRARY_EVENT_TYPE, UPLOADED)).add(1);
+        verify(s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, SUCCESS)).add(1);
         verify(s3UploaderStatsReportCollection.processedTime(ARBITRARY_EVENT_TYPE)).add(UPLOAD_DURATION);
         verifyNoMoreInteractions(s3UploaderStatsReportCollection.processedFiles(ARBITRARY_EVENT_TYPE, UPLOADED));
         verifyNoMoreInteractions(s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, SUCCESS));
@@ -182,7 +182,7 @@ public class TestS3Uploader
         verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
 
         S3UploaderStats s3UploaderStatsReportCollection = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class);
-        verify(s3UploaderStatsReportCollection.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT)).update(1);
+        verify(s3UploaderStatsReportCollection.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT)).add(1);
         verifyNoMoreInteractions(s3UploaderStatsReportCollection.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT));
     }
 
@@ -205,7 +205,7 @@ public class TestS3Uploader
         verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
 
         S3UploaderStats s3UploaderStatsReportCollection = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class);
-        verify(s3UploaderStatsReportCollection.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT)).update(1);
+        verify(s3UploaderStatsReportCollection.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT)).add(1);
         verifyNoMoreInteractions(s3UploaderStatsReportCollection.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT));
     }
 
@@ -268,7 +268,7 @@ public class TestS3Uploader
         verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
 
         S3UploaderStats s3UploaderStatsReportCollection = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class);
-        verify(s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, FAILURE)).update(1);
+        verify(s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, FAILURE)).add(1);
         verifyNoMoreInteractions(s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, FAILURE));
     }
 

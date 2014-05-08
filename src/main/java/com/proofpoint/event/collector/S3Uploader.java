@@ -144,8 +144,8 @@ public class S3Uploader
                 try {
                     upload(partition, file);
                     String eventType = partition.getEventType();
-                    s3UploaderStats.processedFiles(eventType, UPLOADED).update(1);
-                    s3UploaderStats.uploadAttempts(eventType, SUCCESS).update(1);
+                    s3UploaderStats.processedFiles(eventType, UPLOADED).add(1);
+                    s3UploaderStats.uploadAttempts(eventType, SUCCESS).add(1);
                 }
                 catch (Exception e) {
                     log.error(e, "upload failed: %s: %s. Sending for retry", partition, file);
@@ -255,13 +255,13 @@ public class S3Uploader
     private void handleFailure(File file)
     {
         moveToFailed(file);
-        s3UploaderStats.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT).update(1);
+        s3UploaderStats.processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT).add(1);
     }
 
     private void handleRetry(EventPartition partition, File file)
     {
         moveToRetry(file);
-        s3UploaderStats.uploadAttempts(partition.getEventType(), FAILURE).update(1);
+        s3UploaderStats.uploadAttempts(partition.getEventType(), FAILURE).add(1);
     }
 
     private void moveToFailed(File file)

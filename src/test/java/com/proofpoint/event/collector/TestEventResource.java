@@ -18,7 +18,7 @@ package com.proofpoint.event.collector;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.proofpoint.stats.CounterStat;
+import com.proofpoint.reporting.testing.TestingReportCollectionFactory;
 import org.joda.time.DateTime;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -31,13 +31,9 @@ import java.util.UUID;
 
 import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.UNSUPPORTED;
 import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.VALID;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
@@ -45,21 +41,16 @@ import static org.testng.Assert.assertTrue;
 
 public class TestEventResource
 {
-    private CounterStat counterStatForValidType;
-    private CounterStat counterStatForUnsupportedType;
     private InMemoryEventWriter writer;
     private EventCollectorStats eventCollectorStats;
+    private TestingReportCollectionFactory testingReportCollectionFactory;
 
     @BeforeMethod
     public void setup()
     {
-        counterStatForValidType = new CounterStat();
-        counterStatForUnsupportedType = new CounterStat();
         writer = new InMemoryEventWriter();
-        eventCollectorStats = mock(EventCollectorStats.class);
-
-        when(eventCollectorStats.incomingEvents(anyString(), eq(VALID))).thenReturn(counterStatForValidType);
-        when(eventCollectorStats.incomingEvents(anyString(), eq(UNSUPPORTED))).thenReturn(counterStatForUnsupportedType);
+        testingReportCollectionFactory = new TestingReportCollectionFactory();
+        eventCollectorStats = testingReportCollectionFactory.createReportCollection(EventCollectorStats.class);
     }
 
     @Test
@@ -80,9 +71,13 @@ public class TestEventResource
 
         assertEquals(writer.getEvents(), events);
 
-        verifyCount(1, 0);
-        verify(eventCollectorStats).incomingEvents("Test", VALID);
-        verifyNoMoreInteractions(eventCollectorStats);
+        EventCollectorStats argumentVerifier = testingReportCollectionFactory.getArgumentVerifier(EventCollectorStats.class);
+        verify(argumentVerifier).incomingEvents("Test", VALID);
+        verifyNoMoreInteractions(argumentVerifier);
+
+        EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
+        verify(reportCollection.incomingEvents("Test", VALID)).add(1);
+        verifyNoMoreInteractions(reportCollection.incomingEvents("Test", VALID));
     }
 
     @Test
@@ -104,10 +99,16 @@ public class TestEventResource
         assertTrue(response.getEntity().toString().startsWith("Unsupported event type(s): "));
         assertTrue(response.getEntity().toString().contains("TestBad"));
 
-        verifyCount(2, 1);
-        verify(eventCollectorStats, times(2)).incomingEvents("Test", VALID);
-        verify(eventCollectorStats).incomingEvents("TestBad", UNSUPPORTED);
-        verifyNoMoreInteractions(eventCollectorStats);
+        EventCollectorStats argumentVerifier = testingReportCollectionFactory.getArgumentVerifier(EventCollectorStats.class);
+        verify(argumentVerifier, times(2)).incomingEvents("Test", VALID);
+        verify(argumentVerifier).incomingEvents("TestBad", UNSUPPORTED);
+        verifyNoMoreInteractions(argumentVerifier);
+
+        EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
+        verify(reportCollection.incomingEvents("Test", VALID), times(2)).add(1);
+        verify(reportCollection.incomingEvents("TestBad", UNSUPPORTED)).add(1);
+        verifyNoMoreInteractions(reportCollection.incomingEvents("Test", VALID));
+        verifyNoMoreInteractions(reportCollection.incomingEvents("TestBad", UNSUPPORTED));
     }
 
     @Test
@@ -132,15 +133,15 @@ public class TestEventResource
 
         assertEquals(writer.getEvents(), events);
 
-        verifyCount(2, 0);
-        verify(eventCollectorStats).incomingEvents(eventTypeA, VALID);
-        verify(eventCollectorStats).incomingEvents(eventTypeB, VALID);
-        verifyNoMoreInteractions(eventCollectorStats);
-    }
+        EventCollectorStats argumentVerifier = testingReportCollectionFactory.getArgumentVerifier(EventCollectorStats.class);
+        verify(argumentVerifier).incomingEvents(eventTypeA, VALID);
+        verify(argumentVerifier).incomingEvents(eventTypeB, VALID);
+        verifyNoMoreInteractions(argumentVerifier);
 
-    private void verifyCount(int validTypeCount, int unsupportedTypeCount)
-    {
-        assertEquals(counterStatForValidType.getTotalCount(), validTypeCount);
-        assertEquals(counterStatForUnsupportedType.getTotalCount(), unsupportedTypeCount);
+        EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
+        verify(reportCollection.incomingEvents(eventTypeA, VALID)).add(1);
+        verify(reportCollection.incomingEvents(eventTypeB, VALID)).add(1);
+        verifyNoMoreInteractions(reportCollection.incomingEvents(eventTypeA, VALID));
+        verifyNoMoreInteractions(reportCollection.incomingEvents(eventTypeB, VALID));
     }
 }

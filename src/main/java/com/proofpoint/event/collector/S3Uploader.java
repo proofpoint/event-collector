@@ -20,13 +20,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Stopwatch;
-import com.google.common.base.Ticker;
 import com.google.common.io.Closeables;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
+import com.proofpoint.stats.TimeStat.BlockTimer;
 import com.proofpoint.units.Duration;
 import org.iq80.snappy.SnappyInputStream;
 
@@ -45,13 +44,12 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.proofpoint.event.collector.S3UploaderStats.Status.CORRUPT;
-import static com.proofpoint.event.collector.S3UploaderStats.Status.FAILURE;
-import static com.proofpoint.event.collector.S3UploaderStats.Status.SUCCESS;
-import static com.proofpoint.event.collector.S3UploaderStats.Status.UPLOADED;
+import static com.proofpoint.event.collector.S3UploaderStats.FileProcessedStatus.CORRUPT;
+import static com.proofpoint.event.collector.S3UploaderStats.FileProcessedStatus.UPLOADED;
+import static com.proofpoint.event.collector.S3UploaderStats.FileUploadStatus.FAILURE;
+import static com.proofpoint.event.collector.S3UploaderStats.FileUploadStatus.SUCCESS;
 import static com.proofpoint.event.collector.combiner.S3StorageHelper.buildS3Location;
 import static com.proofpoint.json.JsonCodec.jsonCodec;
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 public class S3Uploader
         implements Uploader
@@ -70,16 +68,14 @@ public class S3Uploader
     private final Duration retryPeriod;
     private final Duration retryDelay;
     private final S3UploaderStats s3UploaderStats;
-    private final Ticker ticker;
 
     @Inject
     public S3Uploader(StorageSystem storageSystem,
             ServerConfig config,
             EventPartitioner partitioner,
             @UploaderExecutorService ExecutorService uploadExecutor,
-            @PendingFileExecutorService ScheduledExecutorService retryExecutor
-            , S3UploaderStats s3UploaderStats
-            , Ticker ticker)
+            @PendingFileExecutorService ScheduledExecutorService retryExecutor,
+            S3UploaderStats s3UploaderStats)
     {
         this.storageSystem = storageSystem;
         this.localStagingDirectory = config.getLocalStagingDirectory();
@@ -92,7 +88,6 @@ public class S3Uploader
         this.retryPeriod = config.getRetryPeriod();
         this.retryDelay = config.getRetryDelay();
         this.s3UploaderStats = checkNotNull(s3UploaderStats, "s3UploaderStats is null");
-        this.ticker = checkNotNull(ticker, "ticker is null");
 
         //noinspection ResultOfMethodCallIgnored
         localStagingDirectory.mkdirs();
@@ -173,11 +168,9 @@ public class S3Uploader
                 file.getName());
         StoredObject target = new StoredObject(location);
 
-        Stopwatch stopwatch = Stopwatch.createStarted(ticker);
-        storageSystem.putObject(target.getLocation(), file);
-        stopwatch.stop();
-
-        s3UploaderStats.processedTime(partition.getEventType()).add(new Duration(stopwatch.elapsed(MILLISECONDS), MILLISECONDS));
+        try (BlockTimer timer = s3UploaderStats.processedTime(partition.getEventType()).time()) {
+            storageSystem.putObject(target.getLocation(), file);
+        }
 
         if (!file.delete()) {
             log.warn("failed to delete local staging file: %s", file.getAbsolutePath());

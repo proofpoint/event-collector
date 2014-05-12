@@ -168,7 +168,7 @@ public class S3Uploader
                 file.getName());
         StoredObject target = new StoredObject(location);
 
-        try (BlockTimer timer = s3UploaderStats.processedTime(partition.getEventType()).time()) {
+        try (BlockTimer ignored = s3UploaderStats.processedTime(partition.getEventType()).time()) {
             storageSystem.putObject(target.getLocation(), file);
         }
 

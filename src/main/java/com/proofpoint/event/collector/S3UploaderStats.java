@@ -43,7 +43,7 @@ public interface S3UploaderStats
     public enum FileUploadStatus
     {
         SUCCESS,              // upload attempt succeeded
-        FAILURE;              // upload attempt failed, file will be retry for upload
+        FAILURE;              // upload attempt failed, file will be retried for upload
 
         @Override
         public String toString()

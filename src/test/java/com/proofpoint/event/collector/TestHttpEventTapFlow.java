@@ -18,11 +18,10 @@ package com.proofpoint.event.collector;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.proofpoint.event.collector.EventCollectorStats.Status;
 import com.proofpoint.http.client.BodyGenerator;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.json.JsonCodec;
-import com.proofpoint.stats.CounterStat;
+import com.proofpoint.reporting.testing.TestingReportCollectionFactory;
 import com.proofpoint.units.Duration;
 import org.joda.time.DateTime;
 import org.mockito.ArgumentCaptor;
@@ -40,12 +39,13 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Objects.firstNonNull;
-import static org.mockito.Matchers.anyString;
+import static com.proofpoint.event.collector.EventCollectorStats.Status.DELIVERED;
+import static com.proofpoint.event.collector.EventCollectorStats.Status.DROPPED;
+import static com.proofpoint.event.collector.EventCollectorStats.Status.LOST;
+import static com.proofpoint.event.collector.EventCollectorStats.Status.REJECTED;
 import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertNotEquals;
@@ -75,25 +75,15 @@ public class TestHttpEventTapFlow
     private HttpEventTapFlow multipleEventTapFlowWithRetry;
     private HttpEventTapFlow eventTapFlow;              // Tests that don't care if they are single or multiple.
     private EventCollectorStats eventCollectorStats;
-    private CounterStat counterForDroppedEvents;
-    private CounterStat counterForDelivered;
-    private CounterStat counterForRejected;
-    private CounterStat counterForLost;
+    private TestingReportCollectionFactory testingReportCollectionFactory;
 
     @BeforeMethod
     private void setup()
     {
         httpClient = new MockHttpClient();
-        counterForDroppedEvents = new CounterStat();
-        counterForLost = new CounterStat();
-        counterForDelivered = new CounterStat();
-        counterForRejected = new CounterStat();
 
-        eventCollectorStats = mock(EventCollectorStats.class);
-        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.DROPPED))).thenReturn(counterForDroppedEvents);
-        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.DELIVERED))).thenReturn(counterForDelivered);
-        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.LOST))).thenReturn(counterForLost);
-        when(eventCollectorStats.outboundEvents(anyString(), anyString(), anyString(), eq(Status.REJECTED))).thenReturn(counterForRejected);
+        testingReportCollectionFactory = new TestingReportCollectionFactory();
+        eventCollectorStats = testingReportCollectionFactory.createReportCollection(EventCollectorStats.class);
 
         singleEventTapFlow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, ARBITRARY_EVENT_TYPE, "FlowId", singleTap, 0, null, eventCollectorStats);
         multipleEventTapFlow = new HttpEventTapFlow(httpClient, EVENT_LIST_JSON_CODEC, ARBITRARY_EVENT_TYPE, "FlowId", multipleTaps, 0, null, eventCollectorStats);
@@ -395,9 +385,14 @@ public class TestHttpEventTapFlow
     {
         eventTapFlow.processBatch(events);
 
-        verify(eventCollectorStats).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, Status.DELIVERED);
-        verifyNoMoreInteractions(eventCollectorStats);
-        verifyCount(events.size(), 0, 0, 0);
+        ArgumentCaptor<String> uriArgumentCaptor = ArgumentCaptor.forClass(String.class);
+        EventCollectorStats argumentVerifier = testingReportCollectionFactory.getArgumentVerifier(EventCollectorStats.class);
+        verify(argumentVerifier).outboundEvents(eq(ARBITRARY_EVENT_TYPE), eq(ARBITRARY_FLOW_ID), uriArgumentCaptor.capture(), eq(DELIVERED));
+        verifyNoMoreInteractions(argumentVerifier);
+
+        EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
+        verify(reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, uriArgumentCaptor.getValue(), DELIVERED)).add(events.size());
+        verifyNoMoreInteractions(reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, uriArgumentCaptor.getValue(), DELIVERED));
     }
 
     @Test
@@ -407,9 +402,13 @@ public class TestHttpEventTapFlow
         httpClient.respondWithException();
         eventTapFlow.processBatch(events);
 
-        verify(eventCollectorStats).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, Status.LOST);
-        verifyNoMoreInteractions(eventCollectorStats);
-        verifyCount(0, 0, events.size(), 0);
+        EventCollectorStats argumentVerifier = testingReportCollectionFactory.getArgumentVerifier(EventCollectorStats.class);
+        verify(argumentVerifier).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, LOST);
+        verifyNoMoreInteractions(argumentVerifier);
+
+        EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
+        verify(reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, LOST)).add(events.size());
+        verifyNoMoreInteractions(reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, LOST));
     }
 
     @Test
@@ -419,9 +418,13 @@ public class TestHttpEventTapFlow
         httpClient.respondWithServerError();
         eventTapFlow.processBatch(events);
 
-        verify(eventCollectorStats).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, Status.LOST);
-        verifyNoMoreInteractions(eventCollectorStats);
-        verifyCount(0, 0, events.size(), 0);
+        EventCollectorStats argumentVerifier = testingReportCollectionFactory.getArgumentVerifier(EventCollectorStats.class);
+        verify(argumentVerifier).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, LOST);
+        verifyNoMoreInteractions(argumentVerifier);
+
+        EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
+        verify(reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, LOST)).add(events.size());
+        verifyNoMoreInteractions(reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, LOST));
     }
 
     @Test
@@ -431,10 +434,13 @@ public class TestHttpEventTapFlow
         eventTapFlow.processBatch(events);
 
         ArgumentCaptor<String> uriArgumentCaptor = ArgumentCaptor.forClass(String.class);
+        EventCollectorStats argumentVerifier = testingReportCollectionFactory.getArgumentVerifier(EventCollectorStats.class);
+        verify(argumentVerifier).outboundEvents(eq(ARBITRARY_EVENT_TYPE), eq(ARBITRARY_FLOW_ID), uriArgumentCaptor.capture(), eq(REJECTED));
+        verifyNoMoreInteractions(argumentVerifier);
 
-        verify(eventCollectorStats).outboundEvents(eq(ARBITRARY_EVENT_TYPE), eq(ARBITRARY_FLOW_ID), uriArgumentCaptor.capture(), eq(Status.REJECTED));
-        verifyNoMoreInteractions(eventCollectorStats);
-        verifyCount(0, 0, 0, events.size());
+        EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
+        verify(reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, uriArgumentCaptor.getValue(), REJECTED)).add(events.size());
+        verifyNoMoreInteractions(reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, uriArgumentCaptor.getValue(), REJECTED));
     }
 
     @Test
@@ -442,9 +448,13 @@ public class TestHttpEventTapFlow
     {
         multipleEventTapFlowWithRetry.notifyEntriesDropped(10);
 
-        verify(eventCollectorStats).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, Status.DROPPED);
-        verifyNoMoreInteractions(eventCollectorStats);
-        verifyCount(0, 10, 0, 0);
+        EventCollectorStats argumentVerifier = testingReportCollectionFactory.getArgumentVerifier(EventCollectorStats.class);
+        verify(argumentVerifier).outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, DROPPED);
+        verifyNoMoreInteractions(argumentVerifier);
+
+        EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
+        verify(reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, DROPPED)).add(10);
+        verifyNoMoreInteractions(reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, DROPPED));
     }
 
     private void clearFirstBatchHeaders(HttpEventTapFlow eventTapFlow, Set<URI> taps)
@@ -500,13 +510,5 @@ public class TestHttpEventTapFlow
         }
 
         assertEqualsNoOrder(request.getHeaders().get(X_PROOFPOINT_QOS).toArray(), headerBuilder.build().toArray());
-    }
-
-    private void verifyCount(int deliveredCount, int droppedCount, int lostCount, int rejectedCount)
-    {
-        assertEquals(counterForDelivered.getTotalCount(), deliveredCount);
-        assertEquals(counterForDroppedEvents.getTotalCount(), droppedCount);
-        assertEquals(counterForLost.getTotalCount(), lostCount);
-        assertEquals(counterForRejected.getTotalCount(), rejectedCount);
     }
 }

@@ -18,10 +18,9 @@ package com.proofpoint.event.collector;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.proofpoint.event.collector.EventCollectorStats.Status;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.json.JsonCodec;
-import com.proofpoint.stats.CounterStat;
+import com.proofpoint.reporting.testing.TestingReportCollectionFactory;
 import com.proofpoint.units.Duration;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
@@ -33,10 +32,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static java.util.UUID.randomUUID;
 
@@ -55,25 +50,16 @@ public class TestHttpEventTapFlowFactory
     private JsonCodec<List<Event>> jsonCodec;
     private HttpEventTapFlowFactory factory;
     private EventCollectorStats eventCollectorStats;
-    private CounterStat counterForDroppedEvents;
-    private CounterStat counterForLost;
-    private CounterStat counterForDelivered;
+
+    private TestingReportCollectionFactory testingReportCollectionFactory;
 
     @BeforeMethod
     public void setup()
     {
         httpClient = new MockHttpClient();
         jsonCodec = JsonCodec.listJsonCodec(Event.class);
-        counterForDroppedEvents = mock(CounterStat.class);
-        counterForLost = mock(CounterStat.class);
-        counterForDelivered = mock(CounterStat.class);
-        CounterStat counterForRejected = mock(CounterStat.class);
-
-        eventCollectorStats = mock(EventCollectorStats.class);
-        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.DROPPED))).thenReturn(counterForDroppedEvents);
-        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.DELIVERED))).thenReturn(counterForDelivered);
-        when(eventCollectorStats.outboundEvents(anyString(), anyString(), eq(Status.LOST))).thenReturn(counterForLost);
-        when(eventCollectorStats.outboundEvents(anyString(), anyString(), anyString(), eq(Status.REJECTED))).thenReturn(counterForRejected);
+        testingReportCollectionFactory = new TestingReportCollectionFactory();
+        eventCollectorStats = testingReportCollectionFactory.createReportCollection(EventCollectorStats.class);
 
         factory = new HttpEventTapFlowFactory(httpClient, jsonCodec, config, eventCollectorStats);
     }

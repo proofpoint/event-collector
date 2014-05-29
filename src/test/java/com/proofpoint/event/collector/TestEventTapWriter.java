@@ -32,6 +32,7 @@ import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import java.net.URI;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -95,6 +96,10 @@ public class TestEventTapWriter
     private static final ServiceDescriptor qtapB2a = qtapB2;
     private static final ServiceDescriptor qtapB2b = createQosServiceDescriptor(typeB, flowId2, instanceB);
     private static final ServiceDescriptor qtapC = createQosServiceDescriptor(typeC, flowId1, instanceA);
+    private static final ServiceDescriptor tapAWithHttpAndHttps = createServiceDescriptorWithHttpAndHttps(typeA, flowId1, instanceA);
+    private static final ServiceDescriptor tapBWithHttpAndHttps = createServiceDescriptorWithHttpAndHttps(typeB, flowId1, instanceA);
+    private static final ServiceDescriptor tapAWithHttps = createServiceDescriptorWithHttps(typeA, flowId1, instanceA);
+    private static final ServiceDescriptor tapBWithHttps = createServiceDescriptorWithHttps(typeB, flowId1, instanceA);
 
     private ServiceSelector serviceSelector;
     private Map<String, Boolean> currentProcessors;
@@ -665,7 +670,7 @@ public class TestEventTapWriter
         String batchProcessorNameC = extractProcessorName(tapC);
         updateTaps(tapA);
         executorService.elapseTime(
-                (long) eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
+                eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
                 TimeUnit.MILLISECONDS);
         assertFalse(batchProcessors.containsKey(batchProcessorNameA));
         executorService.elapseTime(1, TimeUnit.MILLISECONDS);
@@ -676,7 +681,7 @@ public class TestEventTapWriter
         // created to handle the new tap after one period.
         updateTaps(tapB);
         executorService.elapseTime(
-                (long) eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
+                eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
                 TimeUnit.MILLISECONDS);
         assertFalse(batchProcessors.containsKey(batchProcessorNameB));
         executorService.elapseTime(1, TimeUnit.MILLISECONDS);
@@ -686,7 +691,7 @@ public class TestEventTapWriter
         // Same is true after the second period, but with tapC.
         updateTaps(tapC);
         executorService.elapseTime(
-                (long) eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
+                eventTapConfig.getEventTapRefreshDuration().toMillis() - 1,
                 TimeUnit.MILLISECONDS);
         assertFalse(batchProcessors.containsKey(batchProcessorNameC));
         executorService.elapseTime(1, TimeUnit.MILLISECONDS);
@@ -754,12 +759,49 @@ public class TestEventTapWriter
         forTap(tapB).verifyEvents(eventsB[0]);
     }
 
+    @Test
+    public void testHttpsIsPreferredOverHttp()
+    {
+        updateThenRefreshFlowsThenCheck(tapAWithHttpAndHttps, tapBWithHttpAndHttps);
+        writeEvents(eventsA[0], eventsB[0], eventsC[0]);
+        forTap(tapAWithHttpAndHttps).verifyEvents(eventsA[0]);
+        forTap(tapBWithHttpAndHttps).verifyEvents(eventsB[0]);
+    }
+
+    @Test
+    public void testHttpsOnlyTaps()
+    {
+        updateThenRefreshFlowsThenCheck(tapAWithHttps, tapBWithHttps);
+        writeEvents(eventsA[0], eventsB[0], eventsC[0]);
+        forTap(tapAWithHttps).verifyEvents(eventsA[0]);
+        forTap(tapBWithHttps).verifyEvents(eventsB[0]);
+    }
+
+    @Test
+    public void testHttpOnlyTapsWithAllowHttpConsumersIsFalse()
+    {
+        eventTapConfig.setAllowHttpConsumers(false);
+
+        eventTapWriter = new EventTapWriter(
+                serviceSelector, executorService,
+                batchProcessorFactory, eventTapFlowFactory,
+                eventTapConfig);
+        eventTapWriter.start();
+
+        updateThenRefreshFlowsThenCheck(ImmutableList.<ServiceDescriptor>of(tapA, tapB), ImmutableList.<ServiceDescriptor>of());
+    }
+
     private void updateThenRefreshFlowsThenCheck(ServiceDescriptor... taps)
+    {
+        updateThenRefreshFlowsThenCheck(Arrays.asList(taps), Arrays.asList(taps));
+    }
+
+    private void updateThenRefreshFlowsThenCheck(List<ServiceDescriptor> tapsInDiscovery, List<ServiceDescriptor> tapsInFlows)
     {
         // Figure out which of the processors should have been destroyed.
         // This happens if: (a) The flow disappears, or (b) the flow switches
         // between QoS and non-QoS.
-        Map<String, Boolean> newProcessors = createProcessorsForTaps(taps);
+        Map<String, Boolean> newProcessors = createProcessorsForTaps(tapsInDiscovery);
         for (Map.Entry<String, Boolean> entry : currentProcessors.entrySet()) {
             String processorName = entry.getKey();
             boolean processorQos = entry.getValue();
@@ -770,12 +812,12 @@ public class TestEventTapWriter
         }
         currentProcessors = newProcessors;
 
-        updateTaps(taps);
+        updateTaps(tapsInDiscovery);
         eventTapWriter.refreshFlows();
-        checkActiveProcessors(taps);
+        checkActiveProcessors(tapsInFlows);
     }
 
-    private Map<String, Boolean> createProcessorsForTaps(ServiceDescriptor[] taps)
+    private Map<String, Boolean> createProcessorsForTaps(List<ServiceDescriptor> taps)
     {
         HashMap<String, Boolean> result = new HashMap<>();
         for (ServiceDescriptor tap : taps) {
@@ -794,6 +836,11 @@ public class TestEventTapWriter
     }
 
     private void updateTaps(ServiceDescriptor... taps)
+    {
+        updateTaps(Arrays.asList(taps));
+    }
+
+    private void updateTaps(List<ServiceDescriptor> taps)
     {
         doReturn(ImmutableList.copyOf(taps)).when(serviceSelector).selectAllServices();
     }
@@ -824,7 +871,7 @@ public class TestEventTapWriter
         return results;
     }
 
-    private void checkActiveProcessors(ServiceDescriptor... taps)
+    private void checkActiveProcessors(List<ServiceDescriptor> taps)
     {
         List<ServiceDescriptor> tapsAsList = ImmutableList.copyOf(taps);
 
@@ -890,7 +937,13 @@ public class TestEventTapWriter
         for (ServiceDescriptor tap : taps) {
             String thisEventType = tap.getProperties().get("eventType");
             String thisFlowId = tap.getProperties().get(EventTapWriter.FLOW_ID_PROPERTY_NAME);
-            String thisUri = tap.getProperties().get("http");
+
+            String thisUri = tap.getProperties().get("https");
+
+            if (thisUri == null && eventTapConfig.isAllowHttpConsumers()) {
+                thisUri = tap.getProperties().get("http");
+            }
+
             boolean thisQosEnabled = nullToEmpty(tap.getProperties().get("qos.delivery")).equalsIgnoreCase("retry");
 
             assertNotNull(thisEventType);
@@ -922,21 +975,6 @@ public class TestEventTapWriter
                 tap.getProperties().get(EventTapWriter.FLOW_ID_PROPERTY_NAME));
     }
 
-    private static String extractEventType(ServiceDescriptor tap)
-    {
-        return tap.getProperties().get("eventType");
-    }
-
-    private static String extractFlowId(ServiceDescriptor tap)
-    {
-        return tap.getProperties().get(EventTapWriter.FLOW_ID_PROPERTY_NAME);
-    }
-
-    private static String extractUri(ServiceDescriptor tap)
-    {
-        return tap.getProperties().get("http");
-    }
-
     private static ServiceDescriptor createServiceDescriptor(String eventType, Map<String, String> properties)
     {
         String nodeId = randomUUID().toString();
@@ -953,6 +991,7 @@ public class TestEventTapWriter
         if (!properties.containsKey("http")) {
             builder.put("http", format("http://%s.event.tap", eventType));
         }
+
         return new ServiceDescriptor(
                 randomUUID(),
                 nodeId,
@@ -967,6 +1006,21 @@ public class TestEventTapWriter
     {
         return createServiceDescriptor(eventType,
                 ImmutableMap.of(EventTapWriter.FLOW_ID_PROPERTY_NAME, flowId, "http", format("http://%s-%s.event.tap", eventType, instanceId)));
+    }
+
+    private static ServiceDescriptor createServiceDescriptorWithHttpAndHttps(String eventType, String flowId, String instanceId)
+    {
+        return createServiceDescriptor(eventType,
+                ImmutableMap.of(EventTapWriter.FLOW_ID_PROPERTY_NAME, flowId,
+                        "http", format("http://%s-%s.event.tap:8080", eventType, instanceId),
+                        "https", format("https://%s-%s.event.tap:8443", eventType, instanceId)));
+    }
+
+    private static ServiceDescriptor createServiceDescriptorWithHttps(String eventType, String flowId, String instanceId)
+    {
+        return createServiceDescriptor(eventType,
+                ImmutableMap.of(EventTapWriter.FLOW_ID_PROPERTY_NAME, flowId,
+                        "https", format("https://%s-%s.event.tap:8443", eventType, instanceId)));
     }
 
     private static ServiceDescriptor createQosServiceDescriptor(String eventType, String flowId, String instanceId)

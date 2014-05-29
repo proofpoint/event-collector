@@ -200,7 +200,7 @@ class HttpEventTapFlow implements EventTapFlow
             {
                 if (fromStatusCode(response.getStatusCode()).getFamily() == SUCCESSFUL) {
                     log.debug("Posted %s events", entries.size());
-                    onRecordsDelivered(entries.size());
+                    onRecordsDelivered(uri, entries.size());
                     return true;
                 }
                 else if (fromStatusCode(response.getStatusCode()).getFamily() == CLIENT_ERROR) {
@@ -228,9 +228,9 @@ class HttpEventTapFlow implements EventTapFlow
         });
     }
 
-    private void onRecordsDelivered(int eventCount)
+    private void onRecordsDelivered(URI tap, int eventCount)
     {
-        eventCollectorStats.outboundEvents(eventType, flowId, Status.DELIVERED).add(eventCount);
+        eventCollectorStats.outboundEvents(eventType, flowId, tap.toString(), Status.DELIVERED).add(eventCount);
     }
 
     private void onRecordsLost(int eventCount)

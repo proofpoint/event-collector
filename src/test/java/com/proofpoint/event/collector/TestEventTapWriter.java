@@ -95,6 +95,8 @@ public class TestEventTapWriter
     private static final ServiceDescriptor qtapB2a = qtapB2;
     private static final ServiceDescriptor qtapB2b = createQosServiceDescriptor(typeB, flowId2, instanceB);
     private static final ServiceDescriptor qtapC = createQosServiceDescriptor(typeC, flowId1, instanceA);
+    private static final ServiceDescriptor tapAWithHttps = createServiceDescriptorWithHttps(typeA, flowId1, instanceA);
+    private static final ServiceDescriptor tapBWithHttps = createServiceDescriptorWithHttps(typeB, flowId1, instanceA);
 
     private ServiceSelector serviceSelector;
     private Map<String, Boolean> currentProcessors;
@@ -754,6 +756,15 @@ public class TestEventTapWriter
         forTap(tapB).verifyEvents(eventsB[0]);
     }
 
+    @Test
+    public void testHttpsIsPreferOverHttp()
+    {
+        updateThenRefreshFlowsThenCheck(tapAWithHttps, tapBWithHttps);
+        writeEvents(eventsA[0], eventsB[0], eventsC[0]);
+        forTap(tapAWithHttps).verifyEvents(eventsA[0]);
+        forTap(tapBWithHttps).verifyEvents(eventsB[0]);
+    }
+
     private void updateThenRefreshFlowsThenCheck(ServiceDescriptor... taps)
     {
         // Figure out which of the processors should have been destroyed.
@@ -890,7 +901,13 @@ public class TestEventTapWriter
         for (ServiceDescriptor tap : taps) {
             String thisEventType = tap.getProperties().get("eventType");
             String thisFlowId = tap.getProperties().get(EventTapWriter.FLOW_ID_PROPERTY_NAME);
-            String thisUri = tap.getProperties().get("http");
+
+            String thisUri = tap.getProperties().get("https");
+
+            if (thisUri == null) {
+                thisUri = tap.getProperties().get("http");
+            }
+
             boolean thisQosEnabled = nullToEmpty(tap.getProperties().get("qos.delivery")).equalsIgnoreCase("retry");
 
             assertNotNull(thisEventType);
@@ -953,6 +970,7 @@ public class TestEventTapWriter
         if (!properties.containsKey("http")) {
             builder.put("http", format("http://%s.event.tap", eventType));
         }
+
         return new ServiceDescriptor(
                 randomUUID(),
                 nodeId,
@@ -967,6 +985,14 @@ public class TestEventTapWriter
     {
         return createServiceDescriptor(eventType,
                 ImmutableMap.of(EventTapWriter.FLOW_ID_PROPERTY_NAME, flowId, "http", format("http://%s-%s.event.tap", eventType, instanceId)));
+    }
+
+    private static ServiceDescriptor createServiceDescriptorWithHttps(String eventType, String flowId, String instanceId)
+    {
+        return createServiceDescriptor(eventType,
+                ImmutableMap.of(EventTapWriter.FLOW_ID_PROPERTY_NAME, flowId,
+                        "http", format("http://%s-%s.event.tap", eventType, instanceId),
+                        "https", format("https://%s-%s.event.tap", eventType, instanceId)));
     }
 
     private static ServiceDescriptor createQosServiceDescriptor(String eventType, String flowId, String instanceId)

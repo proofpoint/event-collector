@@ -29,6 +29,7 @@ public class EventTapConfig
     private Duration eventTapRefreshDuration = new Duration(10, TimeUnit.SECONDS);
     private int eventTapQosRetryCount = 10;
     private Duration eventTapQosRetryDelay = new Duration(30, TimeUnit.SECONDS);
+    private boolean allowHttpConsumers = true;
 
     @Deprecated
     @Min(1)
@@ -84,6 +85,19 @@ public class EventTapConfig
     public EventTapConfig setEventTapQosRetryDelay(Duration eventTapQosRetryDelay)
     {
         this.eventTapQosRetryDelay = eventTapQosRetryDelay;
+        return this;
+    }
+
+    public boolean getAllowHttpConsumer()
+    {
+        return allowHttpConsumers;
+    }
+
+    @Config("collector.event-tap.allow-http-consumers")
+    @ConfigDescription("")
+    public EventTapConfig setAllowHttpConsumer(boolean allowHttpConsumers)
+    {
+        this.allowHttpConsumers = allowHttpConsumers;
         return this;
     }
 }

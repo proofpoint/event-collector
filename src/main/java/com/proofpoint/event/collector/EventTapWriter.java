@@ -55,6 +55,7 @@ public class EventTapWriter implements EventWriter
     private final ScheduledExecutorService executorService;
     private final BatchProcessorFactory batchProcessorFactory;
     private final EventTapFlowFactory eventTapFlowFactory;
+    private final boolean allowHttpConsumers;
 
     private final AtomicReference<Map<String, EventTypePolicy>> eventTypePolicies = new AtomicReference<Map<String, EventTypePolicy>>(
             ImmutableMap.<String, EventTypePolicy>of());
@@ -73,6 +74,7 @@ public class EventTapWriter implements EventWriter
         this.selector = checkNotNull(selector, "selector is null");
         this.executorService = checkNotNull(executorService, "executorService is null");
         this.flowRefreshDuration = checkNotNull(config, "config is null").getEventTapRefreshDuration();
+        this.allowHttpConsumers = config.isAllowHttpConsumers();
         this.batchProcessorFactory = checkNotNull(batchProcessorFactory, "batchProcessorFactory is null");
         this.eventTapFlowFactory = checkNotNull(eventTapFlowFactory, "eventTapFlowFactory is null");
     }
@@ -168,7 +170,12 @@ public class EventTapWriter implements EventWriter
             Map<String, String> properties = descriptor.getProperties();
             String eventType = properties.get("eventType");
             String flowId = properties.get(FLOW_ID_PROPERTY_NAME);
-            URI uri = safeUriFromString(properties.get("http"));
+
+            URI uri = safeUriFromString(properties.get("https"));
+            if (uri == null && allowHttpConsumers) {
+                uri = safeUriFromString(properties.get("http"));
+            }
+
             String qosDelivery = properties.get("qos.delivery");
 
             if (isNullOrEmpty(eventType) || isNullOrEmpty(flowId) || uri == null) {

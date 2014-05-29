@@ -38,7 +38,8 @@ public class TestEventTapConfig
                 .setEventTapThreads(20)
                 .setEventTapRefreshDuration(new Duration(10, TimeUnit.SECONDS))
                 .setEventTapQosRetryCount(10)
-                .setEventTapQosRetryDelay(new Duration(30, TimeUnit.SECONDS));
+                .setEventTapQosRetryDelay(new Duration(30, TimeUnit.SECONDS))
+                .setAllowHttpConsumers(true);
 
         ConfigAssertions.assertRecordedDefaults(recordedDefaults);
     }
@@ -51,6 +52,7 @@ public class TestEventTapConfig
                 .put("collector.event-tap.refresh", "30m")
                 .put("collector.event-tap.qos-retry-count", "17")
                 .put("collector.event-tap.qos-retry-delay", "1h")
+                .put("collector.event-tap.allow-http-consumers", "false")
                 .build();
 
         @SuppressWarnings("deprecation")
@@ -58,7 +60,8 @@ public class TestEventTapConfig
                 .setEventTapThreads(3)
                 .setEventTapQosRetryDelay(new Duration(1, TimeUnit.HOURS))
                 .setEventTapQosRetryCount(17)
-                .setEventTapRefreshDuration(new Duration(30, TimeUnit.MINUTES));
+                .setEventTapRefreshDuration(new Duration(30, TimeUnit.MINUTES))
+                .setAllowHttpConsumers(false);
 
         ConfigAssertions.assertFullMapping(properties, expected);
     }

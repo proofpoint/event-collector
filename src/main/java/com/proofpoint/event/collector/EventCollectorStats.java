@@ -19,6 +19,8 @@ package com.proofpoint.event.collector;
 import com.proofpoint.reporting.Key;
 import com.proofpoint.stats.CounterStat;
 
+import java.net.URI;
+
 public interface EventCollectorStats
 {
     // EventCollector.IncomingEvents.Count (Tags: eventType=blah, eventStatus=valid)
@@ -26,7 +28,7 @@ public interface EventCollectorStats
 
     CounterStat outboundEvents(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("outboundStatus") Status status);
 
-    CounterStat outboundEvents(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("uri") String uri, @Key("outboundStatus") Status status);
+    CounterStat outboundEvents(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("uri") URI uri, @Key("outboundStatus") Status status);
 
     public enum Status
     {

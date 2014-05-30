@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.MapMaker;
 import com.google.common.collect.Sets;
-import com.proofpoint.event.collector.EventCollectorStats.Status;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.http.client.Response;
@@ -41,6 +40,10 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.proofpoint.event.collector.EventCollectorStats.Status.DELIVERED;
+import static com.proofpoint.event.collector.EventCollectorStats.Status.DROPPED;
+import static com.proofpoint.event.collector.EventCollectorStats.Status.LOST;
+import static com.proofpoint.event.collector.EventCollectorStats.Status.REJECTED;
 import static com.proofpoint.http.client.JsonBodyGenerator.jsonBodyGenerator;
 import static javax.ws.rs.core.Response.Status.Family.CLIENT_ERROR;
 import static javax.ws.rs.core.Response.Status.Family.SUCCESSFUL;
@@ -114,7 +117,7 @@ class HttpEventTapFlow implements EventTapFlow
     public void notifyEntriesDropped(int count)
     {
         droppedEntries.getAndAdd(count);
-        eventCollectorStats.outboundEvents(eventType, flowId, Status.DROPPED).add(count);
+        eventCollectorStats.outboundEvents(eventType, flowId, DROPPED).add(count);
     }
 
     @Override
@@ -230,19 +233,19 @@ class HttpEventTapFlow implements EventTapFlow
 
     private void onRecordsDelivered(URI tap, int eventCount)
     {
-        eventCollectorStats.outboundEvents(eventType, flowId, tap.toString(), Status.DELIVERED).add(eventCount);
+        eventCollectorStats.outboundEvents(eventType, flowId, tap, DELIVERED).add(eventCount);
     }
 
     private void onRecordsLost(int eventCount)
     {
         droppedEntries.getAndAdd(eventCount);
-        eventCollectorStats.outboundEvents(eventType, flowId, Status.LOST).add(eventCount);
+        eventCollectorStats.outboundEvents(eventType, flowId, LOST).add(eventCount);
     }
 
     private void onRecordsRejected(URI tap, int eventCount)
     {
         droppedEntries.getAndAdd(eventCount);
-        eventCollectorStats.outboundEvents(eventType, flowId, tap.toString(), Status.REJECTED).add(eventCount);
+        eventCollectorStats.outboundEvents(eventType, flowId, tap, REJECTED).add(eventCount);
     }
 
     @VisibleForTesting

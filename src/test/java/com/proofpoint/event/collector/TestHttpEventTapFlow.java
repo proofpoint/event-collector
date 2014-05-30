@@ -386,7 +386,7 @@ public class TestHttpEventTapFlow
     {
         eventTapFlow.processBatch(events);
 
-        ArgumentCaptor<String> uriArgumentCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
         EventCollectorStats argumentVerifier = testingReportCollectionFactory.getArgumentVerifier(EventCollectorStats.class);
         verify(argumentVerifier).outboundEvents(eq(ARBITRARY_EVENT_TYPE), eq(ARBITRARY_FLOW_ID), uriArgumentCaptor.capture(), eq(DELIVERED));
         verifyNoMoreInteractions(argumentVerifier);
@@ -437,7 +437,7 @@ public class TestHttpEventTapFlow
         httpClient.respondWithClientError();
         eventTapFlow.processBatch(events);
 
-        ArgumentCaptor<String> uriArgumentCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<URI> uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
         EventCollectorStats argumentVerifier = testingReportCollectionFactory.getArgumentVerifier(EventCollectorStats.class);
         verify(argumentVerifier).outboundEvents(eq(ARBITRARY_EVENT_TYPE), eq(ARBITRARY_FLOW_ID), uriArgumentCaptor.capture(), eq(REJECTED));
         verifyNoMoreInteractions(argumentVerifier);

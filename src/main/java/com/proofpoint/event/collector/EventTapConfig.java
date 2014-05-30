@@ -94,7 +94,7 @@ public class EventTapConfig
     }
 
     @Config("collector.event-tap.allow-http-consumers")
-    @ConfigDescription("Indicate whether to allow consumers that only announce as http")
+    @ConfigDescription("Permit events to be sent to http-only consumers.")
     public EventTapConfig setAllowHttpConsumers(boolean allowHttpConsumers)
     {
         this.allowHttpConsumers = allowHttpConsumers;

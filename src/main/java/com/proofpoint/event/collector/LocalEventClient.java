@@ -17,8 +17,8 @@ package com.proofpoint.event.collector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.util.TokenBuffer;
-import com.google.common.util.concurrent.CheckedFuture;
 import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.proofpoint.event.client.EventClient;
 import com.proofpoint.event.client.JsonEventSerializer;
 
@@ -45,14 +45,14 @@ public class LocalEventClient
     }
 
     @Override
-    public <T> CheckedFuture<Void, RuntimeException> post(T... event)
+    public <T> ListenableFuture<Void> post(T... event)
     {
         checkNotNull(event, "event");
         return post(Arrays.asList(event));
     }
 
     @Override
-    public <T> CheckedFuture<Void, RuntimeException> post(final Iterable<T> events)
+    public <T> ListenableFuture<Void> post(final Iterable<T> events)
     {
         checkNotNull(events, "events");
         return post(new EventGenerator<T>()
@@ -69,7 +69,7 @@ public class LocalEventClient
     }
 
     @Override
-    public <T> CheckedFuture<Void, RuntimeException> post(EventGenerator<T> eventGenerator)
+    public <T> ListenableFuture<Void> post(EventGenerator<T> eventGenerator)
     {
         checkNotNull(eventGenerator, "eventGenerator");
         try {
@@ -87,9 +87,9 @@ public class LocalEventClient
             });
         }
         catch (IOException e) {
-            return Futures.immediateFailedCheckedFuture(new RuntimeException(e));
+            return Futures.immediateFailedFuture(new RuntimeException(e));
         }
-        return Futures.immediateCheckedFuture(null);
+        return Futures.immediateFuture(null);
     }
 
     private <T> Event serializeEvent(T event)

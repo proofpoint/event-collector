@@ -17,16 +17,13 @@ package com.proofpoint.event.collector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.util.TokenBuffer;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.CheckedFuture;
 import com.google.common.util.concurrent.Futures;
 import com.proofpoint.event.client.EventClient;
-import com.proofpoint.event.client.EventSubmissionFailedException;
 import com.proofpoint.event.client.JsonEventSerializer;
 
 import javax.inject.Inject;
 import java.io.IOException;
-import java.net.URI;
 import java.util.Arrays;
 import java.util.Set;
 
@@ -49,7 +46,6 @@ public class LocalEventClient
 
     @Override
     public <T> CheckedFuture<Void, RuntimeException> post(T... event)
-            throws IllegalArgumentException
     {
         checkNotNull(event, "event");
         return post(Arrays.asList(event));
@@ -57,7 +53,6 @@ public class LocalEventClient
 
     @Override
     public <T> CheckedFuture<Void, RuntimeException> post(final Iterable<T> events)
-            throws IllegalArgumentException
     {
         checkNotNull(events, "events");
         return post(new EventGenerator<T>()
@@ -75,7 +70,6 @@ public class LocalEventClient
 
     @Override
     public <T> CheckedFuture<Void, RuntimeException> post(EventGenerator<T> eventGenerator)
-            throws IllegalArgumentException
     {
         checkNotNull(eventGenerator, "eventGenerator");
         try {
@@ -93,7 +87,7 @@ public class LocalEventClient
             });
         }
         catch (IOException e) {
-            return Futures.<Void, RuntimeException>immediateFailedCheckedFuture(failedException(e));
+            return Futures.immediateFailedCheckedFuture(new RuntimeException(e));
         }
         return Futures.immediateCheckedFuture(null);
     }
@@ -104,10 +98,5 @@ public class LocalEventClient
         TokenBuffer tokenBuffer = new TokenBuffer(objectMapper);
         eventSerializer.serialize(event, null, tokenBuffer);
         return objectMapper.readValue(tokenBuffer.asParser(), Event.class);
-    }
-
-    private static <T extends Throwable> EventSubmissionFailedException failedException(T e)
-    {
-        return new EventSubmissionFailedException("event", "general", ImmutableMap.of(URI.create("local:/"), e));
     }
 }

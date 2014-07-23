@@ -123,6 +123,13 @@ public class SpoolingEventWriter
         counters.recordReceived(event.getType(), 1);
     }
 
+    @Override
+    public void distribute(Event event)
+            throws IOException
+    {
+        // do nothing
+    }
+
     public Map<String, CounterState> getCounts()
     {
         return counters.getCounts();

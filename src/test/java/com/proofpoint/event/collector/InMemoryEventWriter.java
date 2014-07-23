@@ -32,6 +32,13 @@ public class InMemoryEventWriter implements EventWriter
         this.events.add(event);
     }
 
+    @Override
+    public void distribute(Event event)
+            throws IOException
+    {
+        // do nothing
+    }
+
     public List<Event> getEvents()
     {
         return ImmutableList.copyOf(events);

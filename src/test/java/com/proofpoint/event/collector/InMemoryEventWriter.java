@@ -24,6 +24,7 @@ import java.util.List;
 public class InMemoryEventWriter implements EventWriter
 {
     List<Event> events = Lists.newArrayList();
+    List<Event> distributedEvents = Lists.newArrayList();
 
     @Override
     public void write(Event event)
@@ -36,11 +37,16 @@ public class InMemoryEventWriter implements EventWriter
     public void distribute(Event event)
             throws IOException
     {
-        // do nothing
+        this.distributedEvents.add(event);
     }
 
     public List<Event> getEvents()
     {
         return ImmutableList.copyOf(events);
+    }
+
+    public List<Event> getDistributedEvents()
+    {
+        return ImmutableList.copyOf(distributedEvents);
     }
 }

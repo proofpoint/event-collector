@@ -16,9 +16,12 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.proofpoint.discovery.client.ServiceDescriptor;
+import com.proofpoint.discovery.client.ServiceDescriptor.ServiceDescriptorBuilder;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.FlowPolicy;
@@ -49,6 +52,9 @@ public class EventTapWriter implements EventWriter
 {
     @VisibleForTesting
     static final String FLOW_ID_PROPERTY_NAME = "flowId";
+    private static final String EVENT_TYPE_PROPERTY_NAME = "eventType";
+    private static final String URI_PROPERTY_NAME = "https";
+    private static final String SERVICE_TYPE = "EventTap";
 
     private static final Logger log = Logger.get(EventTapWriter.class);
     private static final EventTypePolicy NULL_EVENT_TYPE_POLICY = new EventTypePolicy.Builder().build();
@@ -60,6 +66,7 @@ public class EventTapWriter implements EventWriter
 
     private final AtomicReference<Map<String, EventTypePolicy>> eventTypePolicies = new AtomicReference<Map<String, EventTypePolicy>>(
             ImmutableMap.<String, EventTypePolicy>of());
+    private final StaticEventTapConfig staticEventTapConfig;
     private Map<String, Map<String, FlowInfo>> flows = ImmutableMap.of();
 
     private ScheduledFuture<?> refreshJob;
@@ -70,8 +77,10 @@ public class EventTapWriter implements EventWriter
             @EventTap ScheduledExecutorService executorService,
             BatchProcessorFactory batchProcessorFactory,
             EventTapFlowFactory eventTapFlowFactory,
-            EventTapConfig config)
+            EventTapConfig config,
+            StaticEventTapConfig staticEventTapConfig)
     {
+        this.staticEventTapConfig = checkNotNull(staticEventTapConfig, "staticEventTapConfig is null");
         this.selector = checkNotNull(selector, "selector is null");
         this.executorService = checkNotNull(executorService, "executorService is null");
         this.flowRefreshDuration = checkNotNull(config, "config is null").getEventTapRefreshDuration();
@@ -128,7 +137,7 @@ public class EventTapWriter implements EventWriter
             Map<String, Map<String, FlowInfo>> existingFlows = flows;
             ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.builder();
 
-            Map<String, Map<String, FlowInfo>> newFlows = constructFlowInfoFromDiscovery();
+            Map<String, Map<String, FlowInfo>> newFlows = constructFlowInfoFromDiscovery(getDescriptors());
             if (existingFlows.equals(newFlows)) {
                 return;
             }
@@ -170,9 +179,8 @@ public class EventTapWriter implements EventWriter
         }
     }
 
-    private Map<String, Map<String, FlowInfo>> constructFlowInfoFromDiscovery()
+    private Map<String, Map<String, FlowInfo>> constructFlowInfoFromDiscovery(Iterable<ServiceDescriptor> descriptors)
     {
-        List<ServiceDescriptor> descriptors = selector.selectAllServices();
         // First level is EventType, second is flowId
         Map<String, Map<String, FlowInfo.Builder>> flows = new HashMap<>();
 
@@ -212,6 +220,33 @@ public class EventTapWriter implements EventWriter
         }
 
         return constructFlowsFromBuilderMap(flows);
+    }
+
+    private List<ServiceDescriptor> getDescriptors()
+    {
+        List<ServiceDescriptor> configDescriptors = Lists.newArrayList();
+        for (PerFlowStaticEventTapConfig config : staticEventTapConfig.getFlowConfigMap().values()) {
+            Set<String> eventTypes = config.getEventTypes();
+            String flowId = config.getFlowId();
+            Set<String> uriStrings = config.getUris();
+
+            for (String type : eventTypes) {
+                for (String uri : uriStrings) {
+                    ServiceDescriptorBuilder serviceDescriptor = ServiceDescriptor.serviceDescriptor(SERVICE_TYPE);
+                    serviceDescriptor.addProperty(EVENT_TYPE_PROPERTY_NAME, type);
+                    serviceDescriptor.addProperty(FLOW_ID_PROPERTY_NAME, flowId);
+                    serviceDescriptor.addProperty(URI_PROPERTY_NAME, uri);
+
+                    configDescriptors.add(serviceDescriptor.build());
+                }
+            }
+        }
+
+        List<ServiceDescriptor> descriptors = Lists.newArrayList();
+        descriptors.addAll(ImmutableList.copyOf(selector.selectAllServices()));
+        descriptors.addAll(ImmutableList.copyOf(configDescriptors));
+
+        return descriptors;
     }
 
     private Map<String, Map<String, FlowInfo>> constructFlowsFromBuilderMap(Map<String, Map<String, FlowInfo.Builder>> flows)

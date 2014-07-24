@@ -78,6 +78,36 @@ public class EventResource
         return Response.status(Response.Status.ACCEPTED).build();
     }
 
+    @POST
+    @Path("/distribute")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response distribute(List<Event> events)
+            throws IOException
+    {
+        Set<String> badEvents = Sets.newHashSet();
+        for (Event event : events) {
+            if (acceptedEventType(event.getType())) {
+                for (EventWriter writer : writers) {
+                    writer.distribute(event);
+                }
+
+                eventCollectorStats.incomingEvents(event.getType(), VALID).add(1);
+            }
+            else {
+                badEvents.add(event.getType());
+
+                eventCollectorStats.incomingEvents(event.getType(), UNSUPPORTED).add(1);
+            }
+        }
+
+        if (!badEvents.isEmpty()) {
+            String errorMessage = "Unsupported event type(s): " + Joiner.on(", ").join(badEvents);
+            return Response.status(Status.BAD_REQUEST).entity(errorMessage).build();
+        }
+
+        return Response.status(Response.Status.ACCEPTED).build();
+    }
+
     private boolean acceptedEventType(String type)
     {
         return acceptedEventTypes.isEmpty() || acceptedEventTypes.contains(type);

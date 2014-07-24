@@ -101,6 +101,27 @@ public class TestEventTapWriter
     private static final ServiceDescriptor tapAWithHttps = createServiceDescriptorWithHttps(typeA, flowId1, instanceA);
     private static final ServiceDescriptor tapBWithHttps = createServiceDescriptorWithHttps(typeB, flowId1, instanceA);
 
+    private static final String ARBITRARY_FLOW_ID = "foo";
+    private static final String ARBITRARY_FLOW_ID_A = ARBITRARY_FLOW_ID;
+    private static final String ARBITRARY_FLOW_ID_B = "bar";
+    private static final String ARBITRARY_EVENT_TYPES_SINGLE = format("%s", typeA);
+    private static final String ARBITRARY_EVENT_TYPES_MULTIPLE = format("%s, %s", typeA, typeB);
+    private static final String ARBITRARY_URIS = "https://instance1.event.tap:8443, https://instance2.event.tap:8443";
+    private static final String ARBITRARY_URIS_FOR_FLOW_A = "https://foo-instance1.event.tap:8443, https://foo-instance2.event.tap:8443";
+    private static final String ARBITRARY_URIS_FOR_FLOW_B = "https://bar-instance1.event.tap:8443, https://bar-instance2.event.tap:8443";
+
+    private static final ServiceDescriptor staticTap1ForEventTypeA = createStaticServiceDescriptorWithHttps(typeA, ARBITRARY_FLOW_ID, "instance1");
+    private static final ServiceDescriptor staticTap2ForEventTypeA = createStaticServiceDescriptorWithHttps(typeA, ARBITRARY_FLOW_ID, "instance2");
+
+    private static final ServiceDescriptor staticTap1ForEventTypeB = createStaticServiceDescriptorWithHttps(typeB, ARBITRARY_FLOW_ID, "instance1");
+    private static final ServiceDescriptor staticTap2ForEventTypeB = createStaticServiceDescriptorWithHttps(typeB, ARBITRARY_FLOW_ID, "instance2");
+
+    private static final ServiceDescriptor staticTap1ForFlowA = createStaticServiceDescriptorWithHttps(typeA, ARBITRARY_FLOW_ID_A, "foo-instance1");
+    private static final ServiceDescriptor staticTap2ForFlowA = createStaticServiceDescriptorWithHttps(typeA, ARBITRARY_FLOW_ID_A, "foo-instance2");
+
+    private static final ServiceDescriptor staticTap1ForFlowB = createStaticServiceDescriptorWithHttps(typeA, ARBITRARY_FLOW_ID_B, "bar-instance1");
+    private static final ServiceDescriptor staticTap2ForFlowB = createStaticServiceDescriptorWithHttps(typeA, ARBITRARY_FLOW_ID_B, "bar-instance2");
+
     private ServiceSelector serviceSelector;
     private Map<String, Boolean> currentProcessors;
     private SerialScheduledExecutorService executorService;
@@ -112,6 +133,7 @@ public class TestEventTapWriter
     private Multimap<List<String>, MockEventTapFlow> qosEventTapFlows;
     private EventTapConfig eventTapConfig;
     private EventTapWriter eventTapWriter;
+    private StaticEventTapConfig staticEventTapConfig;
 
     @BeforeMethod
     public void setup()
@@ -125,41 +147,42 @@ public class TestEventTapWriter
         qosEventTapFlows = LinkedListMultimap.create();     // Insertion order per-key matters
         eventTapConfig = new EventTapConfig();
         serviceSelector = mock(ServiceSelector.class);
+        staticEventTapConfig = mock(StaticEventTapConfig.class);
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig);
+                eventTapConfig, staticEventTapConfig);
         eventTapWriter.start();
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "selector is null")
     public void testConstructorNullSelector()
     {
-        new EventTapWriter(null, executorService, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig());
+        new EventTapWriter(null, executorService, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig(), staticEventTapConfig);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "executorService is null")
     public void testConstructorNullExecutorService()
     {
-        new EventTapWriter(serviceSelector, null, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig());
+        new EventTapWriter(serviceSelector, null, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig(), staticEventTapConfig);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "batchProcessorFactory is null")
     public void testConstructorNullBatchProcessorFactory()
     {
-        new EventTapWriter(serviceSelector, executorService, null, eventTapFlowFactory, new EventTapConfig());
+        new EventTapWriter(serviceSelector, executorService, null, eventTapFlowFactory, new EventTapConfig(), staticEventTapConfig);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventTapFlowFactory is null")
     public void testConstructorNullEventTapFlowFactory()
     {
-        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, null, new EventTapConfig());
+        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, null, new EventTapConfig(), staticEventTapConfig);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
     {
-        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, eventTapFlowFactory, null);
+        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, eventTapFlowFactory, null, staticEventTapConfig);
     }
 
     @Test
@@ -785,10 +808,80 @@ public class TestEventTapWriter
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig);
+                eventTapConfig, staticEventTapConfig);
         eventTapWriter.start();
 
         updateThenRefreshFlowsThenCheck(ImmutableList.<ServiceDescriptor>of(tapA, tapB), ImmutableList.<ServiceDescriptor>of());
+    }
+
+    @Test
+    public void testStaticAnnouncementForSingleEventTypeAndSingleFlow()
+    {
+        Map<String, PerFlowStaticEventTapConfig> staticAnnouncements = ImmutableMap.of(
+                ARBITRARY_FLOW_ID, new PerFlowStaticEventTapConfig()
+                    .setEventTypes(ARBITRARY_EVENT_TYPES_SINGLE)
+                    .setFlowId(ARBITRARY_FLOW_ID)
+                    .setUris(ARBITRARY_URIS)
+        );
+
+        staticEventTapConfig = new StaticEventTapConfig().setFlowConfigMap(staticAnnouncements);
+        eventTapWriter = new EventTapWriter(
+                serviceSelector, executorService,
+                batchProcessorFactory, eventTapFlowFactory,
+                eventTapConfig, staticEventTapConfig);
+        eventTapWriter.start();
+
+        writeEvents(eventsA[0], eventsB[0]);
+        forSharedTaps(staticTap1ForEventTypeA, staticTap2ForEventTypeA).verifyEvents(eventsA[0]);
+    }
+
+    @Test
+    public void testWithStaticAnnouncementForMultipleEventTypes()
+    {
+        Map<String, PerFlowStaticEventTapConfig> staticAnnouncements = ImmutableMap.of(
+                ARBITRARY_FLOW_ID, new PerFlowStaticEventTapConfig()
+                    .setEventTypes(ARBITRARY_EVENT_TYPES_MULTIPLE)
+                    .setFlowId(ARBITRARY_FLOW_ID)
+                    .setUris(format(ARBITRARY_URIS))
+        );
+
+        staticEventTapConfig = new StaticEventTapConfig().setFlowConfigMap(staticAnnouncements);
+        eventTapWriter = new EventTapWriter(
+                serviceSelector, executorService,
+                batchProcessorFactory, eventTapFlowFactory,
+                eventTapConfig, staticEventTapConfig);
+        eventTapWriter.start();
+
+        writeEvents(eventsA[0], eventsB[0]);
+        forSharedTaps(staticTap1ForEventTypeA, staticTap2ForEventTypeA).verifyEvents(eventsA[0]);
+        forSharedTaps(staticTap1ForEventTypeB, staticTap2ForEventTypeB).verifyEvents(eventsB[0]);
+    }
+
+    @Test
+    public void testWithStaticAnnouncementForMultipleFlows()
+    {
+        Map<String, PerFlowStaticEventTapConfig> staticAnnouncements = ImmutableMap.of(
+                ARBITRARY_FLOW_ID_A, new PerFlowStaticEventTapConfig()
+                    .setEventTypes(ARBITRARY_EVENT_TYPES_SINGLE)
+                    .setFlowId(ARBITRARY_FLOW_ID_A)
+                    .setUris(format(ARBITRARY_URIS_FOR_FLOW_A)),
+
+                ARBITRARY_FLOW_ID_B, new PerFlowStaticEventTapConfig()
+                .setEventTypes(ARBITRARY_EVENT_TYPES_SINGLE)
+                .setFlowId(ARBITRARY_FLOW_ID_B)
+                .setUris(format(ARBITRARY_URIS_FOR_FLOW_B))
+        );
+
+        staticEventTapConfig = new StaticEventTapConfig().setFlowConfigMap(staticAnnouncements);
+        eventTapWriter = new EventTapWriter(
+                serviceSelector, executorService,
+                batchProcessorFactory, eventTapFlowFactory,
+                eventTapConfig, staticEventTapConfig);
+        eventTapWriter.start();
+
+        writeEvents(eventsA[0], eventsB[0]);
+        forSharedTaps(staticTap1ForFlowA, staticTap2ForFlowA).verifyEvents(eventsA[0]);
+        forSharedTaps(staticTap1ForFlowB, staticTap2ForFlowB).verifyEvents(eventsA[0]);
     }
 
     private void updateThenRefreshFlowsThenCheck(ServiceDescriptor... taps)
@@ -1021,6 +1114,13 @@ public class TestEventTapWriter
         return createServiceDescriptor(eventType,
                 ImmutableMap.of(EventTapWriter.FLOW_ID_PROPERTY_NAME, flowId,
                         "https", format("https://%s-%s.event.tap:8443", eventType, instanceId)));
+    }
+
+    private static ServiceDescriptor createStaticServiceDescriptorWithHttps(String eventType, String flowId, String instanceId)
+    {
+        return createServiceDescriptor(eventType,
+                ImmutableMap.of(EventTapWriter.FLOW_ID_PROPERTY_NAME, flowId,
+                        "https", format("https://%s.event.tap:8443", instanceId)));
     }
 
     private static ServiceDescriptor createQosServiceDescriptor(String eventType, String flowId, String instanceId)

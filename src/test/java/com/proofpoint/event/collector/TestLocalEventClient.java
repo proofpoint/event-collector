@@ -49,8 +49,8 @@ public class TestLocalEventClient
     {
         eventClient.post(new TestEvent());
 
-        assertEquals(eventWriter.getEvents().size(), 1);
-        Event event = eventWriter.getEvents().get(0);
+        assertEquals(eventWriter.getWrittenEvents().size(), 1);
+        Event event = eventWriter.getWrittenEvents().get(0);
 
         assertEquals(event.getType(), "LocalTest");
         assertTrue(event.getData().containsKey("name"));

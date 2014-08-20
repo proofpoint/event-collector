@@ -19,6 +19,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.google.inject.Inject;
+import com.proofpoint.event.collector.EventCollectorStats.ProcessType;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.POST;
@@ -33,6 +34,8 @@ import java.util.Set;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.UNSUPPORTED;
 import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.VALID;
+import static com.proofpoint.event.collector.EventCollectorStats.ProcessType.DISTRIBUTE;
+import static com.proofpoint.event.collector.EventCollectorStats.ProcessType.WRITE;
 
 @Path("/v2/event")
 public class EventResource
@@ -44,29 +47,45 @@ public class EventResource
     @Inject
     public EventResource(Set<EventWriter> writers, ServerConfig config, EventCollectorStats eventCollectorStats)
     {
-        this.eventCollectorStats = eventCollectorStats;
+        this.eventCollectorStats = checkNotNull(eventCollectorStats, "eventCollectorStats is null");
         this.writers = checkNotNull(writers, "writers are null");
         this.acceptedEventTypes = ImmutableSet.copyOf(checkNotNull(config, "config is null").getAcceptedEventTypes());
     }
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response post(List<Event> events)
+    public Response write(List<Event> events)
+            throws IOException
+    {
+        return processEvents(events, WRITE);
+    }
+
+    @POST
+    @Path("/distribute")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response distribute(List<Event> events)
+            throws IOException
+    {
+        return processEvents(events, DISTRIBUTE);
+    }
+
+    private Response processEvents(List<Event> events, ProcessType processType)
             throws IOException
     {
         Set<String> badEvents = Sets.newHashSet();
         for (Event event : events) {
             if (acceptedEventType(event.getType())) {
+
                 for (EventWriter writer : writers) {
-                    writer.write(event);
+                    processType.process(writer, event);
                 }
 
-                eventCollectorStats.incomingEvents(event.getType(), VALID).add(1);
+                eventCollectorStats.inboundEvents(event.getType(), VALID, processType).add(1);
             }
             else {
                 badEvents.add(event.getType());
 
-                eventCollectorStats.incomingEvents(event.getType(), UNSUPPORTED).add(1);
+                eventCollectorStats.inboundEvents(event.getType(), UNSUPPORTED, processType).add(1);
             }
         }
 

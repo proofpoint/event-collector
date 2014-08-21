@@ -16,12 +16,17 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
 import com.proofpoint.discovery.client.ServiceDescriptor;
+import com.proofpoint.discovery.client.ServiceDescriptor.ServiceDescriptorBuilder;
 import com.proofpoint.discovery.client.ServiceSelector;
 import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.FlowPolicy;
+import com.proofpoint.event.collector.PerFlowStaticEventTapConfig.QosDelivery;
+import com.proofpoint.event.collector.StaticEventTapConfig.FlowKey;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 import org.weakref.jmx.Managed;
@@ -29,6 +34,7 @@ import org.weakref.jmx.Managed;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
+import java.io.IOException;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
@@ -43,11 +49,17 @@ import java.util.concurrent.atomic.AtomicReference;
 import static com.google.common.base.Objects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
+import static java.lang.String.format;
 
 public class EventTapWriter implements EventWriter
 {
     @VisibleForTesting
     static final String FLOW_ID_PROPERTY_NAME = "flowId";
+    private static final String EVENT_TYPE_PROPERTY_NAME = "eventType";
+    private static final String QOS_DELIVERY_PROPERTY_NAME = "qos.delivery";
+    private static final String HTTP_PROPERTY_NAME = "http";
+    private static final String HTTPS_PROPERTY_NAME = "https";
+    private static final String SERVICE_TYPE = "eventTap";
 
     private static final Logger log = Logger.get(EventTapWriter.class);
     private static final EventTypePolicy NULL_EVENT_TYPE_POLICY = new EventTypePolicy.Builder().build();
@@ -59,6 +71,7 @@ public class EventTapWriter implements EventWriter
 
     private final AtomicReference<Map<String, EventTypePolicy>> eventTypePolicies = new AtomicReference<Map<String, EventTypePolicy>>(
             ImmutableMap.<String, EventTypePolicy>of());
+    private final List<ServiceDescriptor> staticDescriptors;
     private Map<String, Map<String, FlowInfo>> flows = ImmutableMap.of();
 
     private ScheduledFuture<?> refreshJob;
@@ -69,8 +82,10 @@ public class EventTapWriter implements EventWriter
             @EventTap ScheduledExecutorService executorService,
             BatchProcessorFactory batchProcessorFactory,
             EventTapFlowFactory eventTapFlowFactory,
-            EventTapConfig config)
+            EventTapConfig config,
+            StaticEventTapConfig staticEventTapConfig)
     {
+        this.staticDescriptors = createStaticDescriptors(checkNotNull(staticEventTapConfig, "staticEventTapConfig is null"));
         this.selector = checkNotNull(selector, "selector is null");
         this.executorService = checkNotNull(executorService, "executorService is null");
         this.flowRefreshDuration = checkNotNull(config, "config is null").getEventTapRefreshDuration();
@@ -127,7 +142,7 @@ public class EventTapWriter implements EventWriter
             Map<String, Map<String, FlowInfo>> existingFlows = flows;
             ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.builder();
 
-            Map<String, Map<String, FlowInfo>> newFlows = constructFlowInfoFromDiscovery();
+            Map<String, Map<String, FlowInfo>> newFlows = constructFlowInfoFromServiceDescriptors(Iterables.concat(staticDescriptors, selector.selectAllServices()));
             if (existingFlows.equals(newFlows)) {
                 return;
             }
@@ -160,9 +175,15 @@ public class EventTapWriter implements EventWriter
         }
     }
 
-    private Map<String, Map<String, FlowInfo>> constructFlowInfoFromDiscovery()
+    @Override
+    public void distribute(Event event)
+            throws IOException
     {
-        List<ServiceDescriptor> descriptors = selector.selectAllServices();
+        write(event);
+    }
+
+    private Map<String, Map<String, FlowInfo>> constructFlowInfoFromServiceDescriptors(Iterable<ServiceDescriptor> descriptors)
+    {
         // First level is EventType, second is flowId
         Map<String, Map<String, FlowInfo.Builder>> flows = new HashMap<>();
 
@@ -202,6 +223,40 @@ public class EventTapWriter implements EventWriter
         }
 
         return constructFlowsFromBuilderMap(flows);
+    }
+
+    private static List<ServiceDescriptor> createStaticDescriptors(StaticEventTapConfig staticEventTapConfig)
+    {
+        ImmutableList.Builder<ServiceDescriptor> staticDescriptorsBuilder = ImmutableList.builder();
+        for (Entry<FlowKey, PerFlowStaticEventTapConfig> entry : staticEventTapConfig.getStaticTaps().entrySet()) {
+            FlowKey flowKey = entry.getKey();
+            String eventType = flowKey.getEventType();
+            String flowId = flowKey.getFlowId();
+            PerFlowStaticEventTapConfig config = entry.getValue();
+            Set<String> uris = config.getUris();
+            QosDelivery qosDelivery = config.getQosDelivery();
+            for (String uriString : uris) {
+                ServiceDescriptorBuilder serviceDescriptor = ServiceDescriptor.serviceDescriptor(SERVICE_TYPE);
+                serviceDescriptor.addProperty(EVENT_TYPE_PROPERTY_NAME, eventType);
+                serviceDescriptor.addProperty(FLOW_ID_PROPERTY_NAME, flowId);
+                serviceDescriptor.addProperty(QOS_DELIVERY_PROPERTY_NAME, qosDelivery.toString());
+
+                String lowerCaseUriString = uriString.toLowerCase();
+                if (lowerCaseUriString.startsWith("https://")) {
+                    serviceDescriptor.addProperty(HTTPS_PROPERTY_NAME, lowerCaseUriString);
+                }
+                else if (uriString.toLowerCase().startsWith("http://")) {
+                    serviceDescriptor.addProperty(HTTP_PROPERTY_NAME, lowerCaseUriString);
+                }
+                else {
+                    throw new RuntimeException(format("Unsupported scheme for uri: %s", uriString));
+                }
+
+                staticDescriptorsBuilder.add(serviceDescriptor.build());
+            }
+        }
+
+        return staticDescriptorsBuilder.build();
     }
 
     private Map<String, Map<String, FlowInfo>> constructFlowsFromBuilderMap(Map<String, Map<String, FlowInfo.Builder>> flows)
@@ -314,7 +369,7 @@ public class EventTapWriter implements EventWriter
 
     private static String createBatchProcessorName(String eventType, String flowId)
     {
-        return String.format("%s{%s}", eventType, flowId);
+        return format("%s{%s}", eventType, flowId);
     }
 
     static class FlowInfo

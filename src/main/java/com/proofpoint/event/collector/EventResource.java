@@ -36,12 +36,15 @@ import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.UNS
 import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.VALID;
 import static com.proofpoint.event.collector.EventCollectorStats.ProcessType.DISTRIBUTE;
 import static com.proofpoint.event.collector.EventCollectorStats.ProcessType.WRITE;
+import static com.proofpoint.event.collector.EventResource.EventProcessor.DISTRIBUTOR;
+import static com.proofpoint.event.collector.EventResource.EventProcessor.WRITER;
 
 @Path("/v2/event")
 public class EventResource
 {
     private final Set<EventWriter> writers;
     private final Set<String> acceptedEventTypes;
+
     private final EventCollectorStats eventCollectorStats;
 
     @Inject
@@ -57,7 +60,7 @@ public class EventResource
     public Response write(List<Event> events)
             throws IOException
     {
-        return processEvents(events, WRITE);
+        return processEvents(WRITER, events, WRITE);
     }
 
     @POST
@@ -66,10 +69,10 @@ public class EventResource
     public Response distribute(List<Event> events)
             throws IOException
     {
-        return processEvents(events, DISTRIBUTE);
+        return processEvents(DISTRIBUTOR, events, DISTRIBUTE);
     }
 
-    private Response processEvents(List<Event> events, ProcessType processType)
+    private Response processEvents(EventProcessor processor, List<Event> events, ProcessType processType)
             throws IOException
     {
         Set<String> badEvents = Sets.newHashSet();
@@ -77,7 +80,7 @@ public class EventResource
             if (acceptedEventType(event.getType())) {
 
                 for (EventWriter writer : writers) {
-                    processType.process(writer, event);
+                    processor.process(writer, event);
                 }
 
                 eventCollectorStats.inboundEvents(event.getType(), VALID, processType).add(1);
@@ -100,5 +103,30 @@ public class EventResource
     private boolean acceptedEventType(String type)
     {
         return acceptedEventTypes.isEmpty() || acceptedEventTypes.contains(type);
+    }
+
+    public enum EventProcessor
+    {
+        WRITER
+                {
+                    @Override
+                    void process(EventWriter writer, Event event)
+                            throws IOException
+                    {
+                        writer.write(event);
+                    }
+                },
+        DISTRIBUTOR
+                {
+                    @Override
+                    void process(EventWriter writer, Event event)
+                            throws IOException
+                    {
+                        writer.distribute(event);
+                    }
+                };
+
+        abstract void process(EventWriter writer, Event event)
+                throws IOException;
     }
 }

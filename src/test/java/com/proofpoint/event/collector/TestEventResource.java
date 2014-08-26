@@ -29,13 +29,13 @@ import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.UUID;
 
 import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.UNSUPPORTED;
 import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.VALID;
 import static com.proofpoint.event.collector.EventCollectorStats.ProcessType.DISTRIBUTE;
 import static com.proofpoint.event.collector.EventCollectorStats.ProcessType.WRITE;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.testng.Assert.assertEquals;
@@ -47,7 +47,7 @@ import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 
 public class TestEventResource
 {
-    private static final Map<String,String> ARBITRARY_DATA = ImmutableMap.of("foo", "bar", "hello", "world");
+    private static final Map<String, String> ARBITRARY_DATA = ImmutableMap.of("foo", "bar", "hello", "world");
 
     private InMemoryEventWriter writer;
     private EventCollectorStats eventCollectorStats;
@@ -76,7 +76,7 @@ public class TestEventResource
 
         verifyWrittenAndDistributedEvents(events, ImmutableList.<Event>of());
 
-        verifyMetrics(WRITE, ImmutableMap.<String, EventStatus>of("Test", VALID));
+        verifyMetrics(WRITE, ImmutableList.of(new EventMetric("Test", VALID, 1)));
     }
 
     @Test
@@ -85,17 +85,18 @@ public class TestEventResource
     {
         EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"), eventCollectorStats);
 
-        Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
-        Event badEvent = new Event("TestBad", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+        Event event1 = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+        Event badEvent1 = new Event("TestBad", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+        Event badEvent2 = new Event("TestBad", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
 
-        List<Event> events = ImmutableList.of(event, badEvent);
+        List<Event> events = ImmutableList.of(event1, badEvent1, badEvent2);
         Response response = resource.write(events);
 
         verifyBadRequestResponse(response);
 
-        verifyWrittenAndDistributedEvents(ImmutableList.of(event), ImmutableList.<Event>of());
+        verifyWrittenAndDistributedEvents(ImmutableList.of(event1), ImmutableList.<Event>of());
 
-        verifyMetrics(WRITE, ImmutableMap.<String, EventStatus>of("Test", VALID, "TestBad", UNSUPPORTED));
+        verifyMetrics(WRITE, ImmutableList.of(new EventMetric("Test", VALID, 1), new EventMetric("TestBad", UNSUPPORTED, 2)));
     }
 
     @Test
@@ -107,17 +108,18 @@ public class TestEventResource
 
         EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(), eventCollectorStats);
 
-        Event eventWithTypeA = new Event(eventTypeA, UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+        Event event1WithTypeA = new Event(eventTypeA, UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+        Event event2WithTypeA = new Event(eventTypeA, UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
         Event eventWithTypeB = new Event(eventTypeB, UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
 
-        List<Event> events = ImmutableList.of(eventWithTypeA, eventWithTypeB);
+        List<Event> events = ImmutableList.of(event1WithTypeA, event2WithTypeA, eventWithTypeB);
         Response response = resource.write(events);
 
         verifyAcceptedResponse(response);
 
         verifyWrittenAndDistributedEvents(events, ImmutableList.<Event>of());
 
-        verifyMetrics(WRITE, ImmutableMap.<String, EventStatus>of(eventTypeA, VALID, eventTypeB, VALID));
+        verifyMetrics(WRITE, ImmutableList.of(new EventMetric(eventTypeA, VALID, 2), new EventMetric(eventTypeB, VALID, 1)));
     }
 
     @Test
@@ -135,7 +137,7 @@ public class TestEventResource
 
         verifyWrittenAndDistributedEvents(ImmutableList.<Event>of(), events);
 
-        verifyMetrics(DISTRIBUTE, ImmutableMap.<String, EventStatus>of("Test", VALID));
+        verifyMetrics(DISTRIBUTE, ImmutableList.of(new EventMetric("Test", VALID, 1)));
     }
 
     @Test
@@ -144,17 +146,18 @@ public class TestEventResource
     {
         EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"), eventCollectorStats);
 
-        Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
-        Event badEvent = new Event("TestBad", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+        Event event1 = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+        Event badEvent1 = new Event("TestBad", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+        Event badEvent2 = new Event("TestBad", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
 
-        List<Event> events = ImmutableList.of(event, badEvent);
+        List<Event> events = ImmutableList.of(event1, badEvent1, badEvent2);
         Response response = resource.distribute(events);
 
         verifyBadRequestResponse(response);
 
-        verifyWrittenAndDistributedEvents(ImmutableList.<Event>of(), ImmutableList.of(event));
+        verifyWrittenAndDistributedEvents(ImmutableList.<Event>of(), ImmutableList.of(event1));
 
-        verifyMetrics(DISTRIBUTE, ImmutableMap.<String, EventStatus>of("Test", VALID, "TestBad", UNSUPPORTED));
+        verifyMetrics(DISTRIBUTE, ImmutableList.of(new EventMetric("Test", VALID, 1), new EventMetric("TestBad", UNSUPPORTED, 2)));
     }
 
     @Test
@@ -166,17 +169,18 @@ public class TestEventResource
 
         EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(), eventCollectorStats);
 
-        Event eventWithTypeA = new Event(eventTypeA, UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+        Event event1WithTypeA = new Event(eventTypeA, UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+        Event event2WithTypeA = new Event(eventTypeA, UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
         Event eventWithTypeB = new Event(eventTypeB, UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
 
-        List<Event> events = ImmutableList.of(eventWithTypeA, eventWithTypeB);
+        List<Event> events = ImmutableList.of(event1WithTypeA, event2WithTypeA, eventWithTypeB);
         Response response = resource.distribute(events);
 
         verifyAcceptedResponse(response);
 
         verifyWrittenAndDistributedEvents(ImmutableList.<Event>of(), events);
 
-        verifyMetrics(DISTRIBUTE, ImmutableMap.<String, EventStatus>of(eventTypeA, VALID, eventTypeB, VALID));
+        verifyMetrics(DISTRIBUTE, ImmutableList.of(new EventMetric(eventTypeA, VALID, 2), new EventMetric(eventTypeB, VALID, 1)));
     }
 
     private void verifyAcceptedResponse(Response response)
@@ -200,21 +204,50 @@ public class TestEventResource
         assertEquals(writer.getDistributedEvents(), distributedEvents);
     }
 
-    private void verifyMetrics(ProcessType processType, Map<String, EventStatus> typeToStatus)
+    private void verifyMetrics(ProcessType processType, List<EventMetric> metrics)
     {
         EventCollectorStats argumentVerifier = testingReportCollectionFactory.getArgumentVerifier(EventCollectorStats.class);
-        for(Entry<String, EventStatus> entry : typeToStatus.entrySet()) {
-            verify(argumentVerifier).inboundEvents(entry.getKey(), entry.getValue(), processType);
+        for (EventMetric metric : metrics) {
+            verify(argumentVerifier, times(metric.getEventCount())).inboundEvents(metric.getEventType(), metric.getStatus(), processType);
         }
 
         verifyNoMoreInteractions(argumentVerifier);
 
         EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
-        for(Entry<String, EventStatus> entry : typeToStatus.entrySet()) {
-            String eventType = entry.getKey();
-            EventStatus eventStatus = entry.getValue();
-            verify(reportCollection.inboundEvents(eventType, eventStatus, processType)).add(1);
+        for (EventMetric metric : metrics) {
+            String eventType = metric.getEventType();
+            EventStatus eventStatus = metric.getStatus();
+            verify(reportCollection.inboundEvents(eventType, eventStatus, processType), times(metric.getEventCount())).add(1);
             verifyNoMoreInteractions(reportCollection.inboundEvents(eventType, eventStatus, processType));
+        }
+    }
+
+    private class EventMetric
+    {
+        private String eventType;
+        private EventStatus status;
+        private int eventCount;
+
+        public EventMetric(String eventType, EventStatus status, int eventCount)
+        {
+            this.eventType = eventType;
+            this.status = status;
+            this.eventCount = eventCount;
+        }
+
+        public String getEventType()
+        {
+            return eventType;
+        }
+
+        public EventStatus getStatus()
+        {
+            return status;
+        }
+
+        public int getEventCount()
+        {
+            return eventCount;
         }
     }
 }

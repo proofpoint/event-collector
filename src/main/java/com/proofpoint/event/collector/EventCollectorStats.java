@@ -24,7 +24,7 @@ import java.net.URI;
 public interface EventCollectorStats
 {
     // EventCollector.IncomingEvents.Count (Tags: eventType=blah, eventStatus=valid)
-    CounterStat incomingEvents(@Key("eventType") String eventType, @Key("eventStatus") EventStatus eventStatus);
+    CounterStat inboundEvents(@Key("eventType") String eventType, @Key("eventStatus") EventStatus eventStatus, @Key("processType") ProcessType processType);
 
     CounterStat outboundEvents(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("outboundStatus") Status status);
 
@@ -47,6 +47,18 @@ public interface EventCollectorStats
     public enum EventStatus
     {
         VALID, UNSUPPORTED;
+
+        @Override
+        public String toString()
+        {
+            return name().toLowerCase();
+        }
+    }
+
+    public enum ProcessType
+    {
+        WRITE,
+        DISTRIBUTE;
 
         @Override
         public String toString()

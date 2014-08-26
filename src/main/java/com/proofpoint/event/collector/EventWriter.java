@@ -21,4 +21,7 @@ public interface EventWriter
 {
     void write(Event event)
             throws IOException;
+
+    void distribute(Event event)
+            throws IOException;
 }

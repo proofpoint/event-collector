@@ -123,6 +123,14 @@ public class SpoolingEventWriter
         counters.recordReceived(event.getType(), 1);
     }
 
+    @Override
+    public void distribute(Event event)
+            throws IOException
+    {
+        // This particular collector is not the first collector to see this event. As such, this event
+        // has already been uploaded to S3 and should not be uploaded again.
+    }
+
     public Map<String, CounterState> getCounts()
     {
         return counters.getCounts();

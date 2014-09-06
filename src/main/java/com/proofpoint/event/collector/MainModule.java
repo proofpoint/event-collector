@@ -82,6 +82,7 @@ public class MainModule
         binder.bind(CombineObjectMetadataStore.class).to(S3CombineObjectMetadataStore.class).in(Scopes.SINGLETON);
 
         bindConfig(binder).to(ServerConfig.class);
+        bindConfig(binder).to(StaticEventTapConfig.class);
 
         eventBinder(binder).bindEventClient(CombineCompleted.class);
 
@@ -185,7 +186,8 @@ public class MainModule
 
     @Provides
     @Singleton
-    private Ticker providesTicker() {
+    private Ticker providesTicker()
+    {
         return Ticker.systemTicker();
     }
 }

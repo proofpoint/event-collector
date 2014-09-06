@@ -12,7 +12,7 @@
     <parent>
         <groupId>com.proofpoint.platform</groupId>
         <artifactId>rest-server-base</artifactId>
-        <version>1.03</version>
+        <version>1.05</version>
     </parent>
 
     <licenses>
@@ -25,6 +25,7 @@
 
     <properties>
         <main-class>com.proofpoint.event.collector.Main</main-class>
+        <project.rpm.username>platform</project.rpm.username>
     </properties>
 
     <scm>

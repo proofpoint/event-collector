@@ -30,7 +30,6 @@ import com.proofpoint.http.client.StringResponseHandler.StringResponse;
 import com.proofpoint.http.client.jetty.JettyHttpClient;
 import com.proofpoint.http.server.testing.TestingHttpServer;
 import com.proofpoint.http.server.testing.TestingHttpServerModule;
-import com.proofpoint.jaxrs.JaxrsModule;
 import com.proofpoint.jmx.testing.TestingJmxModule;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.json.JsonModule;
@@ -53,6 +52,7 @@ import static com.proofpoint.http.client.Request.Builder.preparePost;
 import static com.proofpoint.http.client.StaticBodyGenerator.createStaticBodyGenerator;
 import static com.proofpoint.http.client.StatusResponseHandler.createStatusResponseHandler;
 import static com.proofpoint.http.client.StringResponseHandler.createStringResponseHandler;
+import static com.proofpoint.jaxrs.JaxrsModule.explicitJaxrsModule;
 import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.Response.Status;
@@ -91,7 +91,7 @@ public class TestServer
                         new TestingDiscoveryModule(),
                         new TestingJmxModule(),
                         new JsonModule(),
-                        new JaxrsModule(),
+                        explicitJaxrsModule(),
                         new JsonEventModule(),
                         new EventTapModule(),
                         new ReportingModule(),

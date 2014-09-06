@@ -21,7 +21,6 @@ import com.proofpoint.discovery.client.DiscoveryModule;
 import com.proofpoint.discovery.client.announce.Announcer;
 import com.proofpoint.event.client.JsonEventModule;
 import com.proofpoint.http.server.HttpServerModule;
-import com.proofpoint.jaxrs.JaxrsModule;
 import com.proofpoint.jmx.JmxHttpModule;
 import com.proofpoint.jmx.JmxModule;
 import com.proofpoint.json.JsonModule;
@@ -30,6 +29,8 @@ import com.proofpoint.node.NodeModule;
 import com.proofpoint.reporting.ReportingClientModule;
 import com.proofpoint.reporting.ReportingModule;
 import org.weakref.jmx.guice.MBeanModule;
+
+import static com.proofpoint.jaxrs.JaxrsModule.explicitJaxrsModule;
 
 public class Main
 {
@@ -45,7 +46,7 @@ public class Main
                             new DiscoveryModule(),
                             new HttpServerModule(),
                             new JsonModule(),
-                            new JaxrsModule(),
+                            explicitJaxrsModule(),
                             new MBeanModule(),
                             new JmxModule(),
                             new JmxHttpModule(),

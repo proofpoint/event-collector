@@ -63,6 +63,15 @@ public class EventResource
         return processEvents(WRITER, events, WRITE);
     }
 
+    // Separate method to permit gathering of statistics
+    @POST
+    @Consumes("application/x-jackson-smile")
+    public Response writeSmile(List<Event> events)
+            throws IOException
+    {
+        return write(events);
+    }
+
     @POST
     @Path("/distribute")
     @Consumes(MediaType.APPLICATION_JSON)
@@ -70,6 +79,17 @@ public class EventResource
             throws IOException
     {
         return processEvents(DISTRIBUTOR, events, DISTRIBUTE);
+    }
+
+
+    // Separate method to permit gathering of statistics
+    @POST
+    @Path("/distribute")
+    @Consumes("application/x-jackson-smile")
+    public Response distributeSmile(List<Event> events)
+            throws IOException
+    {
+        return distribute(events);
     }
 
     private Response processEvents(EventProcessor processor, List<Event> events, ProcessType processType)

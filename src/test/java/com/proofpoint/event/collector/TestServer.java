@@ -53,10 +53,10 @@ import static com.proofpoint.http.client.Request.Builder.preparePost;
 import static com.proofpoint.http.client.StaticBodyGenerator.createStaticBodyGenerator;
 import static com.proofpoint.http.client.StatusResponseHandler.createStatusResponseHandler;
 import static com.proofpoint.http.client.StringResponseHandler.createStringResponseHandler;
-import static org.testng.Assert.assertEquals;
 import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.Response.Status;
+import static org.testng.Assert.assertEquals;
 
 public class TestServer
 {
@@ -184,6 +184,21 @@ public class TestServer
                 createStatusResponseHandler());
 
         assertEquals(response.getStatusCode(), Status.NO_CONTENT.getStatusCode());
+    }
+
+    @Test
+    public void testDistributeSingle()
+            throws IOException, ExecutionException, InterruptedException
+    {
+        String json = Resources.toString(Resources.getResource("single.json"), Charsets.UTF_8);
+        StatusResponse response = client.execute(preparePost()
+                .setUri(urlFor("/v2/event/distribute"))
+                .setHeader("Content-Type", APPLICATION_JSON)
+                .setBodyGenerator(createStaticBodyGenerator(json, Charsets.UTF_8))
+                .build(),
+                createStatusResponseHandler());
+
+        assertEquals(response.getStatusCode(), Status.ACCEPTED.getStatusCode());
     }
 
     private URI urlFor(String path)

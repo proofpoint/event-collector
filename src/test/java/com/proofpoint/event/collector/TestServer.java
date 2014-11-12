@@ -15,7 +15,11 @@
  */
 package com.proofpoint.event.collector;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.smile.SmileFactory;
 import com.google.common.base.Charsets;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.Files;
 import com.google.common.io.Resources;
@@ -30,7 +34,6 @@ import com.proofpoint.http.client.StringResponseHandler.StringResponse;
 import com.proofpoint.http.client.jetty.JettyHttpClient;
 import com.proofpoint.http.server.testing.TestingHttpServer;
 import com.proofpoint.http.server.testing.TestingHttpServerModule;
-import com.proofpoint.jaxrs.JaxrsModule;
 import com.proofpoint.jmx.testing.TestingJmxModule;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.json.JsonModule;
@@ -47,12 +50,15 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.concurrent.ExecutionException;
 
+import static com.proofpoint.http.client.JsonBodyGenerator.jsonBodyGenerator;
 import static com.proofpoint.http.client.Request.Builder.prepareDelete;
 import static com.proofpoint.http.client.Request.Builder.prepareGet;
 import static com.proofpoint.http.client.Request.Builder.preparePost;
+import static com.proofpoint.http.client.SmileBodyGenerator.smileBodyGenerator;
 import static com.proofpoint.http.client.StaticBodyGenerator.createStaticBodyGenerator;
 import static com.proofpoint.http.client.StatusResponseHandler.createStatusResponseHandler;
 import static com.proofpoint.http.client.StringResponseHandler.createStringResponseHandler;
+import static com.proofpoint.jaxrs.JaxrsModule.explicitJaxrsModule;
 import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.Response.Status;
@@ -60,7 +66,19 @@ import static org.testng.Assert.assertEquals;
 
 public class TestServer
 {
-    private JsonCodec<Object> OBJECT_CODEC = JsonCodec.jsonCodec(Object.class);
+    private static final JsonCodec<Object> OBJECT_CODEC = JsonCodec.jsonCodec(Object.class);
+    private static final Object TESTING_SINGLE_EVENT_STRUCTURE = ImmutableList.of(
+            ImmutableMap.of(
+                    "type", "Test",
+                    "uuid", "DCD36293-3072-4AFD-B6E3-A9EB9CE1F219",
+                    "host", "test.local",
+                    "timestamp", "2011-03-30T16:10:16.000Z",
+                    "data", ImmutableMap.of(
+                            "foo", "bar",
+                            "hello", "world"
+                    )
+            )
+    );
     private HttpClient client;
     private TestingHttpServer server;
     private File tempStageDir;
@@ -91,7 +109,7 @@ public class TestServer
                         new TestingDiscoveryModule(),
                         new TestingJmxModule(),
                         new JsonModule(),
-                        new JaxrsModule(),
+                        explicitJaxrsModule(),
                         new JsonEventModule(),
                         new EventTapModule(),
                         new ReportingModule(),
@@ -134,12 +152,25 @@ public class TestServer
     public void testPostSingle()
             throws IOException, ExecutionException, InterruptedException
     {
-        String json = Resources.toString(Resources.getResource("single.json"), Charsets.UTF_8);
         StatusResponse response = client.execute(preparePost()
                 .setUri(urlFor("/v2/event"))
                 .setHeader("Content-Type", APPLICATION_JSON)
-                .setBodyGenerator(createStaticBodyGenerator(json, Charsets.UTF_8))
+                .setBodyGenerator(jsonBodyGenerator(OBJECT_CODEC, TESTING_SINGLE_EVENT_STRUCTURE))
                 .build(),
+                createStatusResponseHandler());
+
+        assertEquals(response.getStatusCode(), Status.ACCEPTED.getStatusCode());
+    }
+
+    @Test
+    public void testPostSmile()
+            throws IOException, ExecutionException, InterruptedException
+    {
+        StatusResponse response = client.execute(preparePost()
+                        .setUri(urlFor("/v2/event"))
+                        .setHeader("Content-Type", "application/x-jackson-smile")
+                        .setBodyGenerator(smileBodyGenerator(OBJECT_CODEC, TESTING_SINGLE_EVENT_STRUCTURE))
+                        .build(),
                 createStatusResponseHandler());
 
         assertEquals(response.getStatusCode(), Status.ACCEPTED.getStatusCode());
@@ -190,12 +221,25 @@ public class TestServer
     public void testDistributeSingle()
             throws IOException, ExecutionException, InterruptedException
     {
-        String json = Resources.toString(Resources.getResource("single.json"), Charsets.UTF_8);
         StatusResponse response = client.execute(preparePost()
                 .setUri(urlFor("/v2/event/distribute"))
                 .setHeader("Content-Type", APPLICATION_JSON)
-                .setBodyGenerator(createStaticBodyGenerator(json, Charsets.UTF_8))
+                .setBodyGenerator(jsonBodyGenerator(OBJECT_CODEC, TESTING_SINGLE_EVENT_STRUCTURE))
                 .build(),
+                createStatusResponseHandler());
+
+        assertEquals(response.getStatusCode(), Status.ACCEPTED.getStatusCode());
+    }
+
+    @Test
+    public void testDistributeSmile()
+            throws IOException, ExecutionException, InterruptedException
+    {
+        StatusResponse response = client.execute(preparePost()
+                        .setUri(urlFor("/v2/event/distribute"))
+                        .setHeader("Content-Type", "application/x-jackson-smile")
+                        .setBodyGenerator(smileBodyGenerator(OBJECT_CODEC, TESTING_SINGLE_EVENT_STRUCTURE))
+                        .build(),
                 createStatusResponseHandler());
 
         assertEquals(response.getStatusCode(), Status.ACCEPTED.getStatusCode());

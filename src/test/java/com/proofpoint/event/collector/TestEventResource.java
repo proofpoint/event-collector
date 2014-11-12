@@ -80,6 +80,24 @@ public class TestEventResource
     }
 
     @Test
+    public void testWriteSmile()
+            throws IOException
+    {
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"), eventCollectorStats);
+
+        Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+
+        List<Event> events = ImmutableList.of(event);
+        Response response = resource.writeSmile(events);
+
+        verifyAcceptedResponse(response);
+
+        verifyWrittenAndDistributedEvents(events, ImmutableList.<Event>of());
+
+        verifyMetrics(WRITE, ImmutableList.of(new EventMetric("Test", VALID, 1)));
+    }
+
+    @Test
     public void testWriteUnsupportedType()
             throws IOException
     {
@@ -132,6 +150,24 @@ public class TestEventResource
 
         List<Event> events = ImmutableList.of(event);
         Response response = resource.distribute(events);
+
+        verifyAcceptedResponse(response);
+
+        verifyWrittenAndDistributedEvents(ImmutableList.<Event>of(), events);
+
+        verifyMetrics(DISTRIBUTE, ImmutableList.of(new EventMetric("Test", VALID, 1)));
+    }
+
+    @Test
+    public void testDistributeSmile()
+            throws IOException
+    {
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig().setAcceptedEventTypes("Test"), eventCollectorStats);
+
+        Event event = new Event("Test", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+
+        List<Event> events = ImmutableList.of(event);
+        Response response = resource.distributeSmile(events);
 
         verifyAcceptedResponse(response);
 

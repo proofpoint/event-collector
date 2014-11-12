@@ -47,6 +47,7 @@ import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
 import static com.proofpoint.event.client.EventBinder.eventBinder;
+import static com.proofpoint.jaxrs.JaxrsBinder.jaxrsBinder;
 import static com.proofpoint.reporting.ReportBinder.reportBinder;
 import static org.weakref.jmx.guice.ExportBinder.newExporter;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
@@ -71,7 +72,7 @@ public class MainModule
         newExporter(binder).export(SpoolingEventWriter.class).withGeneratedName();
         newSetBinder(binder, EventWriter.class).addBinding().to(Key.get(SpoolingEventWriter.class)).in(Scopes.SINGLETON);
 
-        binder.bind(EventResource.class).in(Scopes.SINGLETON);
+        jaxrsBinder(binder).bind(EventResource.class);
 
         binder.bind(StoredObjectCombiner.class).in(Scopes.SINGLETON);
         newExporter(binder).export(StoredObjectCombiner.class).withGeneratedName();
@@ -86,7 +87,7 @@ public class MainModule
 
         eventBinder(binder).bindEventClient(CombineCompleted.class);
 
-        binder.bind(EventWriterStatsResource.class).in(Scopes.SINGLETON);
+        jaxrsBinder(binder).bind(EventWriterStatsResource.class);
 
         reportBinder(binder).bindReportCollection(EventCollectorStats.class).as(new ObjectNameBuilder(EventCollectorStats.class.getPackage().getName()).withProperty("type", "EventCollector").build());
 

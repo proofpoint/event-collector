@@ -28,7 +28,6 @@ import com.proofpoint.bootstrap.Bootstrap;
 import com.proofpoint.bootstrap.LifeCycleManager;
 import com.proofpoint.discovery.client.testing.TestingDiscoveryModule;
 import com.proofpoint.event.client.JsonEventModule;
-import com.proofpoint.http.client.BodyGenerator;
 import com.proofpoint.http.client.HttpClient;
 import com.proofpoint.http.client.StatusResponseHandler.StatusResponse;
 import com.proofpoint.http.client.StringResponseHandler.StringResponse;
@@ -48,7 +47,6 @@ import org.weakref.jmx.guice.MBeanModule;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.net.URI;
 import java.util.concurrent.ExecutionException;
 
@@ -56,6 +54,7 @@ import static com.proofpoint.http.client.JsonBodyGenerator.jsonBodyGenerator;
 import static com.proofpoint.http.client.Request.Builder.prepareDelete;
 import static com.proofpoint.http.client.Request.Builder.prepareGet;
 import static com.proofpoint.http.client.Request.Builder.preparePost;
+import static com.proofpoint.http.client.SmileBodyGenerator.smileBodyGenerator;
 import static com.proofpoint.http.client.StaticBodyGenerator.createStaticBodyGenerator;
 import static com.proofpoint.http.client.StatusResponseHandler.createStatusResponseHandler;
 import static com.proofpoint.http.client.StringResponseHandler.createStringResponseHandler;
@@ -68,7 +67,6 @@ import static org.testng.Assert.assertEquals;
 public class TestServer
 {
     private static final JsonCodec<Object> OBJECT_CODEC = JsonCodec.jsonCodec(Object.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper(new SmileFactory()).disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     private static final Object TESTING_SINGLE_EVENT_STRUCTURE = ImmutableList.of(
             ImmutableMap.of(
                     "type", "Test",
@@ -169,18 +167,10 @@ public class TestServer
             throws IOException, ExecutionException, InterruptedException
     {
         StatusResponse response = client.execute(preparePost()
-                .setUri(urlFor("/v2/event"))
-                .setHeader("Content-Type", "application/x-jackson-smile")
-                .setBodyGenerator(new BodyGenerator()
-                {
-                    @Override
-                    public void write(OutputStream outputStream)
-                            throws Exception
-                    {
-                        MAPPER.writeValue(outputStream, TESTING_SINGLE_EVENT_STRUCTURE);
-                    }
-                })
-                .build(),
+                        .setUri(urlFor("/v2/event"))
+                        .setHeader("Content-Type", "application/x-jackson-smile")
+                        .setBodyGenerator(smileBodyGenerator(OBJECT_CODEC, TESTING_SINGLE_EVENT_STRUCTURE))
+                        .build(),
                 createStatusResponseHandler());
 
         assertEquals(response.getStatusCode(), Status.ACCEPTED.getStatusCode());
@@ -248,15 +238,7 @@ public class TestServer
         StatusResponse response = client.execute(preparePost()
                         .setUri(urlFor("/v2/event/distribute"))
                         .setHeader("Content-Type", "application/x-jackson-smile")
-                        .setBodyGenerator(new BodyGenerator()
-                        {
-                            @Override
-                            public void write(OutputStream outputStream)
-                                    throws Exception
-                            {
-                                MAPPER.writeValue(outputStream, TESTING_SINGLE_EVENT_STRUCTURE);
-                            }
-                        })
+                        .setBodyGenerator(smileBodyGenerator(OBJECT_CODEC, TESTING_SINGLE_EVENT_STRUCTURE))
                         .build(),
                 createStatusResponseHandler());
 

@@ -62,6 +62,22 @@ public class ServerConfig
     private Duration retryPeriod = new Duration(5, TimeUnit.MINUTES);
     private Duration retryDelay = new Duration(0, TimeUnit.MINUTES);
     private String combinerGroupId = "default";
+    private String serviceType = "collector";
+
+
+    @NotNull
+    public String getServiceType()
+    {
+        return serviceType;
+    }
+
+    @Config("collector.service-type")
+    @ConfigDescription("Name of service to announce into discover service, defaults to 'collector'")
+    public ServerConfig setServiceType(String serviceType)
+    {
+        this.serviceType = serviceType;
+        return this;
+    }
 
     @NotNull
     public Set<String> getAcceptedEventTypes()

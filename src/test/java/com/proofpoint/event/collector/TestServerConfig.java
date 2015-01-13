@@ -61,6 +61,7 @@ public class TestServerConfig
                 .setRetryPeriod(new Duration(5, TimeUnit.MINUTES))
                 .setRetryDelay(new Duration(0, TimeUnit.MINUTES))
                 .setCombinerGroupId("default")
+                .setServiceType("collector")
         );
     }
 
@@ -89,6 +90,7 @@ public class TestServerConfig
                 .put("collector.retry-period", "10m")
                 .put("collector.retry-delay", "4m")
                 .put("collector.combiner.group-id", "someGroupId")
+                .put("collector.service-type", "collector-at1")
                 .build();
 
         ServerConfig expected = new ServerConfig()
@@ -112,7 +114,8 @@ public class TestServerConfig
                 .setCombinerLowPriorityEventTypes(ImmutableSet.of("TypeC", "TypeD"))
                 .setRetryPeriod(new Duration(10, TimeUnit.MINUTES))
                 .setRetryDelay(new Duration(4, TimeUnit.MINUTES))
-                .setCombinerGroupId("someGroupId");
+                .setCombinerGroupId("someGroupId")
+                .setServiceType("collector-at1");
 
         ConfigAssertions.assertFullMapping(properties, expected);
     }

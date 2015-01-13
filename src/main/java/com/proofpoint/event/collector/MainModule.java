@@ -22,11 +22,10 @@ import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.google.inject.Binder;
-import com.google.inject.Key;
-import com.google.inject.Module;
-import com.google.inject.Provides;
-import com.google.inject.Scopes;
+import com.google.inject.*;
+import com.proofpoint.discovery.client.announce.AnnouncementHttpServerInfo;
+import com.proofpoint.discovery.client.announce.ServiceAnnouncement;
+import com.proofpoint.discovery.client.announce.ServiceAnnouncement.ServiceAnnouncementBuilder;
 import com.proofpoint.event.client.EventClient;
 import com.proofpoint.event.collector.combiner.CombineCompleted;
 import com.proofpoint.event.collector.combiner.CombineObjectMetadataStore;
@@ -92,7 +91,7 @@ public class MainModule
 
         reportBinder(binder).bindReportCollection(S3UploaderStats.class).as(new ObjectNameBuilder(S3UploaderStats.class.getPackage().getName()).withProperty("type", "S3Uploader").build());
 
-        discoveryBinder(binder).bindHttpAnnouncement("collector");
+        discoveryBinder(binder).bindServiceAnnouncement(CollectorHttpAnnouncementProvider.class);
     }
 
     @Provides
@@ -189,5 +188,39 @@ public class MainModule
     private Ticker providesTicker()
     {
         return Ticker.systemTicker();
+    }
+
+
+    static class CollectorHttpAnnouncementProvider implements Provider<ServiceAnnouncement>
+    {
+        private final String serviceType;
+        private AnnouncementHttpServerInfo httpServerInfo;
+
+        @Inject
+        CollectorHttpAnnouncementProvider(ServerConfig config)
+        {
+            this.serviceType = config.getServiceType();
+        }
+
+        @Inject
+        public void setAnnouncementHttpServerInfo(AnnouncementHttpServerInfo httpServerInfo)
+        {
+            this.httpServerInfo = httpServerInfo;
+        }
+
+        @Override
+        public ServiceAnnouncement get()
+        {
+            ServiceAnnouncementBuilder builder = ServiceAnnouncement.serviceAnnouncement(serviceType);
+
+            if (httpServerInfo.getHttpUri() != null) {
+                builder.addProperty("http", httpServerInfo.getHttpUri().toString());
+                builder.addProperty("http-external", httpServerInfo.getHttpExternalUri().toString());
+            }
+            if (httpServerInfo.getHttpsUri() != null) {
+                builder.addProperty("https", httpServerInfo.getHttpsUri().toString());
+            }
+            return builder.build();
+        }
     }
 }

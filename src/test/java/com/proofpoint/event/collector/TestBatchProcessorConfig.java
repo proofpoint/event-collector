@@ -17,9 +17,11 @@ package com.proofpoint.event.collector;
 
 import com.google.common.collect.ImmutableMap;
 import com.proofpoint.configuration.testing.ConfigAssertions;
+import org.apache.bval.constraints.NotEmpty;
 import org.testng.annotations.Test;
 
 import javax.validation.constraints.Min;
+import javax.validation.constraints.NotNull;
 import java.util.Map;
 
 import static com.proofpoint.configuration.testing.ConfigAssertions.assertRecordedDefaults;
@@ -33,7 +35,9 @@ public class TestBatchProcessorConfig
     {
         assertRecordedDefaults(recordDefaults(BatchProcessorConfig.class)
                 .setMaxBatchSize(1000)
-                .setQueueSize(40000));
+                        .setQueueSize(250000)
+                        .setDataDirectory(".")
+        );
     }
 
     @Test
@@ -42,11 +46,13 @@ public class TestBatchProcessorConfig
         Map<String, String> properties = new ImmutableMap.Builder<String, String>()
                 .put("collector.event-tap.batch-size-max", "17")
                 .put("collector.event-tap.queue-size", "977")
+                .put("collector.event-tap.data-directory", "data")
                 .build();
 
         BatchProcessorConfig expected = new BatchProcessorConfig()
                 .setMaxBatchSize(17)
-                .setQueueSize(977);
+                .setQueueSize(977)
+                .setDataDirectory("data");
 
         ConfigAssertions.assertFullMapping(properties, expected);
     }
@@ -61,5 +67,12 @@ public class TestBatchProcessorConfig
     void testQueueSizeValidation()
     {
         assertFailsValidation(new BatchProcessorConfig().setQueueSize(0), "queueSize", "must be greater than or equal to 1", Min.class);
+    }
+
+    @Test
+    void testDataDirectoryValidation()
+    {
+        assertFailsValidation(new BatchProcessorConfig().setDataDirectory(""), "dataDirectory", "may not be empty", NotEmpty.class);
+        assertFailsValidation(new BatchProcessorConfig().setDataDirectory(null), "dataDirectory", "may not be null", NotNull.class);
     }
 }

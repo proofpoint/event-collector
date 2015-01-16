@@ -30,6 +30,8 @@ import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.FlowPolicy;
 import com.proofpoint.event.collector.EventTapWriter.FlowInfo.Builder;
 import com.proofpoint.event.collector.StaticEventTapConfig.FlowKey;
+import com.proofpoint.event.collector.queue.Queue;
+import com.proofpoint.event.collector.queue.QueueFactory;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 import org.weakref.jmx.Managed;
@@ -48,7 +50,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.google.common.base.Objects.firstNonNull;
+import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static com.proofpoint.event.collector.QosDelivery.RETRY;
@@ -83,6 +85,7 @@ public class EventTapWriter implements EventWriter
 
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
+    private final QueueFactory queueFactory;
 
     @Inject
     public EventTapWriter(@ServiceType("eventTap") ServiceSelector selector,
@@ -90,7 +93,8 @@ public class EventTapWriter implements EventWriter
             BatchProcessorFactory batchProcessorFactory,
             EventTapFlowFactory eventTapFlowFactory,
             EventTapConfig config,
-            StaticEventTapConfig staticEventTapConfig)
+            StaticEventTapConfig staticEventTapConfig,
+            QueueFactory queueFactory)
     {
         this.staticTapSpecs = createTapSpecFromConfig(checkNotNull(staticEventTapConfig, "staticEventTapConfig is null"));
         this.selector = checkNotNull(selector, "selector is null");
@@ -99,6 +103,7 @@ public class EventTapWriter implements EventWriter
         this.allowHttpConsumers = config.isAllowHttpConsumers();
         this.batchProcessorFactory = checkNotNull(batchProcessorFactory, "batchProcessorFactory is null");
         this.eventTapFlowFactory = checkNotNull(eventTapFlowFactory, "eventTapFlowFactory is null");
+        this.queueFactory = checkNotNull(queueFactory, "queueFactory is null");
     }
 
     @PostConstruct
@@ -225,6 +230,7 @@ public class EventTapWriter implements EventWriter
     }
 
     private EventTypePolicy constructPolicyForFlows(EventTypePolicy existingPolicy, String eventType, Map<String, FlowInfo> flows)
+            throws IOException
     {
         EventTypePolicy.Builder policyBuilder = EventTypePolicy.builder();
 
@@ -247,7 +253,9 @@ public class EventTapWriter implements EventWriter
                     eventTapFlow = eventTapFlowFactory.createEventTapFlow(eventType, flowId, destinations);
                 }
                 log.debug("  -> made flow with destinations %s", destinations);
-                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), eventTapFlow);
+
+                Queue<Event> queue = queueFactory.create(flowId);
+                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), eventTapFlow, queue);
                 policyBuilder.addFlowPolicy(flowId, batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled);
                 batchProcessor.start();
             }

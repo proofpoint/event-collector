@@ -16,10 +16,17 @@
 package com.proofpoint.event.collector;
 
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
+import com.proofpoint.event.collector.queue.Queue;
+import com.proofpoint.event.collector.queue.QueueFactory;
+import com.proofpoint.reporting.ReportExporter;
+import com.proofpoint.testing.FileUtils;
 import org.joda.time.DateTime;
+import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -35,65 +42,99 @@ import static org.testng.Assert.fail;
 
 public class TestAsyncBatchProcessor
 {
+    private static final String DATA_DIRECTORY = "target/queue/events";
+
     private BatchHandler<Event> handler;
+    private BatchProcessorConfig config;
+    private Queue<Event> queue;
+    private QueueFactory queueFactory;
+    private ReportExporter mockReporter;
 
     @BeforeMethod
     public void setup()
+            throws IOException
     {
+        FileUtils.deleteRecursively(new File(DATA_DIRECTORY));
+
+        config = new BatchProcessorConfig().setDataDirectory(DATA_DIRECTORY);
         handler = mock(BatchHandler.class);
+        mockReporter = mock(ReportExporter.class);
+        queueFactory = new QueueFactory(config, mockReporter);
+        queue = queueFactory.create("queue");
+    }
+
+    @AfterMethod
+    public void tearDown()
+            throws IOException
+    {
+        queue.close();
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "name is null")
     public void testConstructorNullName()
+            throws IOException
     {
-        new AsyncBatchProcessor(null, handler, new BatchProcessorConfig());
+        new AsyncBatchProcessor<>(null, handler, new BatchProcessorConfig(), queue);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "handler is null")
     public void testConstructorNullHandler()
+            throws IOException
     {
-        new AsyncBatchProcessor("name", null, new BatchProcessorConfig());
+        new AsyncBatchProcessor<>("name", null, new BatchProcessorConfig(), queue);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
+            throws IOException
     {
-        new AsyncBatchProcessor("name", handler, null);
+        new AsyncBatchProcessor<>("name", handler, null, queue);
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "queue is null")
+    public void testConstructorNullQueueFactory()
+            throws IOException
+    {
+        new AsyncBatchProcessor<>("name", handler, new BatchProcessorConfig(), null);
     }
 
     @Test
     public void testEnqueue()
             throws Exception
     {
+        config.setMaxBatchSize(100).setQueueSize(100);
         BatchProcessor<Event> processor = new AsyncBatchProcessor<>(
-                "foo", handler, new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100)
-        );
+                "foo", handler, config, queueFactory.create("queue"));
         processor.start();
 
-        processor.put(event("foo"));
-        processor.put(event("foo"));
-        processor.put(event("foo"));
+        try {
+            processor.put(event("foo"));
+            processor.put(event("foo"));
+            processor.put(event("foo"));
+        }
+        finally {
+            processor.stop();
+        }
     }
 
     @Test
     public void testFullQueue()
             throws Exception
     {
+        config.setMaxBatchSize(100).setQueueSize(1);
         BlockingBatchHandler blockingHandler = blockingHandler();
         BatchProcessor<Event> processor = new AsyncBatchProcessor<>(
-                "foo", blockingHandler, new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(1)
-        );
-
+                "foo", blockingHandler, config, new QueueFactory(config, mockReporter).create("queue"));
         processor.start();
 
         blockingHandler.lock();
         try {
             // This will be processed, and its processing will block the handler
             processor.put(event("foo"));
-            assertEquals(blockingHandler.getDroppedEntries(), 0);
 
             // Wait for the handler to pick up the item from the queue
             assertTrue(blockingHandler.waitForProcessor(10));
+            assertEquals(blockingHandler.getDroppedEntries(), 0);
 
             // This will remain in the queue because the processing
             // thread has not yet been resumed
@@ -107,17 +148,19 @@ public class TestAsyncBatchProcessor
         finally {
             blockingHandler.resumeProcessor();
             blockingHandler.unlock();
+            processor.stop();
+            queue.close();
         }
     }
 
     @Test
     public void testContinueOnHandlerException()
-            throws InterruptedException
+            throws InterruptedException, IOException
     {
-        BlockingBatchHandler blockingHandler = blockingHandlerThatThrowsException(new RuntimeException());
+        config.setMaxBatchSize(100).setQueueSize(100);
+        BlockingBatchHandler blockingHandler = blockingHandlerThatThrowsException(new RuntimeException("Expected Exception"));
         BatchProcessor<Event> processor = new AsyncBatchProcessor<>(
-                "foo", blockingHandler, new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100)
-        );
+                "foo", blockingHandler, config, new QueueFactory(config, mockReporter).create("queue"));
 
         processor.start();
 
@@ -126,7 +169,6 @@ public class TestAsyncBatchProcessor
             processor.put(event("foo"));
 
             assertTrue(blockingHandler.waitForProcessor(10));
-            assertEquals(blockingHandler.getCallsToProcessBatch(), 1);
         }
         finally {
             blockingHandler.resumeProcessor();
@@ -139,22 +181,22 @@ public class TestAsyncBatchProcessor
         try {
             processor.put(event("bar"));
             assertTrue(blockingHandler.waitForProcessor(10));
-            assertEquals(blockingHandler.getCallsToProcessBatch(), 2);
         }
         finally {
             blockingHandler.resumeProcessor();
             blockingHandler.unlock();
+            processor.stop();
         }
     }
 
     @Test
     public void testStopsWhenStopCalled()
-            throws InterruptedException
+            throws InterruptedException, IOException
     {
+        config.setMaxBatchSize(100).setQueueSize(100);
         BlockingBatchHandler blockingHandler = blockingHandler();
         BatchProcessor<Event> processor = new AsyncBatchProcessor<>(
-                "foo", blockingHandler, new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100)
-        );
+                "foo", blockingHandler, config, new QueueFactory(config, mockReporter).create("queue"));
 
         processor.start();
 
@@ -182,12 +224,12 @@ public class TestAsyncBatchProcessor
 
     @Test
     public void testIgnoresExceptionsInHandler()
-            throws InterruptedException
+            throws InterruptedException, IOException
     {
-        BlockingBatchHandler blockingHandler = blockingHandlerThatThrowsException(new NullPointerException());
+        config.setMaxBatchSize(100).setQueueSize(100);
+        BlockingBatchHandler blockingHandler = blockingHandlerThatThrowsException(new NullPointerException("Expected Exception"));
         BatchProcessor<Event> processor = new AsyncBatchProcessor<>(
-                "foo", blockingHandler, new BatchProcessorConfig().setMaxBatchSize(100).setQueueSize(100)
-        );
+                "foo", blockingHandler, config, new QueueFactory(config, mockReporter).create("queue"));
         processor.start();
 
         blockingHandler.lock();
@@ -199,7 +241,6 @@ public class TestAsyncBatchProcessor
         finally {
             blockingHandler.unlock();
         }
-        assertEquals(blockingHandler.getCallsToProcessBatch(), 1);
 
         blockingHandler.lock();
         try {
@@ -209,8 +250,8 @@ public class TestAsyncBatchProcessor
         }
         finally {
             blockingHandler.unlock();
+            processor.stop();
         }
-        assertEquals(blockingHandler.getCallsToProcessBatch(), 2);
     }
 
     private static Event event(String type)
@@ -248,7 +289,6 @@ public class TestAsyncBatchProcessor
         private final Condition internalCondition = lock.newCondition();
         private final Runnable onProcess;
         private long droppedEntries = 0;
-        private long callsToProcessBatch = 0;
 
         public BlockingBatchHandler(Runnable onProcess)
         {
@@ -260,15 +300,17 @@ public class TestAsyncBatchProcessor
         {
             // Wait for the right time to run
             lock.lock();
-            callsToProcessBatch += 1;
             try {
                 // Signal that we've started running
-                externalCondition.signal();
-                try {
-                    // Block
-                    internalCondition.await();
-                }
-                catch (InterruptedException ignored) {
+                if (entries.size() > 0) {
+                    externalCondition.signal();
+
+                    try {
+                        // Block
+                        internalCondition.await();
+                    }
+                    catch (InterruptedException ignored) {
+                    }
                 }
                 onProcess.run();
             }
@@ -306,12 +348,8 @@ public class TestAsyncBatchProcessor
 
         public long getDroppedEntries()
         {
-            return droppedEntries;
-        }
 
-        public long getCallsToProcessBatch()
-        {
-            return callsToProcessBatch;
+            return droppedEntries;
         }
     }
 }

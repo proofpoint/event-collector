@@ -16,15 +16,15 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.proofpoint.event.collector.queue.Queue;
 import com.proofpoint.log.Logger;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
+import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -36,20 +36,23 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
     private static final Logger log = Logger.get(AsyncBatchProcessor.class);
     private final BatchHandler<T> handler;
     private final int maxBatchSize;
-    private final BlockingQueue<T> queue;
+    private final Queue<T> queue;
     private final ExecutorService executor;
     private final AtomicReference<Future<?>> future = new AtomicReference<>();
 
-    public AsyncBatchProcessor(String name, BatchHandler<T> handler, BatchProcessorConfig config)
+    public AsyncBatchProcessor(String name, BatchHandler<T> handler, BatchProcessorConfig config, Queue<T> queue)
     {
         checkNotNull(name, "name is null");
         checkNotNull(handler, "handler is null");
+        checkNotNull(queue, "queue is null");
 
         this.handler = handler;
+        this.queue = queue;
         this.maxBatchSize = checkNotNull(config, "config is null").getMaxBatchSize();
-        this.queue = new ArrayBlockingQueue<>(config.getQueueSize());
-
         this.executor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat(format("batch-processor-%s", name)).build());
+
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+        executor.schedule(new FileCleaner(), 1, TimeUnit.MINUTES);
     }
 
     @Override
@@ -61,17 +64,8 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
             public void run()
             {
                 while (!Thread.interrupted()) {
-                    final List<T> entries = new ArrayList<>(maxBatchSize);
-
                     try {
-                        T first = queue.take();
-                        entries.add(first);
-                        queue.drainTo(entries, maxBatchSize - 1);
-
-                        handler.processBatch(entries);
-                    }
-                    catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
+                        handler.processBatch(queue.dequeue(maxBatchSize));
                     }
                     catch (Exception e) {
                         log.error(e, "error occurred during batch processing");
@@ -86,6 +80,12 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
     {
         future.get().cancel(true);
         executor.shutdownNow();
+        try {
+            queue.close();
+        }
+        catch (IOException e) {
+            log.error(e, "Could not close queue");
+        }
     }
 
     @Override
@@ -93,10 +93,29 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
     {
         checkState(future.get() != null && !future.get().isCancelled(), "Processor is not running");
         checkNotNull(entry, "entry is null");
-
-        if (!queue.offer(entry)) {
-            // queue is full: drop current message
+        try {
+            if (!queue.offer(entry)) {
+                // queue is full: drop current message
+                handler.notifyEntriesDropped(1);
+            }
+        }
+        catch (IOException e) {
             handler.notifyEntriesDropped(1);
+            log.error(e, "failed to add entry");
+        }
+    }
+
+    private class FileCleaner implements Runnable
+    {
+        @Override
+        public void run()
+        {
+            try {
+                queue.clean();
+            }
+            catch (IOException e) {
+                log.error(e, "Could not remove old queue files.");
+            }
         }
     }
 }

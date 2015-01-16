@@ -13,12 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.proofpoint.event.collector;
+package com.proofpoint.event.collector.queue;
 
-import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
-import com.proofpoint.event.collector.queue.Queue;
-
-public interface BatchProcessorFactory
+public class QueueFullException extends Exception
 {
-    public BatchProcessor<Event> createBatchProcessor(String name, BatchHandler<Event> batchHandler, Queue<Event> queue);
+    public QueueFullException(String message)
+    {
+        super(message);
+    }
 }

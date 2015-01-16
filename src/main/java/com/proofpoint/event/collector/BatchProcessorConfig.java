@@ -17,13 +17,31 @@ package com.proofpoint.event.collector;
 
 import com.proofpoint.configuration.Config;
 import com.proofpoint.configuration.ConfigDescription;
+import org.apache.bval.constraints.NotEmpty;
 
 import javax.validation.constraints.Min;
+import javax.validation.constraints.NotNull;
 
 public class BatchProcessorConfig
 {
     private int maxBatchSize = 1000;
-    private int queueSize = 40000;
+    private int queueSize = 250000;
+    private String dataDirectory = ".";
+
+    @NotNull
+    @NotEmpty
+    public String getDataDirectory()
+    {
+        return dataDirectory;
+    }
+
+    @Config("collector.event-tap.data-directory")
+    @ConfigDescription("The path to where cached data is stored")
+    public BatchProcessorConfig setDataDirectory(String dataDirectory)
+    {
+        this.dataDirectory = dataDirectory;
+        return this;
+    }
 
     @Min(1)
     public int getMaxBatchSize()

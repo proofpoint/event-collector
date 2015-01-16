@@ -26,7 +26,10 @@ import com.proofpoint.discovery.client.ServiceState;
 import com.proofpoint.discovery.client.testing.StaticServiceSelector;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.StaticEventTapConfig.FlowKey;
+import com.proofpoint.event.collector.queue.Queue;
+import com.proofpoint.event.collector.queue.QueueFactory;
 import com.proofpoint.log.Logger;
+import com.proofpoint.reporting.ReportExporter;
 import com.proofpoint.testing.SerialScheduledExecutorService;
 import org.joda.time.DateTime;
 import org.testng.annotations.BeforeMethod;
@@ -43,12 +46,14 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import static com.google.common.base.Objects.firstNonNull;
+import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Strings.nullToEmpty;
 import static com.proofpoint.event.collector.EventTapWriter.EVENT_TYPE_PROPERTY_NAME;
 import static com.proofpoint.event.collector.EventTapWriter.FLOW_ID_PROPERTY_NAME;
 import static com.proofpoint.event.collector.EventTapWriter.HTTP_PROPERTY_NAME;
 import static com.proofpoint.event.collector.QosDelivery.RETRY;
+import static java.lang.String.format;
+import static java.util.UUID.randomUUID;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -59,8 +64,6 @@ import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertTrue;
-import static java.lang.String.format;
-import static java.util.UUID.randomUUID;
 
 public class TestEventTapWriter
 {
@@ -117,10 +120,12 @@ public class TestEventTapWriter
     private Multimap<List<String>, MockEventTapFlow> qosEventTapFlows;
     private EventTapConfig eventTapConfig;
     private EventTapWriter eventTapWriter;
+    private QueueFactory queueFactory;
 
     @BeforeMethod
     public void setup()
     {
+        ReportExporter reportExporter = mock(ReportExporter.class);
         serviceSelector = new StaticServiceSelector(ImmutableSet.<ServiceDescriptor>of());
         currentProcessors = ImmutableMap.of();
         executorService = new SerialScheduledExecutorService();
@@ -130,41 +135,48 @@ public class TestEventTapWriter
         qosEventTapFlows = LinkedListMultimap.create();     // Insertion order per-key matters
         eventTapConfig = new EventTapConfig();
         serviceSelector = mock(ServiceSelector.class);
+        queueFactory = new QueueFactory(new BatchProcessorConfig().setDataDirectory("target"), reportExporter);
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig, new StaticEventTapConfig());
+                eventTapConfig, new StaticEventTapConfig(), queueFactory);
         eventTapWriter.start();
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "selector is null")
     public void testConstructorNullSelector()
     {
-        new EventTapWriter(null, executorService, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig(), new StaticEventTapConfig());
+        new EventTapWriter(null, executorService, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig(), new StaticEventTapConfig(), queueFactory);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "executorService is null")
     public void testConstructorNullExecutorService()
     {
-        new EventTapWriter(serviceSelector, null, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig(), new StaticEventTapConfig());
+        new EventTapWriter(serviceSelector, null, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig(), new StaticEventTapConfig(), queueFactory);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "batchProcessorFactory is null")
     public void testConstructorNullBatchProcessorFactory()
     {
-        new EventTapWriter(serviceSelector, executorService, null, eventTapFlowFactory, new EventTapConfig(), new StaticEventTapConfig());
+        new EventTapWriter(serviceSelector, executorService, null, eventTapFlowFactory, new EventTapConfig(), new StaticEventTapConfig(), queueFactory);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "eventTapFlowFactory is null")
     public void testConstructorNullEventTapFlowFactory()
     {
-        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, null, new EventTapConfig(), new StaticEventTapConfig());
+        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, null, new EventTapConfig(), new StaticEventTapConfig(), queueFactory);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "config is null")
     public void testConstructorNullConfig()
     {
-        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, eventTapFlowFactory, null, new StaticEventTapConfig());
+        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, eventTapFlowFactory, null, new StaticEventTapConfig(), queueFactory);
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "queueFactory is null")
+    public void testConstructorNullQueueFactory()
+    {
+        new EventTapWriter(serviceSelector, executorService, batchProcessorFactory, eventTapFlowFactory, new EventTapConfig(), new StaticEventTapConfig(), null);
     }
 
     @Test
@@ -790,10 +802,11 @@ public class TestEventTapWriter
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig, new StaticEventTapConfig());
+                eventTapConfig, new StaticEventTapConfig(),
+                queueFactory);
         eventTapWriter.start();
 
-        updateThenRefreshFlowsThenCheck(ImmutableList.<ServiceDescriptor>of(tapA, tapB), ImmutableList.<ServiceDescriptor>of());
+        updateThenRefreshFlowsThenCheck(ImmutableList.of(tapA, tapB), ImmutableList.<ServiceDescriptor>of());
     }
 
     @Test
@@ -812,7 +825,8 @@ public class TestEventTapWriter
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig, staticEventTapConfig);
+                eventTapConfig, staticEventTapConfig,
+                queueFactory);
         eventTapWriter.start();
 
         writeEvents(eventsA[0], eventsB[0]);
@@ -837,7 +851,8 @@ public class TestEventTapWriter
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig, staticEventTapConfig);
+                eventTapConfig, staticEventTapConfig,
+                queueFactory);
         eventTapWriter.start();
 
         writeEvents(eventsA[0], eventsB[0]);
@@ -862,7 +877,8 @@ public class TestEventTapWriter
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig, staticEventTapConfig);
+                eventTapConfig, staticEventTapConfig,
+                queueFactory);
         eventTapWriter.start();
 
         writeEvents(eventsA[0], eventsB[0]);
@@ -885,7 +901,8 @@ public class TestEventTapWriter
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig, staticEventTapConfig);
+                eventTapConfig, staticEventTapConfig,
+                queueFactory);
         eventTapWriter.start();
 
         updateThenRefreshFlowsThenCheck(tapA1b);
@@ -911,7 +928,8 @@ public class TestEventTapWriter
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig, staticEventTapConfig);
+                eventTapConfig, staticEventTapConfig,
+                queueFactory);
         eventTapWriter.start();
 
         updateThenRefreshFlowsThenCheck(ImmutableList.of(tapB1), ImmutableList.of(tapA1, tapB1));
@@ -937,7 +955,8 @@ public class TestEventTapWriter
         eventTapWriter = new EventTapWriter(
                 serviceSelector, executorService,
                 batchProcessorFactory, eventTapFlowFactory,
-                eventTapConfig, staticEventTapConfig);
+                eventTapConfig, staticEventTapConfig,
+                queueFactory);
         eventTapWriter.start();
 
         updateThenRefreshFlowsThenCheck(ImmutableList.of(tapA2), ImmutableList.of(tapA1, tapA2));
@@ -988,7 +1007,7 @@ public class TestEventTapWriter
         for (ServiceDescriptor tap : taps) {
             String processorName = extractProcessorName(tap);
             boolean qos = nullToEmpty(tap.getProperties().get("qos.delivery")).equalsIgnoreCase("retry");
-            boolean existingQos = firstNonNull(result.get(processorName), Boolean.valueOf(false));
+            boolean existingQos = firstNonNull(result.get(processorName), false);
             result.put(processorName, existingQos | qos);
         }
         return ImmutableMap.copyOf(result);
@@ -996,7 +1015,7 @@ public class TestEventTapWriter
 
     private void recordExpectedProcessorDiscards(String processorName)
     {
-        int current = firstNonNull(expectedBatchProcessorDiscards.get(processorName), Integer.valueOf(0));
+        int current = firstNonNull(expectedBatchProcessorDiscards.get(processorName), 0);
         expectedBatchProcessorDiscards.put(processorName, current + 1);
     }
 
@@ -1042,7 +1061,7 @@ public class TestEventTapWriter
 
         for (ServiceDescriptor tap : tapsAsList) {
             String processorName = extractProcessorName(tap);
-            int expectedDiscards = firstNonNull(expectedBatchProcessorDiscards.get(processorName), Integer.valueOf(0));
+            int expectedDiscards = firstNonNull(expectedBatchProcessorDiscards.get(processorName), 0);
             assertTrue(batchProcessors.containsKey(processorName), format("no processor created for %s", processorName));
 
             List<MockBatchProcessor<Event>> processors = ImmutableList.copyOf(batchProcessors.get(processorName));
@@ -1063,7 +1082,7 @@ public class TestEventTapWriter
         // For all non-active processors, make sure they have been stopped.
         for (Entry<String, Collection<MockBatchProcessor<Event>>> entry : batchProcessors.asMap().entrySet()) {
             String processorName = entry.getKey();
-            int expectedDiscards = firstNonNull(expectedBatchProcessorDiscards.get(processorName), Integer.valueOf(0));
+            int expectedDiscards = firstNonNull(expectedBatchProcessorDiscards.get(processorName), 0);
             ServiceDescriptor tap = null;
             for (ServiceDescriptor t : tapsAsList) {
                 if (processorName.equals(extractProcessorName(t))) {
@@ -1196,10 +1215,10 @@ public class TestEventTapWriter
     private class MockBatchProcessorFactory implements BatchProcessorFactory
     {
         @Override
-        public <T> BatchProcessor<T> createBatchProcessor(String name, BatchHandler<T> batchHandler)
+        public BatchProcessor<Event> createBatchProcessor(String name, BatchHandler<Event> batchHandler, Queue<Event> queue)
         {
             Logger.get(EventTapWriter.class).error("Create Batch Processor %s", name);
-            MockBatchProcessor batchProcessor = new MockBatchProcessor(name, batchHandler);
+            MockBatchProcessor<Event> batchProcessor = new MockBatchProcessor<>(name, batchHandler);
             batchProcessors.put(name, batchProcessor);
             return batchProcessor;
         }

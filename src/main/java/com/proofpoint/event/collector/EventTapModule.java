@@ -20,6 +20,8 @@ import com.google.inject.Binder;
 import com.google.inject.Key;
 import com.google.inject.Module;
 import com.google.inject.Provides;
+import com.proofpoint.event.collector.queue.QueueFactory;
+import org.weakref.jmx.ObjectNameBuilder;
 
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -29,8 +31,8 @@ import static com.proofpoint.configuration.ConfigurationModule.bindConfig;
 import static com.proofpoint.discovery.client.DiscoveryBinder.discoveryBinder;
 import static com.proofpoint.http.client.HttpClientBinder.httpClientBinder;
 import static com.proofpoint.json.JsonCodecBinder.jsonCodecBinder;
-import static org.weakref.jmx.guice.ExportBinder.newExporter;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
+import static org.weakref.jmx.guice.ExportBinder.newExporter;
 
 public class EventTapModule implements Module
 {
@@ -48,6 +50,11 @@ public class EventTapModule implements Module
         binder.bind(EventTapFlowFactory.class).to(HttpEventTapFlowFactory.class);
         binder.bind(HttpEventTapFlowFactory.class).in(SINGLETON);
         binder.bind(EventTapWriter.class).in(SINGLETON);
+        binder.bind(QueueFactory.class).in(SINGLETON);
+
+        String metricNamePrefix = new ObjectNameBuilder(this.getClass().getPackage().getName())
+                .withProperty("type", "EventCollector.EventTap.Queue")
+                .build();
 
         httpClientBinder(binder).bindHttpClient("EventTap", EventTap.class);
 

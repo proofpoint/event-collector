@@ -17,16 +17,19 @@ package com.proofpoint.event.collector;
 
 import com.proofpoint.configuration.Config;
 import com.proofpoint.configuration.ConfigDescription;
+import com.proofpoint.units.Duration;
 import org.apache.bval.constraints.NotEmpty;
 
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
+import java.util.concurrent.TimeUnit;
 
 public class BatchProcessorConfig
 {
     private int maxBatchSize = 1000;
     private int queueSize = 250000;
     private String dataDirectory = ".";
+    private Duration throttleTime = new Duration(2, TimeUnit.SECONDS);
 
     @NotNull
     @NotEmpty
@@ -40,6 +43,20 @@ public class BatchProcessorConfig
     public BatchProcessorConfig setDataDirectory(String dataDirectory)
     {
         this.dataDirectory = dataDirectory;
+        return this;
+    }
+
+    @NotNull
+    public Duration getThrottleTime()
+    {
+        return throttleTime;
+    }
+
+    @Config("collector.event-tap.throttle-time")
+    @ConfigDescription("The delay between each time a batch of join events is sent")
+    public BatchProcessorConfig setThrottleTime(Duration throttleTime)
+    {
+        this.throttleTime = throttleTime;
         return this;
     }
 

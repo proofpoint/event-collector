@@ -156,13 +156,6 @@ public class FileBackedQueue<T> implements Queue<T>
     }
 
     @Override
-    public void clean()
-            throws IOException
-    {
-        queue.gc();
-    }
-
-    @Override
     public void removeAll()
             throws IOException
     {

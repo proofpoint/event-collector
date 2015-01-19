@@ -78,14 +78,6 @@ public interface Queue<T> extends Closeable
             throws IOException;
 
     /**
-     * Cleans up resources.
-     *
-     * @throws IOException failed to clean
-     */
-    void clean()
-            throws IOException;
-
-    /**
      * Empties the queue.
      *
      * @throws IOException failed to remove items

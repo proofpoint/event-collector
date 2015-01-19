@@ -20,6 +20,7 @@ import com.proofpoint.event.collector.queue.Queue;
 import com.proofpoint.event.collector.queue.QueueFactory;
 import com.proofpoint.reporting.ReportExporter;
 import com.proofpoint.testing.FileUtils;
+import com.proofpoint.units.Duration;
 import org.joda.time.DateTime;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
@@ -56,7 +57,7 @@ public class TestAsyncBatchProcessor
     {
         FileUtils.deleteRecursively(new File(DATA_DIRECTORY));
 
-        config = new BatchProcessorConfig().setDataDirectory(DATA_DIRECTORY);
+        config = new BatchProcessorConfig().setDataDirectory(DATA_DIRECTORY).setThrottleTime(new Duration(10, TimeUnit.MILLISECONDS));
         handler = mock(BatchHandler.class);
         mockReporter = mock(ReportExporter.class);
         queueFactory = new QueueFactory(config, mockReporter);
@@ -96,6 +97,13 @@ public class TestAsyncBatchProcessor
             throws IOException
     {
         new AsyncBatchProcessor<>("name", handler, new BatchProcessorConfig(), null);
+    }
+
+    @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "throttle time is null")
+    public void testConstructorNullThrottleTime()
+            throws IOException
+    {
+        new AsyncBatchProcessor<>("name", handler, new BatchProcessorConfig().setThrottleTime(null), queue);
     }
 
     @Test

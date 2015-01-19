@@ -17,12 +17,14 @@ package com.proofpoint.event.collector;
 
 import com.google.common.collect.ImmutableMap;
 import com.proofpoint.configuration.testing.ConfigAssertions;
+import com.proofpoint.units.Duration;
 import org.apache.bval.constraints.NotEmpty;
 import org.testng.annotations.Test;
 
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static com.proofpoint.configuration.testing.ConfigAssertions.assertRecordedDefaults;
 import static com.proofpoint.configuration.testing.ConfigAssertions.recordDefaults;
@@ -37,6 +39,7 @@ public class TestBatchProcessorConfig
                 .setMaxBatchSize(1000)
                         .setQueueSize(250000)
                         .setDataDirectory(".")
+                        .setThrottleTime(new Duration(2, TimeUnit.SECONDS))
         );
     }
 
@@ -47,12 +50,14 @@ public class TestBatchProcessorConfig
                 .put("collector.event-tap.batch-size-max", "17")
                 .put("collector.event-tap.queue-size", "977")
                 .put("collector.event-tap.data-directory", "data")
+                .put("collector.event-tap.throttle-time", "4m")
                 .build();
 
         BatchProcessorConfig expected = new BatchProcessorConfig()
                 .setMaxBatchSize(17)
                 .setQueueSize(977)
-                .setDataDirectory("data");
+                .setDataDirectory("data")
+                .setThrottleTime(new Duration(4, TimeUnit.MINUTES));
 
         ConfigAssertions.assertFullMapping(properties, expected);
     }
@@ -74,5 +79,11 @@ public class TestBatchProcessorConfig
     {
         assertFailsValidation(new BatchProcessorConfig().setDataDirectory(""), "dataDirectory", "may not be empty", NotEmpty.class);
         assertFailsValidation(new BatchProcessorConfig().setDataDirectory(null), "dataDirectory", "may not be null", NotNull.class);
+    }
+
+    @Test
+    void testThrottleTimeValidation()
+    {
+        assertFailsValidation(new BatchProcessorConfig().setThrottleTime(null), "throttleTime", "may not be null", NotNull.class);
     }
 }

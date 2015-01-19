@@ -53,7 +53,7 @@ public class BatchProcessorConfig
     }
 
     @Config("collector.event-tap.throttle-time")
-    @ConfigDescription("The delay between each time a batch of join events is sent")
+    @ConfigDescription("The delay between each time a batch of events is sent")
     public BatchProcessorConfig setThrottleTime(Duration throttleTime)
     {
         this.throttleTime = throttleTime;

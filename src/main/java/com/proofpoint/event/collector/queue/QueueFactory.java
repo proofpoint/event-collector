@@ -37,6 +37,7 @@ public class QueueFactory
     private final BatchProcessorConfig config;
     private final ReportExporter reportExporter;
     private final Map<String, Queue<Event>> map;
+    private final Object lock = new Object();
 
     @Inject
     public QueueFactory(BatchProcessorConfig config, ReportExporter reportExporter)
@@ -52,12 +53,16 @@ public class QueueFactory
     {
         checkArgument(name != null && !name.isEmpty(), "name is null or empty");
 
-        Queue<Event> queue = map.get(name);
-        if (queue == null) {
-            queue = new FileBackedQueue<>(name, config.getDataDirectory(), EVENT_CODEC, config.getQueueSize());
-            setupQueueMetric(name, queue);
-            map.put(name, queue);
+        Queue<Event> queue;
+        synchronized (lock) {
+            queue = map.get(name);
+            if (queue == null) {
+                queue = new FileBackedQueue<>(name, config.getDataDirectory(), EVENT_CODEC, config.getQueueSize());
+                setupQueueMetric(name, queue);
+                map.put(name, queue);
+            }
         }
+
         return queue;
     }
 

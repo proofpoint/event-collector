@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.proofpoint.event</groupId>
     <artifactId>event-collector</artifactId>
-    <version>1.15.2-SNAPSHOT</version>
+    <version>1.15.2015.2101.1048.47-0</version>
 
     <name>event-collector</name>
     <description>Event collector</description>

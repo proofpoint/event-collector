@@ -17,16 +17,16 @@
 package com.proofpoint.event.collector;
 
 import com.proofpoint.reporting.Key;
-import com.proofpoint.stats.CounterStat;
-import com.proofpoint.stats.TimeStat;
+import com.proofpoint.stats.SparseCounterStat;
+import com.proofpoint.stats.SparseTimeStat;
 
 public interface S3UploaderStats
 {
-    CounterStat processedFiles(@Key("eventType") String eventType, @Key("status") FileProcessedStatus status);
+    SparseCounterStat processedFiles(@Key("eventType") String eventType, @Key("status") FileProcessedStatus status);
 
-    TimeStat processedTime(@Key("eventType") String eventType);
+    SparseTimeStat processedTime(@Key("eventType") String eventType);
 
-    CounterStat uploadAttempts(@Key("eventType") String eventType, @Key("status") FileUploadStatus status);
+    SparseCounterStat uploadAttempts(@Key("eventType") String eventType, @Key("status") FileUploadStatus status);
 
     public enum FileProcessedStatus
     {

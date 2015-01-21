@@ -17,18 +17,18 @@
 package com.proofpoint.event.collector;
 
 import com.proofpoint.reporting.Key;
-import com.proofpoint.stats.CounterStat;
+import com.proofpoint.stats.SparseCounterStat;
 
 import java.net.URI;
 
 public interface EventCollectorStats
 {
     // EventCollector.IncomingEvents.Count (Tags: eventType=blah, eventStatus=valid)
-    CounterStat inboundEvents(@Key("eventType") String eventType, @Key("eventStatus") EventStatus eventStatus, @Key("processType") ProcessType processType);
+    SparseCounterStat inboundEvents(@Key("eventType") String eventType, @Key("eventStatus") EventStatus eventStatus, @Key("processType") ProcessType processType);
 
-    CounterStat outboundEvents(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("outboundStatus") Status status);
+    SparseCounterStat outboundEvents(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("outboundStatus") Status status);
 
-    CounterStat outboundEvents(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("uri") URI uri, @Key("outboundStatus") Status status);
+    SparseCounterStat outboundEvents(@Key("eventType") String eventType, @Key("flowId") String flowId, @Key("uri") URI uri, @Key("outboundStatus") Status status);
 
     public enum Status
     {

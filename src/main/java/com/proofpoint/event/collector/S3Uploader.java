@@ -25,7 +25,7 @@ import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
-import com.proofpoint.stats.TimeStat.BlockTimer;
+import com.proofpoint.stats.SparseTimeStat;
 import com.proofpoint.units.Duration;
 import org.iq80.snappy.SnappyInputStream;
 
@@ -168,7 +168,7 @@ public class S3Uploader
                 file.getName());
         StoredObject target = new StoredObject(location);
 
-        try (BlockTimer ignored = s3UploaderStats.processedTime(partition.getEventType()).time()) {
+        try (SparseTimeStat.BlockTimer ignored = s3UploaderStats.processedTime(partition.getEventType()).time()) {
             storageSystem.putObject(target.getLocation(), file);
         }
 

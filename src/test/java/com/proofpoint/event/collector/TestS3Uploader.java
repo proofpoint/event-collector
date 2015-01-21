@@ -24,8 +24,8 @@ import com.proofpoint.event.collector.combiner.CombinedStoredObject;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
 import com.proofpoint.reporting.testing.TestingReportCollectionFactory;
-import com.proofpoint.stats.CounterStat;
-import com.proofpoint.stats.TimeStat;
+import com.proofpoint.stats.SparseCounterStat;
+import com.proofpoint.stats.SparseTimeStat;
 import com.proofpoint.testing.SerialScheduledExecutorService;
 import com.proofpoint.units.Duration;
 import org.testng.annotations.BeforeMethod;
@@ -146,9 +146,9 @@ public class TestS3Uploader
         verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
 
         S3UploaderStats s3UploaderStatsReportCollection = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class);
-        CounterStat processedFilesCounterStat = s3UploaderStatsReportCollection.processedFiles(ARBITRARY_EVENT_TYPE, UPLOADED);
-        CounterStat uploadAttemptsCounterStat = s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, SUCCESS);
-        TimeStat processedTimeTimerStat = s3UploaderStatsReportCollection.processedTime(ARBITRARY_EVENT_TYPE);
+        SparseCounterStat processedFilesCounterStat = s3UploaderStatsReportCollection.processedFiles(ARBITRARY_EVENT_TYPE, UPLOADED);
+        SparseCounterStat uploadAttemptsCounterStat = s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, SUCCESS);
+        SparseTimeStat processedTimeTimerStat = s3UploaderStatsReportCollection.processedTime(ARBITRARY_EVENT_TYPE);
         verify(processedFilesCounterStat).add(1);
         verify(uploadAttemptsCounterStat).add(1);
         verify(processedTimeTimerStat).time();
@@ -175,7 +175,7 @@ public class TestS3Uploader
         verify(s3UploaderStatsArgumentVerifier).processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT);
         verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
 
-        CounterStat processedFilesCounterStat = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT);
+        SparseCounterStat processedFilesCounterStat = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT);
         verify(processedFilesCounterStat).add(1);
         verifyNoMoreInteractions(processedFilesCounterStat);
     }
@@ -198,7 +198,7 @@ public class TestS3Uploader
         verify(s3UploaderStatsArgumentVerifier).processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT);
         verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
 
-        CounterStat processedFilesCounterStat = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT);
+        SparseCounterStat processedFilesCounterStat = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class).processedFiles(UNKNOWN_EVENT_TYPE, CORRUPT);
         verify(processedFilesCounterStat).add(1);
         verifyNoMoreInteractions(processedFilesCounterStat);
     }
@@ -263,8 +263,8 @@ public class TestS3Uploader
         verifyNoMoreInteractions(s3UploaderStatsArgumentVerifier);
 
         S3UploaderStats s3UploaderStatsReportCollection = testingReportCollectionFactory.getReportCollection(S3UploaderStats.class);
-        CounterStat uploadAttemptsCounterStat = s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, FAILURE);
-        TimeStat processedTimeTimerStat = s3UploaderStatsReportCollection.processedTime(ARBITRARY_EVENT_TYPE);
+        SparseCounterStat uploadAttemptsCounterStat = s3UploaderStatsReportCollection.uploadAttempts(ARBITRARY_EVENT_TYPE, FAILURE);
+        SparseTimeStat processedTimeTimerStat = s3UploaderStatsReportCollection.processedTime(ARBITRARY_EVENT_TYPE);
         verify(uploadAttemptsCounterStat).add(1);
         verify(processedTimeTimerStat).time();
         verifyNoMoreInteractions(uploadAttemptsCounterStat);

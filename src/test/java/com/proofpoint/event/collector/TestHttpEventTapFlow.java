@@ -22,7 +22,7 @@ import com.proofpoint.http.client.BodyGenerator;
 import com.proofpoint.http.client.Request;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.reporting.testing.TestingReportCollectionFactory;
-import com.proofpoint.stats.CounterStat;
+import com.proofpoint.stats.SparseCounterStat;
 import com.proofpoint.units.Duration;
 import org.joda.time.DateTime;
 import org.mockito.ArgumentCaptor;
@@ -44,6 +44,11 @@ import static com.proofpoint.event.collector.EventCollectorStats.Status.DELIVERE
 import static com.proofpoint.event.collector.EventCollectorStats.Status.DROPPED;
 import static com.proofpoint.event.collector.EventCollectorStats.Status.LOST;
 import static com.proofpoint.event.collector.EventCollectorStats.Status.REJECTED;
+import static java.lang.String.format;
+import static java.net.URI.create;
+import static java.util.UUID.randomUUID;
+import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
+import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -51,11 +56,6 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertNotEquals;
 import static org.testng.Assert.assertTrue;
-import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
-import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
-import static java.lang.String.format;
-import static java.net.URI.create;
-import static java.util.UUID.randomUUID;
 
 public class TestHttpEventTapFlow
 {
@@ -392,7 +392,7 @@ public class TestHttpEventTapFlow
         verifyNoMoreInteractions(argumentVerifier);
 
         EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
-        CounterStat counterStat = reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, uriArgumentCaptor.getValue(), DELIVERED);
+        SparseCounterStat counterStat = reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, uriArgumentCaptor.getValue(), DELIVERED);
         verify(counterStat).add(events.size());
         verifyNoMoreInteractions(counterStat);
     }
@@ -409,7 +409,7 @@ public class TestHttpEventTapFlow
         verifyNoMoreInteractions(argumentVerifier);
 
         EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
-        CounterStat counterStat = reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, LOST);
+        SparseCounterStat counterStat = reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, LOST);
         verify(counterStat).add(events.size());
         verifyNoMoreInteractions(counterStat);
     }
@@ -426,7 +426,7 @@ public class TestHttpEventTapFlow
         verifyNoMoreInteractions(argumentVerifier);
 
         EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
-        CounterStat counterStat = reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, LOST);
+        SparseCounterStat counterStat = reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, LOST);
         verify(counterStat).add(events.size());
         verifyNoMoreInteractions(counterStat);
     }
@@ -443,7 +443,7 @@ public class TestHttpEventTapFlow
         verifyNoMoreInteractions(argumentVerifier);
 
         EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
-        CounterStat counterStat = reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, uriArgumentCaptor.getValue(), REJECTED);
+        SparseCounterStat counterStat = reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, uriArgumentCaptor.getValue(), REJECTED);
         verify(counterStat).add(events.size());
         verifyNoMoreInteractions(counterStat);
     }
@@ -458,7 +458,7 @@ public class TestHttpEventTapFlow
         verifyNoMoreInteractions(argumentVerifier);
 
         EventCollectorStats reportCollection = testingReportCollectionFactory.getReportCollection(EventCollectorStats.class);
-        CounterStat counterStat = reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, DROPPED);
+        SparseCounterStat counterStat = reportCollection.outboundEvents(ARBITRARY_EVENT_TYPE, ARBITRARY_FLOW_ID, DROPPED);
         verify(counterStat).add(10);
         verifyNoMoreInteractions(counterStat);
     }

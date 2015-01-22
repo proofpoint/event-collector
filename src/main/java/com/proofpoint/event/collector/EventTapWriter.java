@@ -254,7 +254,7 @@ public class EventTapWriter implements EventWriter
                 }
                 log.debug("  -> made flow with destinations %s", destinations);
 
-                Queue<Event> queue = queueFactory.create(flowId);
+                Queue<Event> queue = queueFactory.create(createBatchProcessorName(eventType, flowId));
                 BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), eventTapFlow, queue);
                 policyBuilder.addFlowPolicy(flowId, batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled);
                 batchProcessor.start();

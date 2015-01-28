@@ -16,7 +16,8 @@
 package com.proofpoint.event.collector.queue;
 
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableList.Builder;
 import com.leansoft.bigqueue.BigQueueImpl;
 import com.leansoft.bigqueue.IBigQueue;
 import com.proofpoint.json.JsonCodec;
@@ -47,6 +48,7 @@ public class FileBackedQueue<T> implements Queue<T>
 
     private final AtomicLong itemsEnqueued = new AtomicLong(0);
     private final AtomicLong itemsDequeued = new AtomicLong(0);
+    private final AtomicLong itemsDroppped = new AtomicLong(0);
 
     public FileBackedQueue(String name, String dataDirectory, JsonCodec<T> codec, long capacity)
             throws IOException
@@ -73,13 +75,19 @@ public class FileBackedQueue<T> implements Queue<T>
     @Reported
     public long getItemsEnqueued()
     {
-        return itemsEnqueued.get();
+        return itemsEnqueued.getAndSet(0);// Reset every time the metric is called
     }
 
     @Reported
     public long getItemsDequeued()
     {
-        return itemsDequeued.get();
+        return itemsDequeued.getAndSet(0); // Reset every time the metric is called
+    }
+
+    @Reported
+    public long getItemsDropped()
+    {
+        return itemsDroppped.getAndSet(0); // Reset every time the metric is called
     }
 
     @Override
@@ -111,6 +119,7 @@ public class FileBackedQueue<T> implements Queue<T>
     {
         checkNotNull(item, "item is null");
         if (queue.size() >= capacity) {
+            itemsDroppped.getAndAdd(1);
             throw new QueueFullException("queue is full");
         }
 
@@ -132,22 +141,23 @@ public class FileBackedQueue<T> implements Queue<T>
     public List<T> dequeue(int numItems)
             throws IOException
     {
-        checkArgument(numItems > 0, "chunk size must be greater than zero");
-        List<T> items = Lists.newArrayList();
+        checkArgument(numItems > 0, "numItems must be greater than zero");
+
+        Builder<T> builder = new Builder<>();
         int chunks = 0;
         while (chunks < numItems) {
             byte[] item = queue.dequeue();
             if (item == null) {
                 break;
             }
-            items.add(codec.fromJson(item));
+            builder.add(codec.fromJson(item));
             chunks++;
         }
 
+        ImmutableList<T> items = builder.build();
         itemsDequeued.getAndAdd(items.size());
         return items;
     }
-
     @Override
     public void close()
             throws IOException

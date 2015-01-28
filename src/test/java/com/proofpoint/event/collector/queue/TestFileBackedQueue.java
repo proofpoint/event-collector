@@ -42,7 +42,7 @@ public class TestFileBackedQueue
 
     private static final JsonCodec<String> EVENT_CODEC = jsonCodec(String.class).withoutPretty();
     private static final String DATA_DIRECTORY = "target/queue";
-    private Queue<String> queue;
+    private FileBackedQueue<String> queue;
 
     @BeforeMethod
     public void setup()
@@ -115,8 +115,8 @@ public class TestFileBackedQueue
         queue.enqueueAll(null);
     }
 
-    @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "chunk size must be greater than zero")
-    public void testDequeueChuckSizeLessThanOneFails()
+    @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "numItems must be greater than zero")
+    public void testDequeueNumItemsLessThanOneFails()
             throws IOException
     {
         queue.dequeue(0);
@@ -133,6 +133,9 @@ public class TestFileBackedQueue
         List<String> take = queue.dequeue(3);
 
         assertEquals(take.size(), 3);
+        assertEquals(queue.getItemsEnqueued(), 3);
+        assertEquals(queue.getItemsDequeued(), 3);
+        assertEquals(queue.getSize(), 0);
         assertEquals(take, ImmutableList.of("foo", "fi", "bar"));
     }
 
@@ -145,6 +148,9 @@ public class TestFileBackedQueue
         List<String> take = queue.dequeue(3);
 
         assertEquals(take.size(), 3);
+        assertEquals(queue.getItemsEnqueued(), 3);
+        assertEquals(queue.getItemsDequeued(), 3);
+        assertEquals(queue.getSize(), 0);
         assertEquals(take, ImmutableList.of("foo", "fi", "bar"));
 
         take = queue.dequeue(3);
@@ -161,11 +167,16 @@ public class TestFileBackedQueue
         List<String> take = queue.dequeue(3);
 
         assertEquals(take.size(), 3);
+        assertEquals(queue.getItemsEnqueued(), 5);
+        assertEquals(queue.getItemsDequeued(), 3);
+        assertEquals(queue.getSize(), 2);
         assertEquals(take, ImmutableList.of("foo", "fi", "bar"));
 
         take = queue.dequeue(3);
 
         assertEquals(take.size(), 2);
+        assertEquals(queue.getItemsDequeued(), 2);
+        assertEquals(queue.getSize(), 0);
         assertEquals(take, ImmutableList.of("fum", "far"));
     }
 
@@ -179,6 +190,8 @@ public class TestFileBackedQueue
 
         queue.removeAll();
 
+        assertEquals(queue.getItemsEnqueued(), 5);
+        assertEquals(queue.getItemsDequeued(), 0);
         assertEquals(queue.getSize(), 0);
     }
 
@@ -212,7 +225,7 @@ public class TestFileBackedQueue
             fail("expected QueueFullException");
         }
         catch (QueueFullException e) {
-            assertTrue(true);
+            assertEquals(queue.getItemsDropped(), 1);
         }
     }
 
@@ -230,10 +243,11 @@ public class TestFileBackedQueue
             fail("expected QueueFullException");
         }
         catch (QueueFullException e) {
-            assertTrue(true);
+            assertEquals(queue.getItemsDropped(), 1);
         }
 
         assertEquals(queue.getSize(), 3);
+        assertEquals(queue.getItemsEnqueued(), 3);
     }
 
     @Test

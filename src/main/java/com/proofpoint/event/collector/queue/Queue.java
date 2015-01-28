@@ -64,7 +64,7 @@ public interface Queue<T> extends Closeable
      *
      * @param numItems maximum number of items to return
      * @return items returns
-     * @throws IOException could not deserialize an item
+     * @throws IOException failed to dequeue items
      */
     List<T> dequeue(int numItems)
             throws IOException;

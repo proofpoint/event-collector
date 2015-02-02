@@ -30,7 +30,6 @@ import java.util.List;
 
 import static com.proofpoint.json.JsonCodec.jsonCodec;
 import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.fail;
 import static org.testng.AssertJUnit.assertFalse;
 import static org.testng.AssertJUnit.assertTrue;
 
@@ -103,16 +102,16 @@ public class TestFileBackedQueue
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "item is null")
     public void testAddItemNullFails()
-            throws IOException, QueueFullException
+            throws IOException
     {
-        queue.enqueue(null);
+        queue.enqueueOrDrop(null);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "items are null")
     public void testAddItemsNullFails()
-            throws IOException, QueueFullException
+            throws IOException
     {
-        queue.enqueueAll(null);
+        queue.enqueueAllOrDrop(null);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "numItems must be greater than zero")
@@ -124,11 +123,11 @@ public class TestFileBackedQueue
 
     @Test
     public void testQueueDequeueIndividual()
-            throws IOException, QueueFullException
+            throws IOException
     {
-        queue.enqueue("foo");
-        queue.enqueue("fi");
-        queue.enqueue("bar");
+        queue.enqueueOrDrop("foo");
+        queue.enqueueOrDrop("fi");
+        queue.enqueueOrDrop("bar");
 
         List<String> take = queue.dequeue(3);
 
@@ -136,20 +135,22 @@ public class TestFileBackedQueue
         assertEquals(queue.getItemsEnqueued(), 3);
         assertEquals(queue.getItemsDequeued(), 3);
         assertEquals(queue.getSize(), 0);
+        assertEquals(queue.getItemsDropped(), 0);
         assertEquals(take, ImmutableList.of("foo", "fi", "bar"));
     }
 
     @Test
     public void testQueueDequeueList()
-            throws IOException, QueueFullException
+            throws IOException
     {
-        queue.enqueueAll(ImmutableList.of("foo", "fi", "bar"));
+        queue.enqueueAllOrDrop(ImmutableList.of("foo", "fi", "bar"));
 
         List<String> take = queue.dequeue(3);
 
         assertEquals(take.size(), 3);
         assertEquals(queue.getItemsEnqueued(), 3);
         assertEquals(queue.getItemsDequeued(), 3);
+        assertEquals(queue.getItemsDropped(), 0);
         assertEquals(queue.getSize(), 0);
         assertEquals(take, ImmutableList.of("foo", "fi", "bar"));
 
@@ -160,9 +161,9 @@ public class TestFileBackedQueue
 
     @Test
     public void testDequeueChunkSize()
-            throws IOException, QueueFullException
+            throws IOException
     {
-        queue.enqueueAll(ImmutableList.of("foo", "fi", "bar", "fum", "far"));
+        queue.enqueueAllOrDrop(ImmutableList.of("foo", "fi", "bar", "fum", "far"));
 
         List<String> take = queue.dequeue(3);
 
@@ -178,13 +179,14 @@ public class TestFileBackedQueue
         assertEquals(queue.getItemsDequeued(), 2);
         assertEquals(queue.getSize(), 0);
         assertEquals(take, ImmutableList.of("fum", "far"));
+        assertEquals(queue.getItemsDropped(), 0);
     }
 
     @Test
     public void testRemoveAll()
-            throws IOException, QueueFullException
+            throws IOException
     {
-        queue.enqueueAll(ImmutableList.of("foo", "fi", "bar", "fum", "far"));
+        queue.enqueueAllOrDrop(ImmutableList.of("foo", "fi", "bar", "fum", "far"));
 
         assertEquals(queue.getSize(), 5);
 
@@ -193,11 +195,12 @@ public class TestFileBackedQueue
         assertEquals(queue.getItemsEnqueued(), 5);
         assertEquals(queue.getItemsDequeued(), 0);
         assertEquals(queue.getSize(), 0);
+        assertEquals(queue.getItemsDropped(), 0);
     }
 
     @Test
     public void testOfferQueueFull()
-            throws IOException, QueueFullException
+            throws IOException
     {
         queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, 3);
 
@@ -205,49 +208,42 @@ public class TestFileBackedQueue
         assertTrue(queue.offer("fi"));
         assertTrue(queue.offer("fo"));
         assertFalse(queue.offer("fum"));
+        assertEquals(queue.getItemsEnqueued(), 3);
+        assertEquals(queue.getItemsDequeued(), 0);
+        assertEquals(queue.getItemsDropped(), 0);
     }
 
     @Test
     public void testEnqueueQueueFull()
-            throws IOException, QueueFullException
+            throws IOException
     {
         queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, 3);
 
-        queue.enqueue("foo");
-        queue.enqueue("fi");
-        queue.enqueue("fo");
+        queue.enqueueOrDrop("foo");
+        queue.enqueueOrDrop("fi");
+        queue.enqueueOrDrop("fo");
 
-        try {
-            queue.enqueue("fum");
-            fail("expected QueueFullException");
-        }
-        catch (IOException e) {
-            fail("expected QueueFullException");
-        }
-        catch (QueueFullException e) {
-            assertEquals(queue.getItemsDropped(), 1);
-        }
+        boolean enqueued = queue.enqueueOrDrop("fum");
+
+        assertFalse(enqueued);
+        assertEquals(queue.getItemsEnqueued(), 3);
+        assertEquals(queue.getItemsDequeued(), 0);
+        assertEquals(queue.getItemsDropped(), 1);
     }
 
     @Test
     public void testEnqueueAllQueueFull()
-            throws IOException, QueueFullException
+            throws IOException
     {
         queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, 3);
 
-        try {
-            queue.enqueueAll(ImmutableList.of("foo", "fi", "bar", "fum", "far"));
-            fail("expected QueueFullException");
-        }
-        catch (IOException e) {
-            fail("expected QueueFullException");
-        }
-        catch (QueueFullException e) {
-            assertEquals(queue.getItemsDropped(), 1);
-        }
+        List<String> enqueued = queue.enqueueAllOrDrop(ImmutableList.of("foo", "fi", "bar", "fum", "far"));
 
+        assertEquals(enqueued, ImmutableList.of("foo", "fi", "bar"));
         assertEquals(queue.getSize(), 3);
         assertEquals(queue.getItemsEnqueued(), 3);
+        assertEquals(queue.getItemsDequeued(), 0);
+        assertEquals(queue.getItemsDropped(), 2);
     }
 
     @Test
@@ -306,9 +302,9 @@ public class TestFileBackedQueue
         {
             for (int i = 0; i < itemCount; i++) {
                 try {
-                    queue.enqueue(i + "");
+                    queue.enqueueOrDrop(i + "");
                 }
-                catch (IOException | QueueFullException e) {
+                catch (IOException e) {
                     e.printStackTrace();
                 }
             }

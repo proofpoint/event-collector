@@ -75,7 +75,7 @@ public class FileBackedQueue<T> implements Queue<T>
     @Reported
     public long getItemsEnqueued()
     {
-        return itemsEnqueued.getAndSet(0);// Reset every time the metric is called
+        return itemsEnqueued.getAndSet(0); // Reset every time the metric is called
     }
 
     @Reported
@@ -114,27 +114,34 @@ public class FileBackedQueue<T> implements Queue<T>
     }
 
     @Override
-    public void enqueue(T item)
-            throws IOException, QueueFullException
+    public boolean enqueueOrDrop(T item)
+            throws IOException
     {
         checkNotNull(item, "item is null");
         if (queue.size() >= capacity) {
             itemsDroppped.getAndAdd(1);
-            throw new QueueFullException("queue is full");
+            return false;
         }
 
         queue.enqueue(codec.toJson(item).getBytes("UTF-8"));
         itemsEnqueued.getAndAdd(1);
+        return true;
     }
 
     @Override
-    public void enqueueAll(List<T> items)
-            throws IOException, QueueFullException
+    public List<T> enqueueAllOrDrop(List<T> items)
+            throws IOException
     {
         checkNotNull(items, "items are null");
+
+        Builder<T> builder = new Builder<>();
         for (T item : items) {
-            enqueue(item);
+            if (enqueueOrDrop(item)) {
+                builder.add(item);
+            }
         }
+
+        return builder.build();
     }
 
     @Override
@@ -158,6 +165,7 @@ public class FileBackedQueue<T> implements Queue<T>
         itemsDequeued.getAndAdd(items.size());
         return items;
     }
+
     @Override
     public void close()
             throws IOException

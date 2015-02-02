@@ -40,24 +40,26 @@ public interface Queue<T> extends Closeable
             throws IOException;
 
     /**
-     * Inserts the item at the tail of this queue.
+     * Inserts the item at the tail of this queue if the queue is not full. If full, the item
+     * is discarded.
      *
      * @param item item to add
+     * @return true if the item was enqueued
      * @throws IOException could not serialize item
-     * @throws QueueFullException if the queue is at capacity
      */
-    void enqueue(T item)
-            throws IOException, QueueFullException;
+    boolean enqueueOrDrop(T item)
+            throws IOException;
 
     /**
-     * Inserts the items at the tail of this queue.
+     * Inserts the items at the tail of this queue if the queue is not full.
+     * If full, items are discarded.
      *
      * @param items items to add
+     * @return the items that were enqueued
      * @throws IOException could not serialize an item
-     * @throws QueueFullException if the queue is at capacity
      */
-    void enqueueAll(List<T> items)
-            throws IOException, QueueFullException;
+    List<T> enqueueAllOrDrop(List<T> items)
+            throws IOException;
 
     /**
      * Returns up to chunkSize items from the front of the queue.

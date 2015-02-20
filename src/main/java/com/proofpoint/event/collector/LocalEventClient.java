@@ -47,8 +47,9 @@ public class LocalEventClient
         this.objectMapper = checkNotNull(objectMapper, "objectMapper");
     }
 
+    @SafeVarargs
     @Override
-    public <T> ListenableFuture<Void> post(T... event)
+    public final <T> ListenableFuture<Void> post(T... event)
     {
         checkNotNull(event, "event");
         return post(Arrays.asList(event));

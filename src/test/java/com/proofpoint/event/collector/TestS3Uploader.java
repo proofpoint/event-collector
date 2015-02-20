@@ -15,7 +15,7 @@
  */
 package com.proofpoint.event.collector;
 
-import com.google.common.base.Objects;
+import com.google.common.base.MoreObjects;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.io.Files;
@@ -327,7 +327,7 @@ public class TestS3Uploader
 
         public int getAttempts(File file)
         {
-            return Objects.firstNonNull(retryCounts.get(file.getName()), 0);
+            return MoreObjects.firstNonNull(retryCounts.get(file.getName()), 0);
         }
 
         @Override

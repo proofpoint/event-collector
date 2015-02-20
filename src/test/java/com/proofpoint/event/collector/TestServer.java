@@ -138,7 +138,7 @@ public class TestServer
         StatusResponse response = client.execute(preparePost()
                 .setUri(urlFor("/v2/event"))
                 .setHeader("Content-Type", APPLICATION_JSON)
-                .setBodyGenerator(createStaticBodyGenerator(json, Charsets.UTF_8))
+                        .setBodySource(createStaticBodyGenerator(json, Charsets.UTF_8))
                 .build(),
                 createStatusResponseHandler());
 
@@ -153,7 +153,7 @@ public class TestServer
         StatusResponse response = client.execute(
                 preparePost().setUri(urlFor("/v2/event"))
                         .setHeader("Content-Type", APPLICATION_JSON)
-                        .setBodyGenerator(createStaticBodyGenerator(json.getBytes(Charsets.UTF_8)))
+                        .setBodySource(createStaticBodyGenerator(json.getBytes(Charsets.UTF_8)))
                         .build(),
                 createStatusResponseHandler());
 
@@ -194,7 +194,7 @@ public class TestServer
         StatusResponse response = client.execute(preparePost()
                 .setUri(urlFor("/v2/event/distribute"))
                 .setHeader("Content-Type", APPLICATION_JSON)
-                .setBodyGenerator(createStaticBodyGenerator(json, Charsets.UTF_8))
+                        .setBodySource(createStaticBodyGenerator(json, Charsets.UTF_8))
                 .build(),
                 createStatusResponseHandler());
 

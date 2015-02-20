@@ -15,6 +15,7 @@
  */
 package com.proofpoint.event.collector;
 
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
@@ -103,7 +104,7 @@ public class StaticEventTapConfig
         @Override
         public String toString()
         {
-            return Objects.toStringHelper(this)
+            return MoreObjects.toStringHelper(this)
                     .add("eventType", eventType)
                     .add("flowId", flowId)
                     .toString();

@@ -16,6 +16,7 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableSet;
@@ -27,7 +28,7 @@ import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 import java.util.Set;
 
-import static com.google.common.base.Preconditions.*;
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.nullToEmpty;
 import static com.proofpoint.event.collector.QosDelivery.BEST_EFFORT;
 
@@ -99,7 +100,7 @@ public class PerFlowStaticEventTapConfig
     @Override
     public String toString()
     {
-        return Objects.toStringHelper(this)
+        return MoreObjects.toStringHelper(this)
                 .add("qosDelivery", qosDelivery)
                 .add("uris", uris)
                 .toString();

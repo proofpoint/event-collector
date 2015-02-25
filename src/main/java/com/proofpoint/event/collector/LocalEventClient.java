@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.proofpoint.event.client.EventClient;
 import com.proofpoint.event.client.JsonEventSerializer;
+import com.proofpoint.log.Logger;
 
 import javax.inject.Inject;
 import java.io.IOException;
@@ -32,6 +33,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public class LocalEventClient
         implements EventClient
 {
+    private static final Logger logger = Logger.get(LocalEventClient.class);
+
     private final Set<EventWriter> eventWriters;
     private final JsonEventSerializer eventSerializer;
     private final ObjectMapper objectMapper;
@@ -44,8 +47,9 @@ public class LocalEventClient
         this.objectMapper = checkNotNull(objectMapper, "objectMapper");
     }
 
+    @SafeVarargs
     @Override
-    public <T> ListenableFuture<Void> post(T... event)
+    public final <T> ListenableFuture<Void> post(T... event)
     {
         checkNotNull(event, "event");
         return post(Arrays.asList(event));
@@ -55,47 +59,41 @@ public class LocalEventClient
     public <T> ListenableFuture<Void> post(final Iterable<T> events)
     {
         checkNotNull(events, "events");
-        return post(new EventGenerator<T>()
-        {
-            @Override
-            public void generate(EventPoster<T> eventPoster)
-                    throws IOException
-            {
-                for (T event : events) {
-                    eventPoster.post(event);
+        Throwable throwable = null;
+        for (T event : events) {
+            for (EventWriter eventWriter : eventWriters) {
+                try {
+                    eventWriter.write(serializeEvent(event));
+                }
+                catch (IOException e) {
+                    logger.debug("Failed to serialize event %s: %s", event, e.getMessage());
+                    if (throwable == null) {
+                        throwable = e;
+                    }
+                    else {
+                        throwable.addSuppressed(e);
+                    }
                 }
             }
-        });
+        }
+
+        if (throwable != null) {
+            return Futures.immediateFailedFuture(throwable);
+        }
+
+        return Futures.immediateFuture(null);
     }
 
     @Override
     public <T> ListenableFuture<Void> post(EventGenerator<T> eventGenerator)
     {
-        checkNotNull(eventGenerator, "eventGenerator");
-        try {
-            eventGenerator.generate(new EventPoster<T>()
-            {
-                @Override
-                public void post(T event)
-                        throws IOException
-                {
-                    checkNotNull(event, "event");
-                    for (EventWriter eventWriter : eventWriters) {
-                        eventWriter.write(serializeEvent(event));
-                    }
-                }
-            });
-        }
-        catch (IOException e) {
-            return Futures.immediateFailedFuture(new RuntimeException(e));
-        }
-        return Futures.immediateFuture(null);
+        throw new UnsupportedOperationException();
     }
 
     private <T> Event serializeEvent(T event)
             throws IOException
     {
-        TokenBuffer tokenBuffer = new TokenBuffer(objectMapper);
+        TokenBuffer tokenBuffer = new TokenBuffer(objectMapper, false);
         eventSerializer.serialize(event, null, tokenBuffer);
         return objectMapper.readValue(tokenBuffer.asParser(), Event.class);
     }

@@ -25,7 +25,8 @@ import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.google.common.base.Objects.firstNonNull;
+import static com.google.common.base.MoreObjects.firstNonNull;
+
 
 @Beta
 public class EventCounters<K>
@@ -97,7 +98,7 @@ public class EventCounters<K>
     {
         ImmutableMap.Builder<String, CounterState> builder = ImmutableMap.builder();
 
-        for(Entry<String, Counter> entry : counters.entrySet()) {
+        for (Entry<String, Counter> entry : counters.entrySet()) {
             builder.put(entry.getKey(), entry.getValue().getState());
         }
 

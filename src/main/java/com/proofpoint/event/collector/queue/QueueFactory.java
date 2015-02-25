@@ -68,7 +68,7 @@ public class QueueFactory
 
     private void setupQueueMetric(String flowId, Queue<Event> queue)
     {
-        String metricName = new ObjectNameBuilder("com.proofpoint.event.colllector")
+        String metricName = new ObjectNameBuilder("com.proofpoint.event.collector")
                 .withProperty("type", "EventCollector")
                 .withProperty("name", "Queue")
                 .withProperty("flowId", flowId)

@@ -45,11 +45,11 @@ import static com.proofpoint.event.collector.EventCollectorStats.Status.DROPPED;
 import static com.proofpoint.event.collector.EventCollectorStats.Status.LOST;
 import static com.proofpoint.event.collector.EventCollectorStats.Status.REJECTED;
 import static com.proofpoint.http.client.JsonBodyGenerator.jsonBodyGenerator;
+import static java.lang.String.format;
+import static java.lang.Thread.sleep;
 import static javax.ws.rs.core.Response.Status.Family.CLIENT_ERROR;
 import static javax.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static javax.ws.rs.core.Response.Status.fromStatusCode;
-import static java.lang.String.format;
-import static java.lang.Thread.sleep;
 
 class HttpEventTapFlow implements EventTapFlow
 {
@@ -173,7 +173,7 @@ class HttpEventTapFlow implements EventTapFlow
         Request.Builder requestBuilder = Request.builder().preparePost()
                 .setUri(uri)
                 .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
-                .setBodyGenerator(jsonBodyGenerator(eventsCodec, entries));
+                .setBodySource(jsonBodyGenerator(eventsCodec, entries));
 
         final boolean firstBatch = unestablishedTaps.remove(uri);
         if (firstBatch) {

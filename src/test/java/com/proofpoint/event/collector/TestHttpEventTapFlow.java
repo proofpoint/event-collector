@@ -18,8 +18,8 @@ package com.proofpoint.event.collector;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.proofpoint.http.client.BodyGenerator;
 import com.proofpoint.http.client.Request;
+import com.proofpoint.http.client.testing.BodySourceTester;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.reporting.testing.TestingReportCollectionFactory;
 import com.proofpoint.stats.SparseCounterStat;
@@ -39,7 +39,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import static com.google.common.base.Objects.firstNonNull;
+import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.proofpoint.event.collector.EventCollectorStats.Status.DELIVERED;
 import static com.proofpoint.event.collector.EventCollectorStats.Status.DROPPED;
 import static com.proofpoint.event.collector.EventCollectorStats.Status.LOST;
@@ -151,10 +151,9 @@ public class TestHttpEventTapFlow
         assertEquals(requests.size(), 1);
 
         Request request = requests.get(0);
-        BodyGenerator bodyGenerator = request.getBodyGenerator();
         assertTrue(taps.contains(request.getUri()));
 
-        bodyGenerator.write(byteArrayOutputStream);
+        BodySourceTester.writeBodySourceTo(request.getBodySource(), byteArrayOutputStream);
         assertEquals(byteArrayOutputStream.toString(), EVENT_LIST_JSON_CODEC.toJson(events));
 
         assertEquals(request.getHeaders().get(CONTENT_TYPE), ImmutableList.of(APPLICATION_JSON));
@@ -215,10 +214,9 @@ public class TestHttpEventTapFlow
         assertEquals(requests.size(), 1);
 
         Request request = requests.get(0);
-        BodyGenerator bodyGenerator = request.getBodyGenerator();
         assertTrue(singleTap.contains(request.getUri()));
 
-        bodyGenerator.write(byteArrayOutputStream);
+        BodySourceTester.writeBodySourceTo(request.getBodySource(), byteArrayOutputStream);
         assertEquals(byteArrayOutputStream.toString(), EVENT_LIST_JSON_CODEC.toJson(events));
 
         assertEquals(request.getHeaders().get(CONTENT_TYPE), ImmutableList.of("application/json"));

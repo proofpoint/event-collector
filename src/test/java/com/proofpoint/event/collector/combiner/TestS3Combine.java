@@ -37,7 +37,7 @@ import com.proofpoint.event.client.InMemoryEventClient;
 import com.proofpoint.event.collector.EventPartition;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.units.DataSize;
-import org.joda.time.DateMidnight;
+import org.joda.time.DateTime;
 import org.joda.time.format.ISODateTimeFormat;
 import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
@@ -68,7 +68,7 @@ public class TestS3Combine
     private static final int START_DAYS_AGO = TIME_SLICE_DAYS_AGO + 10;
     private static final int END_DAYS_AGO = 0;
     private static final String EVENT_TYPE = "TestEvent";
-    private static final String TIME_SLICE = DateMidnight.now(UTC).minusDays(TIME_SLICE_DAYS_AGO).toString(ISODateTimeFormat.date().withZone(UTC));
+    private static final String TIME_SLICE = DateTime.now(UTC).withTimeAtStartOfDay().minusDays(TIME_SLICE_DAYS_AGO).toString(ISODateTimeFormat.date().withZone(UTC));
     private static final int MIN_LARGE_FILE_LENGTH = 5 * 1024 * 1024;
     private static final int MIN_SMALL_FILE_LENGTH = 10 * 1024;
     private static final String HOUR = "08";

@@ -28,7 +28,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 
-import static com.google.common.base.Objects.firstNonNull;
+import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.lang.String.format;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -67,7 +67,7 @@ public class ScheduledCombiner
 
         this.enabled = config.isCombinerEnabled();
 
-        this.eventTypes = new HashSet<String>();
+        this.eventTypes = new HashSet<>();
     }
 
     @PostConstruct

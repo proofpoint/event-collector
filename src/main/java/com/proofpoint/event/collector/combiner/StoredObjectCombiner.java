@@ -29,7 +29,7 @@ import com.proofpoint.event.collector.ServerConfig;
 import com.proofpoint.log.Logger;
 import com.proofpoint.node.NodeInfo;
 import com.proofpoint.units.DataSize;
-import org.joda.time.DateMidnight;
+import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
 import org.weakref.jmx.Managed;
@@ -61,7 +61,7 @@ public class StoredObjectCombiner
 
     private static final DateTimeFormatter DATE_FORMAT = ISODateTimeFormat.date().withZone(UTC);
 
-    private final Set<URI> badManifests = new ConcurrentSkipListSet<URI>();
+    private final Set<URI> badManifests = new ConcurrentSkipListSet<>();
 
     private final String nodeId;
     private final CombineObjectMetadataStore metadataStore;
@@ -429,18 +429,18 @@ public class StoredObjectCombiner
         return dateBucket.compareTo(thresholdDate) >= 0;
     }
 
-    private String createPartitionForDate(DateMidnight startDateMidnight)
+    private String createPartitionForDate(DateTime startDateMidnight)
     {
         return DATE_FORMAT.print(startDateMidnight);
     }
 
-    private DateMidnight getEndDate()
+    private DateTime getEndDate()
     {
-        return DateMidnight.now(UTC).minusDays(endDaysAgo);
+        return DateTime.now(UTC).withTimeAtStartOfDay().minusDays(endDaysAgo);
     }
 
-    private DateMidnight getStartDate()
+    private DateTime getStartDate()
     {
-        return DateMidnight.now(UTC).minusDays(startDaysAgo);
+        return DateTime.now(UTC).withTimeAtStartOfDay().minusDays(startDaysAgo);
     }
 }

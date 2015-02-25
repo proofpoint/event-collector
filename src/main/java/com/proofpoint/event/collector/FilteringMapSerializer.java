@@ -27,7 +27,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
-import static com.google.common.base.Objects.firstNonNull;
+import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
@@ -87,7 +87,7 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
     }
 
     private static class UniversalMatchSelectionPolicy
-        implements PropertyMapSelectionPolicy
+            implements PropertyMapSelectionPolicy
     {
         private static PropertyMapSelectionPolicy matchesEverything = new UniversalMatchSelectionPolicy();
 
@@ -104,7 +104,7 @@ public class FilteringMapSerializer extends JsonSerializer<Map<String, ?>>
     }
 
     public static class DefinedPropertiesSelectionPolicy
-        implements PropertyMapSelectionPolicy
+            implements PropertyMapSelectionPolicy
     {
         private String nodeName;
         private Set<String> propertiesToSerialize;

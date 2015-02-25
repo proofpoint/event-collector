@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.proofpoint.event</groupId>
     <artifactId>event-collector</artifactId>
-    <version>1.16.1-SNAPSHOT</version>
+    <version>1.17.29-SNAPSHOT</version>
 
     <name>event-collector</name>
     <description>Event collector</description>
@@ -12,7 +12,7 @@
     <parent>
         <groupId>com.proofpoint.platform</groupId>
         <artifactId>rest-server-base</artifactId>
-        <version>1.10</version>
+        <version>1.15</version>
     </parent>
 
     <licenses>

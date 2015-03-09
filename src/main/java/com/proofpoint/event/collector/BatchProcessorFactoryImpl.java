@@ -21,6 +21,7 @@ import com.proofpoint.event.collector.queue.Queue;
 import javax.inject.Inject;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.proofpoint.event.collector.EventTapWriter.createBatchProcessorName;
 
 public class BatchProcessorFactoryImpl implements BatchProcessorFactory
 {
@@ -33,8 +34,8 @@ public class BatchProcessorFactoryImpl implements BatchProcessorFactory
     }
 
     @Override
-    public BatchProcessor<Event> createBatchProcessor(String name, BatchHandler<Event> batchHandler, Queue<Event> queue)
+    public BatchProcessor<Event> createBatchProcessor(String eventType, String flowId, BatchHandler<Event> batchHandler, Queue<Event> queue)
     {
-        return new AsyncBatchProcessor<>(name, batchHandler, config, queue);
+        return new AsyncBatchProcessor<>(createBatchProcessorName(eventType, flowId), batchHandler, config, queue);
     }
 }

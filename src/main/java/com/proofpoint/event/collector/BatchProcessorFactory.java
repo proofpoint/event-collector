@@ -20,5 +20,5 @@ import com.proofpoint.event.collector.queue.Queue;
 
 public interface BatchProcessorFactory
 {
-    public BatchProcessor<Event> createBatchProcessor(String name, BatchHandler<Event> batchHandler, Queue<Event> queue);
+    public BatchProcessor<Event> createBatchProcessor(String eventType, String flowId, BatchHandler<Event> batchHandler, Queue<Event> queue);
 }

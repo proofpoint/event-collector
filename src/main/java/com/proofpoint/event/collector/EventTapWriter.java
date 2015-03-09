@@ -32,8 +32,13 @@ import com.proofpoint.event.collector.EventTapWriter.FlowInfo.Builder;
 import com.proofpoint.event.collector.StaticEventTapConfig.FlowKey;
 import com.proofpoint.event.collector.queue.Queue;
 import com.proofpoint.event.collector.queue.QueueFactory;
+import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.Serializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.weakref.jmx.Managed;
 
 import javax.annotation.PostConstruct;
@@ -41,6 +46,7 @@ import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import java.io.IOException;
 import java.net.URI;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -87,6 +93,9 @@ public class EventTapWriter implements EventWriter
     private final Duration flowRefreshDuration;
     private final QueueFactory queueFactory;
 
+    private final KafkaProducer<String, Event> kafkaProducer;
+    private final JsonCodec<Event> jsonCodec;
+
     @Inject
     public EventTapWriter(@ServiceType("eventTap") ServiceSelector selector,
             @EventTap ScheduledExecutorService executorService,
@@ -104,6 +113,15 @@ public class EventTapWriter implements EventWriter
         this.batchProcessorFactory = checkNotNull(batchProcessorFactory, "batchProcessorFactory is null");
         this.eventTapFlowFactory = checkNotNull(eventTapFlowFactory, "eventTapFlowFactory is null");
         this.queueFactory = checkNotNull(queueFactory, "queueFactory is null");
+
+        this.jsonCodec = JsonCodec.jsonCodec(Event.class);
+
+        Map<String, Object> kafkaConfig = new HashMap<>();
+        kafkaConfig.put("request.required.acks", 1);
+        kafkaConfig.put("metadata.broker.list", "localhost:9092");
+        kafkaConfig.put("producer.type","async");
+
+        kafkaProducer = new KafkaProducer<String, Event>(kafkaConfig, new StringSerializer(), new EventSerializer());
     }
 
     @PostConstruct
@@ -179,9 +197,11 @@ public class EventTapWriter implements EventWriter
     @Override
     public void write(Event event)
     {
-        for (FlowPolicy flowPolicy : getPolicyForEvent(event).flowPolicies.values()) {
+        /*for (FlowPolicy flowPolicy : getPolicyForEvent(event).flowPolicies.values()) {
             flowPolicy.processor.put(event);
-        }
+        }*/
+
+        kafkaProducer.send(new ProducerRecord<String, Event>(event.getType(), event.getUuid(), event));
     }
 
     @Override
@@ -190,6 +210,8 @@ public class EventTapWriter implements EventWriter
     {
         write(event);
     }
+
+    private Map<
 
     private Table<String, String, FlowInfo> constructFlowInfoFromTapSpec(Iterable<TapSpec> tapSpecs)
     {
@@ -360,7 +382,7 @@ public class EventTapWriter implements EventWriter
         }
     }
 
-    private static String createBatchProcessorName(String eventType, String flowId)
+    public static String createBatchProcessorName(String eventType, String flowId)
     {
         return format("%s{%s}", eventType, flowId);
     }
@@ -489,6 +511,28 @@ public class EventTapWriter implements EventWriter
         public QosDelivery getQosDelivery()
         {
             return qosDelivery;
+        }
+    }
+
+    private class EventSerializer implements Serializer<Event>
+    {
+
+        @Override
+        public void configure(Map<String, ?> map, boolean b)
+        {
+
+        }
+
+        @Override
+        public byte[] serialize(String s, Event event)
+        {
+            return jsonCodec.toJsonBytes(event);
+        }
+
+        @Override
+        public void close()
+        {
+
         }
     }
 }

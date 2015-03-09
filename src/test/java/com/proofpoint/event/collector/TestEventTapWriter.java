@@ -51,6 +51,7 @@ import static com.google.common.base.Strings.nullToEmpty;
 import static com.proofpoint.event.collector.EventTapWriter.EVENT_TYPE_PROPERTY_NAME;
 import static com.proofpoint.event.collector.EventTapWriter.FLOW_ID_PROPERTY_NAME;
 import static com.proofpoint.event.collector.EventTapWriter.HTTP_PROPERTY_NAME;
+import static com.proofpoint.event.collector.EventTapWriter.createBatchProcessorName;
 import static com.proofpoint.event.collector.QosDelivery.RETRY;
 import static java.lang.String.format;
 import static java.util.UUID.randomUUID;
@@ -1215,8 +1216,9 @@ public class TestEventTapWriter
     private class MockBatchProcessorFactory implements BatchProcessorFactory
     {
         @Override
-        public BatchProcessor<Event> createBatchProcessor(String name, BatchHandler<Event> batchHandler, Queue<Event> queue)
+        public BatchProcessor<Event> createBatchProcessor(String eventType, String flowId, BatchHandler<Event> batchHandler, Queue<Event> queue)
         {
+            String name = createBatchProcessorName(eventType, flowId);
             Logger.get(EventTapWriter.class).error("Create Batch Processor %s", name);
             MockBatchProcessor<Event> batchProcessor = new MockBatchProcessor<>(name, batchHandler);
             batchProcessors.put(name, batchProcessor);

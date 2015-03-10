@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.proofpoint.event</groupId>
     <artifactId>event-collector</artifactId>
-    <version>1.18.1-SNAPSHOT</version>
+    <version>1.18.5-SNAPSHOT</version>
 
     <name>event-collector</name>
     <description>Event collector</description>
@@ -12,7 +12,7 @@
     <parent>
         <groupId>com.proofpoint.platform</groupId>
         <artifactId>rest-server-base</artifactId>
-        <version>1.15</version>
+        <version>1.16</version>
     </parent>
 
     <licenses>
@@ -300,12 +300,44 @@
                     <arguments>${arguments}</arguments>
                 </configuration>
             </plugin>
-
             <plugin>
                 <groupId>com.ning.maven.plugins</groupId>
                 <artifactId>maven-duplicate-finder-plugin</artifactId>
                 <configuration>
-                    <skip>true</skip>
+                    <exceptions>
+                        <exception>
+                            <conflictingDependencies>
+                                <dependency>
+                                    <groupId>log4j</groupId>
+                                    <artifactId>log4j</artifactId>
+                                    <version>[1.2.16]</version>
+                                </dependency>
+                                <dependency>
+                                    <groupId>org.slf4j</groupId>
+                                    <artifactId>log4j-over-slf4j</artifactId>
+                                    <version>[1.7.8]</version>
+                                </dependency>
+                            </conflictingDependencies>
+                            <packages>
+                                <package>org.apache.log4j</package>
+                            </packages>
+                        </exception>
+                        <exception>
+                            <conflictingDependencies>
+                                <dependency>
+                                    <groupId>com.proofpoint.platform</groupId>
+                                    <artifactId>http-server</artifactId>
+                                </dependency>
+                                <dependency>
+                                    <groupId>com.proofpoint.platform</groupId>
+                                    <artifactId>http-client</artifactId>
+                                </dependency>
+                            </conflictingDependencies>
+                            <resources>
+                                <resource>jetty-logging.properties</resource>
+                            </resources>
+                        </exception>
+                    </exceptions>
                 </configuration>
             </plugin>
         </plugins>

@@ -21,7 +21,7 @@ import com.google.inject.Scopes;
 import com.proofpoint.configuration.ConfigurationModule;
 import com.proofpoint.discovery.client.DiscoveryBinder;
 
-public class ReportingClientModule implements Module
+public class ReportingClientModuleWithPrivateIoPool implements Module
 {
     @Override
     public void configure(Binder binder)

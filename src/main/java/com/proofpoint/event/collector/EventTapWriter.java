@@ -16,6 +16,8 @@
 package com.proofpoint.event.collector;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -132,7 +134,7 @@ public class EventTapWriter implements EventWriter
         for (Map.Entry<String, EventTypePolicy> entry : eventTypePolicies.get().entrySet()) {
             String eventType = entry.getKey();
             EventTypePolicy eventTypePolicy = entry.getValue();
-            for (Map.Entry<String, FlowPolicy> flowPolicyEntry : eventTypePolicy.flowPolicies.entrySet()) {
+            for (Map.Entry<String, FlowPolicy> flowPolicyEntry : eventTypePolicy.getFlowPolicies().entrySet()) {
                 String flowId = flowPolicyEntry.getKey();
                 FlowPolicy flowPolicy = flowPolicyEntry.getValue();
                 stopBatchProcessor(eventType, flowId, flowPolicy.processor);
@@ -179,7 +181,7 @@ public class EventTapWriter implements EventWriter
     @Override
     public void write(Event event)
     {
-        for (FlowPolicy flowPolicy : getPolicyForEvent(event).flowPolicies.values()) {
+        for (FlowPolicy flowPolicy : getPolicyForEvent(event).getFlowPolicies().values()) {
             flowPolicy.processor.put(event);
         }
     }
@@ -253,7 +255,7 @@ public class EventTapWriter implements EventWriter
             log.debug("** considering flow ID %s", flowId);
 
             Set<URI> destinations = ImmutableSet.copyOf(updatedFlowInfo.destinations);
-            FlowPolicy existingFlowPolicy = existingPolicy.flowPolicies.get(flowId);
+            FlowPolicy existingFlowPolicy = existingPolicy.getFlowPolicies().get(flowId);
 
             if (existingFlowPolicy == null || existingFlowPolicy.qosEnabled != updatedFlowInfo.qosEnabled) {
                 log.debug("**-> making new policy because %s", existingFlowPolicy == null ? "existing is null" : "qos changed");
@@ -300,10 +302,10 @@ public class EventTapWriter implements EventWriter
 
     private void stopExistingPolicyIfNoLongerInUse(String eventType, EventTypePolicy existingPolicy, EventTypePolicy newPolicy)
     {
-        for (Entry<String, FlowPolicy> flowPolicyEntry : existingPolicy.flowPolicies.entrySet()) {
+        for (Entry<String, FlowPolicy> flowPolicyEntry : existingPolicy.getFlowPolicies().entrySet()) {
             String flowId = flowPolicyEntry.getKey();
             FlowPolicy existingFlowPolicy = flowPolicyEntry.getValue();
-            FlowPolicy newFlowPolicy = newPolicy.flowPolicies.get(flowId);
+            FlowPolicy newFlowPolicy = newPolicy.getFlowPolicies().get(flowId);
 
             if (newFlowPolicy == null || newFlowPolicy.processor != existingFlowPolicy.processor) {
                 stopBatchProcessor(eventType, flowId, existingFlowPolicy.processor);
@@ -425,17 +427,24 @@ public class EventTapWriter implements EventWriter
      */
     static class EventTypePolicy
     {
-        public final Map<String, FlowPolicy> flowPolicies;
+        // cache is used to support scenarios where a flow temporarily disappears from discovery
+        // the primary reason for this is to support the switch over from OLD to NEW event indexers for re-clustering work by JAB team
+        private final Cache<String, FlowPolicy> flowPolicies;
 
-        private EventTypePolicy(
-                Map<String, FlowPolicy> flowPolicies)
+        private EventTypePolicy(Map<String, FlowPolicy> flowPolicies)
         {
-            this.flowPolicies = flowPolicies;
+            this.flowPolicies = CacheBuilder.newBuilder().expireAfterWrite(2, TimeUnit.HOURS).build();
+            this.flowPolicies.putAll(flowPolicies);
         }
 
         public static Builder builder()
         {
             return new Builder();
+        }
+
+        public Map<String, FlowPolicy> getFlowPolicies()
+        {
+            return flowPolicies.asMap();
         }
 
         public static class FlowPolicy

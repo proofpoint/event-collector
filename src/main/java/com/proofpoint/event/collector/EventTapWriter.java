@@ -71,7 +71,7 @@ public class EventTapWriter implements EventWriter
     private static final String QOS_DELIVERY_PROPERTY_NAME = "qos.delivery";
 
     private static final Logger log = Logger.get(EventTapWriter.class);
-    private static final EventTypePolicy NULL_EVENT_TYPE_POLICY = new EventTypePolicy.Builder().build();
+    private static final EventTypePolicy NULL_EVENT_TYPE_POLICY = EventTypePolicy.builder().build();
     private final ServiceSelector selector;
     private final ScheduledExecutorService executorService;
     private final BatchProcessorFactory batchProcessorFactory;
@@ -150,15 +150,15 @@ public class EventTapWriter implements EventWriter
     public void refreshFlows()
     {
         try {
-            Map<String, EventTypePolicy> existingPolicies = eventTypePolicies.get();
             Table<String, String, FlowInfo> existingFlows = flows;
-            ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.builder();
 
             Table<String, String, FlowInfo> newFlows = constructFlowInfoFromTapSpec(Iterables.concat(staticTapSpecs, createTapSpecFromDiscovery(selector.selectAllServices())));
-            if (existingFlows.equals(newFlows)) {
+            if (existingFlows.equals(newFlows)) { // TODO: equals() doesn't work properly because FlowInfo#equals is not implemented
                 return;
             }
 
+            Map<String, EventTypePolicy> existingPolicies = eventTypePolicies.get();
+            ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.builder();
             for (Map.Entry<String, Map<String, FlowInfo>> entry : newFlows.rowMap().entrySet()) {
                 String eventType = entry.getKey();
                 EventTypePolicy existingPolicy = firstNonNull(existingPolicies.get(eventType), NULL_EVENT_TYPE_POLICY);
@@ -191,6 +191,10 @@ public class EventTapWriter implements EventWriter
         write(event);
     }
 
+    /**
+     * @param tapSpecs tap specs to construct the flow info from
+     * @return a table with eventTypes as rows, flowIds as columns and FlowInfo as cell values; FlowInfo instances are constructed based on the given tap specs
+     */
     private Table<String, String, FlowInfo> constructFlowInfoFromTapSpec(Iterable<TapSpec> tapSpecs)
     {
         Table<String, String, FlowInfo.Builder> flows = HashBasedTable.create();
@@ -229,6 +233,12 @@ public class EventTapWriter implements EventWriter
         return flowsBuilder.build();
     }
 
+    /**
+     * @param existingPolicy existing policy for the given event type
+     * @param eventType event type
+     * @param flows new flows registered with the given event type; map between flowIds and FlowInfos
+     * @return new event type policy
+     */
     private EventTypePolicy constructPolicyForFlows(EventTypePolicy existingPolicy, String eventType, Map<String, FlowInfo> flows)
             throws IOException
     {
@@ -237,9 +247,11 @@ public class EventTapWriter implements EventWriter
         log.debug("Constructing policy for %s", eventType);
 
         for (Entry<String, FlowInfo> flowEntry : flows.entrySet()) {
+
             String flowId = flowEntry.getKey();
             FlowInfo updatedFlowInfo = flowEntry.getValue();
             log.debug("** considering flow ID %s", flowId);
+
             Set<URI> destinations = ImmutableSet.copyOf(updatedFlowInfo.destinations);
             FlowPolicy existingFlowPolicy = existingPolicy.flowPolicies.get(flowId);
 
@@ -365,6 +377,9 @@ public class EventTapWriter implements EventWriter
         return format("%s{%s}", eventType, flowId);
     }
 
+    /**
+     * Contains information associated with a flow (except the flowId).
+     */
     static class FlowInfo
     {
         private final boolean qosEnabled;
@@ -405,6 +420,9 @@ public class EventTapWriter implements EventWriter
         }
     }
 
+    /**
+     * Contains a map between flowIds and FlowPolicies associated with them.
+     */
     static class EventTypePolicy
     {
         public final Map<String, FlowPolicy> flowPolicies;
@@ -456,6 +474,9 @@ public class EventTapWriter implements EventWriter
         }
     }
 
+    /**
+     * Describes a tap for a specific event type along with the tap's flow id, uri and QoS settings.
+     */
     private static class TapSpec
     {
         private final String eventType;

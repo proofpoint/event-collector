@@ -73,7 +73,7 @@ public class EventTapWriter implements EventWriter
     private static final String QOS_DELIVERY_PROPERTY_NAME = "qos.delivery";
 
     private static final Logger log = Logger.get(EventTapWriter.class);
-    private static final EventTypePolicy NULL_EVENT_TYPE_POLICY = EventTypePolicy.builder().build();
+    private static final EventTypePolicy NULL_EVENT_TYPE_POLICY = new EventTypePolicy(null);
     private final ServiceSelector selector;
     private final ScheduledExecutorService executorService;
     private final BatchProcessorFactory batchProcessorFactory;
@@ -244,10 +244,9 @@ public class EventTapWriter implements EventWriter
     private EventTypePolicy constructPolicyForFlows(EventTypePolicy existingPolicy, String eventType, Map<String, FlowInfo> flows)
             throws IOException
     {
-        EventTypePolicy.Builder policyBuilder = EventTypePolicy.builder();
-
         log.debug("Constructing policy for %s", eventType);
 
+        ImmutableMap.Builder<String, FlowPolicy> newPolicies = ImmutableMap.builder();
         for (Entry<String, FlowInfo> flowEntry : flows.entrySet()) {
 
             String flowId = flowEntry.getKey();
@@ -270,21 +269,23 @@ public class EventTapWriter implements EventWriter
 
                 Queue<Event> queue = queueFactory.create(createBatchProcessorName(eventType, flowId));
                 BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), eventTapFlow, queue);
-                policyBuilder.addFlowPolicy(flowId, batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled);
+
+                FlowPolicy flowPolicy = new FlowPolicy(batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled);
+                newPolicies.put(flowId, flowPolicy);
                 batchProcessor.start();
             }
             else if (!destinations.equals(existingFlowPolicy.eventTapFlow.getTaps())) {
                 log.debug("**-> changing taps from %s to %s", existingFlowPolicy.eventTapFlow.getTaps(), destinations);
                 existingFlowPolicy.eventTapFlow.setTaps(destinations);
-                policyBuilder.addFlowPolicy(flowId, existingFlowPolicy);
+                newPolicies.put(flowId, existingFlowPolicy);
             }
             else {
                 log.debug("**-> keeping as is with destinations %s", existingFlowPolicy.eventTapFlow.getTaps());
-                policyBuilder.addFlowPolicy(flowId, existingFlowPolicy);
+                newPolicies.put(flowId, existingFlowPolicy);
             }
         }
 
-        return policyBuilder.build();
+        return new EventTypePolicy(newPolicies.build());
     }
 
     private void stopExistingPoliciesNoLongerInUse(Map<String, EventTypePolicy> existingPolicies, Map<String, EventTypePolicy> newPolicies)
@@ -434,7 +435,9 @@ public class EventTapWriter implements EventWriter
         private EventTypePolicy(Map<String, FlowPolicy> flowPolicies)
         {
             this.flowPolicies = CacheBuilder.newBuilder().expireAfterWrite(2, TimeUnit.HOURS).build();
-            this.flowPolicies.putAll(flowPolicies);
+            if (flowPolicies != null) {
+                this.flowPolicies.putAll(flowPolicies);
+            }
         }
 
         public static Builder builder()
@@ -458,27 +461,6 @@ public class EventTapWriter implements EventWriter
                 this.processor = processor;
                 this.eventTapFlow = eventTapFlow;
                 this.qosEnabled = qosEnabled;
-            }
-        }
-
-        public static class Builder
-        {
-            private ImmutableMap.Builder<String, FlowPolicy> flowPoliciesBuilder = ImmutableMap.builder();
-
-            public Builder addFlowPolicy(String flowId, BatchProcessor<Event> processor, EventTapFlow eventTapFlow, boolean qosEnabled)
-            {
-                return addFlowPolicy(flowId, new FlowPolicy(processor, eventTapFlow, qosEnabled));
-            }
-
-            public Builder addFlowPolicy(String flowId, FlowPolicy flowPolicy)
-            {
-                flowPoliciesBuilder.put(flowId, flowPolicy);
-                return this;
-            }
-
-            public EventTypePolicy build()
-            {
-                return new EventTypePolicy(flowPoliciesBuilder.build());
             }
         }
     }

@@ -305,6 +305,7 @@
                 <groupId>com.ning.maven.plugins</groupId>
                 <artifactId>maven-duplicate-finder-plugin</artifactId>
                 <configuration>
+                    <skip>false</skip>
                     <exceptions>
                         <exception>
                             <conflictingDependencies>

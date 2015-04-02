@@ -156,6 +156,12 @@ public class EventTapWriter implements EventWriter
         }
     }
 
+    @VisibleForTesting
+    Table<String, String, FlowInfo> getFlows()
+    {
+        return flows;
+    }
+
     @Managed
     public void refreshFlows()
     {
@@ -202,6 +208,20 @@ public class EventTapWriter implements EventWriter
 
             Map<String, EventTypePolicy> newPolicies = policiesBuilder.build();
             eventTypePolicies.set(newPolicies);
+
+            // make sure that all flows referenced from new policies are present
+            for (Entry<String, EventTypePolicy> eventTypePolicyEntry : newPolicies.entrySet()) {
+                String eventType = eventTypePolicyEntry.getKey();
+                EventTypePolicy eventTypePolicy = eventTypePolicyEntry.getValue();
+
+                for (Entry<String, FlowPolicy> flowPolicyEntry : eventTypePolicy.getFlowPolicies().entrySet()) {
+                    String flowId = flowPolicyEntry.getKey();
+                    FlowInfo flowInfo = flows.get(eventType, flowId);
+                    if (newFlows.get(eventType, flowId) == null && flowInfo != null) {
+                        newFlows.put(eventType, flowId, flowInfo);
+                    }
+                }
+            }
             flows = newFlows;
 
             stopExistingPoliciesNoLongerInUse(existingPolicies, newPolicies);
@@ -259,13 +279,13 @@ public class EventTapWriter implements EventWriter
 
     private Table<String, String, FlowInfo> constructFlowsFromTable(Table<String, String, FlowInfo.Builder> flows)
     {
-        ImmutableTable.Builder<String, String, FlowInfo> flowsBuilder = ImmutableTable.builder();
+        HashBasedTable<String, String, FlowInfo> flowsBuilder = HashBasedTable.create();
 
         for (Cell<String, String, Builder> cell : flows.cellSet()) {
             flowsBuilder.put(cell.getRowKey(), cell.getColumnKey(), cell.getValue().build());
         }
 
-        return flowsBuilder.build();
+        return flowsBuilder;
     }
 
     /**

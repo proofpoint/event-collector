@@ -67,6 +67,7 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertEqualsNoOrder;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 
 public class TestEventTapWriter
@@ -701,12 +702,16 @@ public class TestEventTapWriter
         forTap(tapA).verifyEvents(eventsA[0], eventsA[1]);
         forTap(tapB).verifyEvents(eventsB[0], eventsB[1]);
         verifyProcessorState(tapB, 1, 0);
+        assertNotNull(eventTapWriter.getFlows().get(typeA, flowId1));
+        assertNotNull(eventTapWriter.getFlows().get(typeB, flowId1));
 
         // move clock an hour ahead and expect tapB to stop receiving events
         when(mockClock.now()).thenReturn(clock.now().plusHours(1).plusSeconds(1));
         updateTaps(ImmutableList.of(tapA));
         eventTapWriter.refreshFlows();
         verifyProcessorState(tapB, 1, 1);
+        assertNotNull(eventTapWriter.getFlows().get(typeA, flowId1));
+        assertNull(eventTapWriter.getFlows().get(typeB, flowId1));
 
         writeEvents(eventsA[2], eventsB[2]);
         forTap(tapA).verifyEvents(eventsA[0], eventsA[1], eventsA[2]);
@@ -732,6 +737,8 @@ public class TestEventTapWriter
         forTap(tapA1).verifyEvents(eventsA[0], eventsA[1]);
         forTap(tapA2).verifyEvents(eventsA[0], eventsA[1]);
         verifyProcessorState(tapA1, 1, 0);
+        assertNotNull(eventTapWriter.getFlows().get(typeA, flowId1));
+        assertNotNull(eventTapWriter.getFlows().get(typeA, flowId2));
 
         // move clock an hour ahead and expect tapA1 to stop receiving events
         when(mockClock.now()).thenReturn(clock.now().plusHours(1).plusSeconds(1));

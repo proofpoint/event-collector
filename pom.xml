@@ -25,6 +25,7 @@
 
     <properties>
         <main-class>com.proofpoint.event.collector.Main</main-class>
+        <project.rpm.username>platform</project.rpm.username>
     </properties>
 
     <scm>

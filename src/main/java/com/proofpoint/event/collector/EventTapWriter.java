@@ -301,11 +301,14 @@ public class EventTapWriter implements EventWriter
                 }
                 log.debug("  -> made flow with destinations %s", destinations);
 
-                Queue<Event> queue = queueFactory.create(createBatchProcessorName(eventType, flowId));
-                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), eventTapFlow, queue);
+                String queueName = createBatchProcessorName(eventType, flowId);
+                Queue<Event> queue = queueFactory.create(queueName);
+                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(queueName, eventTapFlow, queue);
 
                 FlowPolicy flowPolicy = new FlowPolicy(batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled, clock.now());
                 newFlowPolicies.put(flowId, flowPolicy);
+
+                log.info("Starting processor %s", queueName);
                 batchProcessor.start();
             }
             else if (!destinations.equals(existingFlowPolicy.eventTapFlow.getTaps())) {
@@ -371,7 +374,7 @@ public class EventTapWriter implements EventWriter
 
     private void stopBatchProcessor(String eventType, String flowId, BatchProcessor<Event> processor)
     {
-        log.debug("Stopping processor %s: no longer required", createBatchProcessorName(eventType, flowId));
+        log.info("Stopping processor %s: no longer required", createBatchProcessorName(eventType, flowId));
         processor.stop();
     }
 

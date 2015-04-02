@@ -21,6 +21,7 @@ import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -101,8 +102,12 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
 		{
 			try
 			{
-				handler.processBatch(queue.dequeue(maxBatchSize));
-			}
+                // re-enqueue entries in case of failure
+                List<T> entries = queue.dequeue(maxBatchSize);
+                if (!handler.processBatch(entries)) {
+                    queue.enqueueAllOrDrop(entries);
+                }
+            }
 			catch (Exception e)
 			{
 				log.error(e, "error occurred during batch processing");

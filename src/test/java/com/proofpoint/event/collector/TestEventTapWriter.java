@@ -1392,9 +1392,10 @@ public class TestEventTapWriter
         }
 
         @Override
-        public void processBatch(List<Event> entries)
+        public boolean processBatch(List<Event> entries)
         {
             events.addAll(entries);
+            return true;
         }
 
         @Override

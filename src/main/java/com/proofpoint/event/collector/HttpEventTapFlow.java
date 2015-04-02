@@ -89,14 +89,14 @@ class HttpEventTapFlow implements EventTapFlow
     }
 
     @Override
-    public void processBatch(List<Event> entries)
+    public boolean processBatch(List<Event> entries)
     {
         List<URI> taps;
 
         for (int i = 0; i <= retryCount; ++i) {
             taps = this.taps.get();
             if (sendEvents(taps, entries)) {
-                return;
+                return true;
             }
             if (retryDelayMillis > 0) {
                 try {
@@ -111,6 +111,8 @@ class HttpEventTapFlow implements EventTapFlow
         }
 
         onRecordsLost(entries.size());
+
+        return false;
     }
 
     @Override

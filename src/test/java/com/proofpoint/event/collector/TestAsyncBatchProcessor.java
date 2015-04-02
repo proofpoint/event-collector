@@ -15,6 +15,7 @@
  */
 package com.proofpoint.event.collector;
 
+import com.google.common.collect.ImmutableList;
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
 import com.proofpoint.event.collector.queue.Queue;
 import com.proofpoint.event.collector.queue.QueueFactory;
@@ -36,7 +37,11 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
@@ -58,6 +63,7 @@ public class TestAsyncBatchProcessor
         FileUtils.deleteRecursively(new File(DATA_DIRECTORY));
 
         config = new BatchProcessorConfig().setDataDirectory(DATA_DIRECTORY).setThrottleTime(new Duration(10, TimeUnit.MILLISECONDS));
+        //noinspection unchecked
         handler = mock(BatchHandler.class);
         mockReporter = mock(ReportExporter.class);
         queueFactory = new QueueFactory(config, mockReporter);
@@ -262,6 +268,27 @@ public class TestAsyncBatchProcessor
         }
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    public void test_failedEntries_GetEnqueued()
+            throws Exception
+    {
+        config.setMaxBatchSize(100).setQueueSize(1).setThrottleTime(new Duration(100, TimeUnit.MILLISECONDS));
+
+        List<Event> events = ImmutableList.of(event("typeA1"), event("typeA2"));
+        BatchHandler<Event> mockHandler = mock(BatchHandler.class);
+        when(mockHandler.processBatch(events)).thenReturn(false);
+
+        Queue<Event> mockQueue = mock(Queue.class);
+        when(mockQueue.dequeue(anyInt())).thenReturn(events);
+        when(mockQueue.enqueueAllOrDrop(events)).thenReturn(events);
+
+        BatchProcessor<Event> processor = new AsyncBatchProcessor<>("foo", mockHandler, config, mockQueue);
+        processor.start();
+
+        verify(mockQueue, timeout(200).times(1)).enqueueAllOrDrop(events);
+    }
+
     private static Event event(String type)
     {
         return new Event(type, UUID.randomUUID().toString(), "localhost", DateTime.now(), Collections.<String, Object>emptyMap());
@@ -304,7 +331,7 @@ public class TestAsyncBatchProcessor
         }
 
         @Override
-        public void processBatch(List<Event> entries)
+        public boolean processBatch(List<Event> entries)
         {
             // Wait for the right time to run
             lock.lock();
@@ -325,6 +352,8 @@ public class TestAsyncBatchProcessor
             finally {
                 lock.unlock();
             }
+
+            return true;
         }
 
         @Override

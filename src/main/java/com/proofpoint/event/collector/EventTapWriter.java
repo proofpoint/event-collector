@@ -22,7 +22,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableTable;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
 import com.google.common.collect.Table.Cell;
 import com.proofpoint.discovery.client.ServiceDescriptor;
@@ -56,6 +55,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
+import static com.proofpoint.event.collector.QosDelivery.BEST_EFFORT;
 import static com.proofpoint.event.collector.QosDelivery.RETRY;
 import static java.lang.String.format;
 
@@ -142,7 +142,7 @@ public class EventTapWriter implements EventWriter
         for (Map.Entry<String, EventTypePolicy> entry : eventTypePolicies.get().entrySet()) {
             String eventType = entry.getKey();
             EventTypePolicy eventTypePolicy = entry.getValue();
-            for (Map.Entry<String, FlowPolicy> flowPolicyEntry : eventTypePolicy.getFlowPolicies().entrySet()) {
+            for (Map.Entry<String, FlowPolicy> flowPolicyEntry : eventTypePolicy.flowPolicies.entrySet()) {
                 String flowId = flowPolicyEntry.getKey();
                 FlowPolicy flowPolicy = flowPolicyEntry.getValue();
                 stopBatchProcessor(eventType, flowId, flowPolicy.processor);
@@ -166,62 +166,23 @@ public class EventTapWriter implements EventWriter
     public void refreshFlows()
     {
         try {
+            Map<String, EventTypePolicy> existingPolicies = eventTypePolicies.get();
             Table<String, String, FlowInfo> existingFlows = flows;
+            ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.builder();
 
-            Table<String, String, FlowInfo> newFlows = constructFlowInfoFromTapSpec(Iterables.concat(staticTapSpecs, createTapSpecFromDiscovery(selector.selectAllServices())));
+            Table<String, String, FlowInfo> newFlows = constructFlowInfoFromTapSpec(Iterables.concat(staticTapSpecs, createTapSpecFromDiscovery(flows, selector.selectAllServices())));
             if (existingFlows.equals(newFlows)) { // TODO: equals() doesn't work properly because FlowInfo#equals is not implemented
                 return;
             }
 
-            Map<String, EventTypePolicy> existingPolicies = eventTypePolicies.get();
-            ImmutableMap.Builder<String, EventTypePolicy> policiesBuilder = ImmutableMap.builder();
             for (Map.Entry<String, Map<String, FlowInfo>> entry : newFlows.rowMap().entrySet()) {
                 String eventType = entry.getKey();
                 EventTypePolicy existingPolicy = firstNonNull(existingPolicies.get(eventType), NULL_EVENT_TYPE_POLICY);
                 policiesBuilder.put(eventType, constructPolicyForFlows(existingPolicy, eventType, entry.getValue()));
             }
 
-            // handle the case where an eventType is no longer in discovery but there might be some flows that are still cached for this event
-            // if flow information needs to be cached, then add flows that haven't expired for event type that are no longer in discovery
-            long flowCacheMillis = eventTapConfig.getEventTapCacheExpiration().toMillis();
-            if (flowCacheMillis > 0) {
-                for (Entry<String, Map<String, FlowInfo>> oldEntry : existingFlows.rowMap().entrySet()) {
-                    String oldEventType = oldEntry.getKey();
-                    EventTypePolicy existingPolicy = existingPolicies.get(oldEventType);
-
-                    if (!newFlows.containsRow(oldEventType) && existingPolicy != null) {
-
-                        // retain FlowPolicy's that haven't expired
-                        Map<String, FlowPolicy> liveFlowPolicies = Maps.newHashMap();
-                        for (Entry<String, FlowPolicy> flowPolicyEntry : existingPolicy.getFlowPolicies().entrySet()) {
-                            if (flowPolicyEntry.getValue().lastKnownToExist.plus(flowCacheMillis).isAfter(clock.now().toInstant())) {
-                                liveFlowPolicies.put(flowPolicyEntry.getKey(), flowPolicyEntry.getValue());
-                            }
-                        }
-
-                        if (!liveFlowPolicies.isEmpty()) {
-                            policiesBuilder.put(oldEventType, new EventTypePolicy(liveFlowPolicies));
-                        }
-                    }
-                }
-            }
-
             Map<String, EventTypePolicy> newPolicies = policiesBuilder.build();
             eventTypePolicies.set(newPolicies);
-
-            // make sure that all flows referenced from new policies are present
-            for (Entry<String, EventTypePolicy> eventTypePolicyEntry : newPolicies.entrySet()) {
-                String eventType = eventTypePolicyEntry.getKey();
-                EventTypePolicy eventTypePolicy = eventTypePolicyEntry.getValue();
-
-                for (Entry<String, FlowPolicy> flowPolicyEntry : eventTypePolicy.getFlowPolicies().entrySet()) {
-                    String flowId = flowPolicyEntry.getKey();
-                    FlowInfo flowInfo = flows.get(eventType, flowId);
-                    if (newFlows.get(eventType, flowId) == null && flowInfo != null) {
-                        newFlows.put(eventType, flowId, flowInfo);
-                    }
-                }
-            }
             flows = newFlows;
 
             stopExistingPoliciesNoLongerInUse(existingPolicies, newPolicies);
@@ -234,7 +195,7 @@ public class EventTapWriter implements EventWriter
     @Override
     public void write(Event event)
     {
-        for (FlowPolicy flowPolicy : getPolicyForEvent(event).getFlowPolicies().values()) {
+        for (FlowPolicy flowPolicy : getPolicyForEvent(event).flowPolicies.values()) {
             flowPolicy.processor.put(event);
         }
     }
@@ -279,13 +240,13 @@ public class EventTapWriter implements EventWriter
 
     private Table<String, String, FlowInfo> constructFlowsFromTable(Table<String, String, FlowInfo.Builder> flows)
     {
-        HashBasedTable<String, String, FlowInfo> flowsBuilder = HashBasedTable.create();
+        ImmutableTable.Builder<String, String, FlowInfo> flowsBuilder = ImmutableTable.builder();
 
         for (Cell<String, String, Builder> cell : flows.cellSet()) {
-            flowsBuilder.put(cell.getRowKey(), cell.getColumnKey(), cell.getValue().build());
+            flowsBuilder.put(cell.getRowKey(), cell.getColumnKey(), cell.getValue().build(clock));
         }
 
-        return flowsBuilder;
+        return flowsBuilder.build();
     }
 
     /**
@@ -300,7 +261,7 @@ public class EventTapWriter implements EventWriter
         log.debug("Constructing policy for %s", eventType);
 
         // go through the existing flows and add FlowPolicy entries for missing flowIds
-        ImmutableMap.Builder<String, FlowPolicy> newFlowPolicies = ImmutableMap.builder();
+        ImmutableMap.Builder<String, FlowPolicy> newPolicies = ImmutableMap.builder();
         for (Entry<String, FlowInfo> flowEntry : flows.entrySet()) {
 
             String flowId = flowEntry.getKey();
@@ -308,7 +269,7 @@ public class EventTapWriter implements EventWriter
             log.debug("** considering flow ID %s", flowId);
 
             Set<URI> destinations = ImmutableSet.copyOf(updatedFlowInfo.destinations);
-            FlowPolicy existingFlowPolicy = existingPolicy.getFlowPolicies().get(flowId);
+            FlowPolicy existingFlowPolicy = existingPolicy.flowPolicies.get(flowId);
 
             if (existingFlowPolicy == null || existingFlowPolicy.qosEnabled != updatedFlowInfo.qosEnabled) {
                 log.debug("**-> making new policy because %s", existingFlowPolicy == null ? "existing is null" : "qos changed");
@@ -322,11 +283,11 @@ public class EventTapWriter implements EventWriter
                 log.debug("  -> made flow with destinations %s", destinations);
 
                 String queueName = createBatchProcessorName(eventType, flowId);
-                Queue<Event> queue = queueFactory.create(queueName);
-                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(queueName, eventTapFlow, queue);
+                Queue<Event> queue = queueFactory.create(createBatchProcessorName(eventType, flowId));
+                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), eventTapFlow, queue);
 
-                FlowPolicy flowPolicy = new FlowPolicy(batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled, clock.now());
-                newFlowPolicies.put(flowId, flowPolicy);
+                FlowPolicy flowPolicy = new FlowPolicy(batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled);
+                newPolicies.put(flowId, flowPolicy);
 
                 log.info("Starting processor %s", queueName);
                 batchProcessor.start();
@@ -334,31 +295,15 @@ public class EventTapWriter implements EventWriter
             else if (!destinations.equals(existingFlowPolicy.eventTapFlow.getTaps())) {
                 log.debug("**-> changing taps from %s to %s", existingFlowPolicy.eventTapFlow.getTaps(), destinations);
                 existingFlowPolicy.eventTapFlow.setTaps(destinations);
-                existingFlowPolicy.setLastKnownToExist(clock.now());
-                newFlowPolicies.put(flowId, existingFlowPolicy);
+                newPolicies.put(flowId, existingFlowPolicy);
             }
             else {
                 log.debug("**-> keeping as is with destinations %s", existingFlowPolicy.eventTapFlow.getTaps());
-                existingFlowPolicy.setLastKnownToExist(clock.now());
-                newFlowPolicies.put(flowId, existingFlowPolicy);
+                newPolicies.put(flowId, existingFlowPolicy);
             }
         }
 
-        // if flow information needs to be cached, then go through the old policy flows and add the ones that don't exist anymore but still need to be cached
-        long flowCacheMillis = eventTapConfig.getEventTapCacheExpiration().toMillis();
-        if (existingPolicy != null && existingPolicy != NULL_EVENT_TYPE_POLICY && flowCacheMillis > 0) {
-            for (Entry<String, FlowPolicy> flow : existingPolicy.getFlowPolicies().entrySet()) {
-                String flowId = flow.getKey();
-                if (!flows.containsKey(flowId)) {
-                    FlowPolicy flowPolicy = flow.getValue();
-                    if (flowPolicy.lastKnownToExist.plus(flowCacheMillis).isAfter(clock.now().toInstant())) {
-                        newFlowPolicies.put(flowId, flowPolicy);
-                    }
-                }
-            }
-        }
-
-        return new EventTypePolicy(newFlowPolicies.build());
+        return new EventTypePolicy(newPolicies.build());
     }
 
     private void stopExistingPoliciesNoLongerInUse(Map<String, EventTypePolicy> existingPolicies, Map<String, EventTypePolicy> newPolicies)
@@ -376,10 +321,10 @@ public class EventTapWriter implements EventWriter
 
     private void stopExistingPolicyIfNoLongerInUse(String eventType, EventTypePolicy existingPolicy, EventTypePolicy newPolicy)
     {
-        for (Entry<String, FlowPolicy> flowPolicyEntry : existingPolicy.getFlowPolicies().entrySet()) {
+        for (Entry<String, FlowPolicy> flowPolicyEntry : existingPolicy.flowPolicies.entrySet()) {
             String flowId = flowPolicyEntry.getKey();
             FlowPolicy existingFlowPolicy = flowPolicyEntry.getValue();
-            FlowPolicy newFlowPolicy = newPolicy.getFlowPolicies().get(flowId);
+            FlowPolicy newFlowPolicy = newPolicy.flowPolicies.get(flowId);
 
             if (newFlowPolicy == null || newFlowPolicy.processor != existingFlowPolicy.processor) {
                 stopBatchProcessor(eventType, flowId, existingFlowPolicy.processor);
@@ -398,9 +343,10 @@ public class EventTapWriter implements EventWriter
         processor.stop();
     }
 
-    private List<TapSpec> createTapSpecFromDiscovery(Iterable<ServiceDescriptor> descriptors)
+    private List<TapSpec> createTapSpecFromDiscovery(Table<String, String, FlowInfo> flows, Iterable<ServiceDescriptor> descriptors)
     {
         ImmutableList.Builder<TapSpec> tapSpecBuilder = ImmutableList.builder();
+        Table<String, String, FlowInfo> oldFlows = HashBasedTable.create(flows);
         for (ServiceDescriptor descriptor : descriptors) {
 
             Map<String, String> properties = descriptor.getProperties();
@@ -416,12 +362,34 @@ public class EventTapWriter implements EventWriter
                 continue;
             }
 
-            tapSpecBuilder.add(
-                    new TapSpec(eventType, flowId, uri, QosDelivery.fromString(properties.get(QOS_DELIVERY_PROPERTY_NAME)))
-            );
+            TapSpec tapSpec = new TapSpec(eventType, flowId, uri, QosDelivery.fromString(properties.get(QOS_DELIVERY_PROPERTY_NAME)));
+            tapSpecBuilder.add(tapSpec);
+            log.debug("Added EXISTING tapSpec which has not yet expired: eventType=%s, flowId=%s, uri=%s, qosDelivery=%s", tapSpec.eventType, tapSpec.flowId, tapSpec.uri, tapSpec.qosDelivery);
+
+            oldFlows.remove(eventType, flowId);
+        }
+
+        // if flow caching is enabled, then append old flows that haven't been missing from discovery long enough
+        if (eventTapConfig.getEventTapCacheExpiration().toMillis() > 0) {
+            for (Cell<String, String, FlowInfo> oldFlowCell : oldFlows.cellSet()) {
+                FlowInfo flowInfo = oldFlowCell.getValue();
+                if (isValidFlow(flowInfo)) {
+                    for (URI destination : flowInfo.destinations) {
+                        TapSpec tapSpec = new TapSpec(oldFlowCell.getRowKey(), oldFlowCell.getColumnKey(), destination, flowInfo.qosEnabled ? RETRY : BEST_EFFORT);
+                        tapSpecBuilder.add(tapSpec);
+                        log.debug("Added OLD tapSpec which has not yet expired: eventType=%s, flowId=%s, uri=%s, qosDelivery=%s", tapSpec.eventType, tapSpec.flowId, tapSpec.uri, tapSpec.qosDelivery);
+                    }
+                }
+            }
         }
 
         return tapSpecBuilder.build();
+    }
+
+    private boolean isValidFlow(FlowInfo flowInfo)
+    {
+        long flowCacheMillis = eventTapConfig.getEventTapCacheExpiration().toMillis();
+        return flowInfo.lastKnownToExist.plus(flowCacheMillis).isAfter(clock.now().toInstant());
     }
 
     private static List<TapSpec> createTapSpecFromConfig(StaticEventTapConfig staticEventTapConfig)
@@ -460,11 +428,13 @@ public class EventTapWriter implements EventWriter
     {
         private final boolean qosEnabled;
         private final Set<URI> destinations;
+        private final DateTime lastKnownToExist;
 
-        private FlowInfo(boolean qosEnabled, Set<URI> destinations)
+        private FlowInfo(boolean qosEnabled, Set<URI> destinations, DateTime lastKnownToExist)
         {
             this.qosEnabled = qosEnabled;
             this.destinations = ImmutableSet.copyOf(destinations);
+            this.lastKnownToExist = lastKnownToExist;
         }
 
         static Builder builder()
@@ -489,9 +459,9 @@ public class EventTapWriter implements EventWriter
                 return this;
             }
 
-            public FlowInfo build()
+            public FlowInfo build(Clock clock)
             {
-                return new FlowInfo(qosEnabled, destinations.build());
+                return new FlowInfo(qosEnabled, destinations.build(), clock.now());
             }
         }
     }
@@ -508,29 +478,17 @@ public class EventTapWriter implements EventWriter
             this.flowPolicies = flowPolicies == null ? ImmutableMap.<String, FlowPolicy>of() : ImmutableMap.copyOf(flowPolicies);
         }
 
-        public Map<String, FlowPolicy> getFlowPolicies()
-        {
-            return flowPolicies;
-        }
-
         public static class FlowPolicy
         {
             public final BatchProcessor<Event> processor;
             public final EventTapFlow eventTapFlow;
             public final boolean qosEnabled;
-            public DateTime lastKnownToExist;
 
-            public FlowPolicy(BatchProcessor<Event> processor, EventTapFlow eventTapFlow, boolean qosEnabled, DateTime lastKnownToExist)
+            public FlowPolicy(BatchProcessor<Event> processor, EventTapFlow eventTapFlow, boolean qosEnabled)
             {
                 this.processor = processor;
                 this.eventTapFlow = eventTapFlow;
                 this.qosEnabled = qosEnabled;
-                this.lastKnownToExist = checkNotNull(lastKnownToExist, "lastKnownToExist must not be null");
-            }
-
-            public void setLastKnownToExist(DateTime lastKnownToExist)
-            {
-                this.lastKnownToExist = lastKnownToExist;
             }
         }
     }

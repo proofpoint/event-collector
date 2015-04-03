@@ -281,7 +281,7 @@ public class EventTapWriter implements EventWriter
                 else {
                     eventTapFlow = eventTapFlowFactory.createEventTapFlow(eventType, flowId, destinations);
                 }
-                log.debug("  -> made flow with destinations %s", destinations);
+                log.debug("  -> made flow for %s with destinations %s", eventType, destinations);
 
                 String queueName = createBatchProcessorName(eventType, flowId);
                 Queue<Event> queue = queueFactory.create(createBatchProcessorName(eventType, flowId));
@@ -294,12 +294,12 @@ public class EventTapWriter implements EventWriter
                 batchProcessor.start();
             }
             else if (!destinations.equals(existingFlowPolicy.eventTapFlow.getTaps())) {
-                log.debug("**-> changing taps from %s to %s", existingFlowPolicy.eventTapFlow.getTaps(), destinations);
+                log.debug("**-> changing taps for %s from %s to %s", eventType, existingFlowPolicy.eventTapFlow.getTaps(), destinations);
                 existingFlowPolicy.eventTapFlow.setTaps(destinations);
                 newPolicies.put(flowId, existingFlowPolicy);
             }
             else {
-                log.debug("**-> keeping as is with destinations %s", existingFlowPolicy.eventTapFlow.getTaps());
+                log.debug("**-> keeping %s as is with destinations %s", eventType, existingFlowPolicy.eventTapFlow.getTaps());
                 newPolicies.put(flowId, existingFlowPolicy);
             }
         }
@@ -497,6 +497,7 @@ public class EventTapWriter implements EventWriter
 
             public FlowPolicy(BatchProcessor<Event> processor, EventTapFlow eventTapFlow, boolean qosEnabled)
             {
+                log.debug("Creating new FlowPolicy for ", eventTapFlow == null ? null : eventTapFlow.getTaps());
                 this.processor = processor;
                 this.eventTapFlow = eventTapFlow;
                 this.qosEnabled = qosEnabled;

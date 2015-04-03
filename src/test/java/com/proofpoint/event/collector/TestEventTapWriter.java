@@ -694,6 +694,7 @@ public class TestEventTapWriter
         forTap(tapB).verifyEvents(eventsB[0]);
 
         // remove tapB from discovery and expect events to tapB to still be processed because they are within 1h expiration interval
+        when(mockClock.now()).thenReturn(clock.now().plusMinutes(30));
         updateTaps(ImmutableList.of(tapA));
         eventTapWriter.refreshFlows();
         checkActiveProcessors(ImmutableList.of(tapA, tapB));
@@ -705,8 +706,8 @@ public class TestEventTapWriter
         assertNotNull(eventTapWriter.getFlows().get(typeA, flowId1));
         assertNotNull(eventTapWriter.getFlows().get(typeB, flowId1));
 
-        // move clock an hour ahead and expect tapB to stop receiving events
-        when(mockClock.now()).thenReturn(clock.now().plusHours(1).plusSeconds(1));
+        // move clock past cache expiration and expect tapB to stop receiving events
+        when(mockClock.now()).thenReturn(clock.now().plusMinutes(61));
         updateTaps(ImmutableList.of(tapA));
         eventTapWriter.refreshFlows();
         verifyProcessorState(tapB, 1, 1);
@@ -729,6 +730,7 @@ public class TestEventTapWriter
         forTap(tapA2).verifyEvents(eventsA[0]);
 
         // remove tapA1 from discovery and expect events to tapA1 to still be processed because they are within 1h expiration interval
+        when(mockClock.now()).thenReturn(clock.now().plusMinutes(30));
         updateTaps(ImmutableList.of(tapA2));
         eventTapWriter.refreshFlows();
         checkActiveProcessors(ImmutableList.of(tapA1, tapA2));
@@ -740,8 +742,8 @@ public class TestEventTapWriter
         assertNotNull(eventTapWriter.getFlows().get(typeA, flowId1));
         assertNotNull(eventTapWriter.getFlows().get(typeA, flowId2));
 
-        // move clock an hour ahead and expect tapA1 to stop receiving events
-        when(mockClock.now()).thenReturn(clock.now().plusHours(1).plusSeconds(1));
+        // move clock past cache expiration and expect tapB to stop receiving events
+        when(mockClock.now()).thenReturn(clock.now().plusMinutes(61));
         updateTaps(ImmutableList.of(tapA2));
         eventTapWriter.refreshFlows();
         verifyProcessorState(tapA1, 1, 1);

@@ -102,7 +102,7 @@ public class EventTapWriter implements EventWriter
             QueueFactory queueFactory,
             Clock clock)
     {
-        this.staticTapSpecs = createTapSpecFromConfig(checkNotNull(staticEventTapConfig, "staticEventTapConfig is null"));
+        this.staticTapSpecs = createTapSpecFromConfig(checkNotNull(staticEventTapConfig, "staticEventTapConfig is null"), checkNotNull(clock, "clock must not be null"));
         this.selector = checkNotNull(selector, "selector is null");
         this.executorService = checkNotNull(executorService, "executorService is null");
 
@@ -233,6 +233,7 @@ public class EventTapWriter implements EventWriter
             }
 
             flowBuilder.addDestination(uri);
+            flowBuilder.setLastKnownToExist(tapSpec.getLastKnownToExist());
         }
 
         return constructFlowsFromTable(flows);
@@ -243,7 +244,7 @@ public class EventTapWriter implements EventWriter
         ImmutableTable.Builder<String, String, FlowInfo> flowsBuilder = ImmutableTable.builder();
 
         for (Cell<String, String, Builder> cell : flows.cellSet()) {
-            flowsBuilder.put(cell.getRowKey(), cell.getColumnKey(), cell.getValue().build(clock));
+            flowsBuilder.put(cell.getRowKey(), cell.getColumnKey(), cell.getValue().build());
         }
 
         return flowsBuilder.build();
@@ -362,9 +363,9 @@ public class EventTapWriter implements EventWriter
                 continue;
             }
 
-            TapSpec tapSpec = new TapSpec(eventType, flowId, uri, QosDelivery.fromString(properties.get(QOS_DELIVERY_PROPERTY_NAME)));
+            TapSpec tapSpec = new TapSpec(eventType, flowId, uri, QosDelivery.fromString(properties.get(QOS_DELIVERY_PROPERTY_NAME)), clock.now());
             tapSpecBuilder.add(tapSpec);
-            log.debug("Added EXISTING tapSpec which has not yet expired: eventType=%s, flowId=%s, uri=%s, qosDelivery=%s", tapSpec.eventType, tapSpec.flowId, tapSpec.uri, tapSpec.qosDelivery);
+            log.debug("Added EXISTING tapSpec: eventType=%s, flowId=%s, uri=%s, qosDelivery=%s", tapSpec.eventType, tapSpec.flowId, tapSpec.uri, tapSpec.qosDelivery);
 
             oldFlows.remove(eventType, flowId);
         }
@@ -375,10 +376,13 @@ public class EventTapWriter implements EventWriter
                 FlowInfo flowInfo = oldFlowCell.getValue();
                 if (isValidFlow(flowInfo)) {
                     for (URI destination : flowInfo.destinations) {
-                        TapSpec tapSpec = new TapSpec(oldFlowCell.getRowKey(), oldFlowCell.getColumnKey(), destination, flowInfo.qosEnabled ? RETRY : BEST_EFFORT);
+                        TapSpec tapSpec = new TapSpec(oldFlowCell.getRowKey(), oldFlowCell.getColumnKey(), destination, flowInfo.qosEnabled ? RETRY : BEST_EFFORT, flowInfo.lastKnownToExist);
                         tapSpecBuilder.add(tapSpec);
-                        log.debug("Added OLD tapSpec which has not yet expired: eventType=%s, flowId=%s, uri=%s, qosDelivery=%s", tapSpec.eventType, tapSpec.flowId, tapSpec.uri, tapSpec.qosDelivery);
+                        log.debug("Added OLD tapSpec which has not yet expired: eventType=%s, flowId=%s, uri=%s, qosDelivery=%s, lastKnownToExist=%s", tapSpec.eventType, tapSpec.flowId, tapSpec.uri, tapSpec.qosDelivery, tapSpec.lastKnownToExist);
                     }
+                }
+                else {
+                    log.debug("Skipped tapSpec because it expired expired: eventType=%s, flowId=%s, qosDelivery=%s, lastKnownToExist=%s", oldFlowCell.getRowKey(), oldFlowCell.getColumnKey(), flowInfo.qosEnabled ? RETRY : BEST_EFFORT, flowInfo.lastKnownToExist);
                 }
             }
         }
@@ -392,14 +396,14 @@ public class EventTapWriter implements EventWriter
         return flowInfo.lastKnownToExist.plus(flowCacheMillis).isAfter(clock.now().toInstant());
     }
 
-    private static List<TapSpec> createTapSpecFromConfig(StaticEventTapConfig staticEventTapConfig)
+    private static List<TapSpec> createTapSpecFromConfig(StaticEventTapConfig staticEventTapConfig, Clock clock)
     {
         ImmutableList.Builder<TapSpec> tapSpecBuilder = ImmutableList.builder();
         for (Entry<FlowKey, PerFlowStaticEventTapConfig> entry : staticEventTapConfig.getStaticTaps().entrySet()) {
             FlowKey flowKey = entry.getKey();
             PerFlowStaticEventTapConfig config = entry.getValue();
             for (String uri : config.getUris()) {
-                tapSpecBuilder.add(new TapSpec(flowKey.getEventType(), flowKey.getFlowId(), safeUriFromString(uri), config.getQosDelivery()));
+                tapSpecBuilder.add(new TapSpec(flowKey.getEventType(), flowKey.getFlowId(), safeUriFromString(uri), config.getQosDelivery(), clock.now()));
             }
         }
 
@@ -434,7 +438,7 @@ public class EventTapWriter implements EventWriter
         {
             this.qosEnabled = qosEnabled;
             this.destinations = ImmutableSet.copyOf(destinations);
-            this.lastKnownToExist = lastKnownToExist;
+            this.lastKnownToExist = checkNotNull(lastKnownToExist, "lastKnownToExist must not be null");
         }
 
         static Builder builder()
@@ -446,6 +450,7 @@ public class EventTapWriter implements EventWriter
         {
             private boolean qosEnabled = false;
             private ImmutableSet.Builder<URI> destinations = ImmutableSet.builder();
+            private DateTime lastKnownToExist;
 
             public Builder setQosEnabled(boolean enabled)
             {
@@ -459,9 +464,15 @@ public class EventTapWriter implements EventWriter
                 return this;
             }
 
-            public FlowInfo build(Clock clock)
+            public Builder setLastKnownToExist(DateTime lastKnownToExist)
             {
-                return new FlowInfo(qosEnabled, destinations.build(), clock.now());
+                this.lastKnownToExist = lastKnownToExist;
+                return this;
+            }
+
+            public FlowInfo build()
+            {
+                return new FlowInfo(qosEnabled, destinations.build(), lastKnownToExist);
             }
         }
     }
@@ -502,13 +513,15 @@ public class EventTapWriter implements EventWriter
         private final String flowId;
         private final URI uri;
         private final QosDelivery qosDelivery;
+        private final DateTime lastKnownToExist;
 
-        public TapSpec(String eventType, String flowId, URI uri, QosDelivery qosDelivery)
+        public TapSpec(String eventType, String flowId, URI uri, QosDelivery qosDelivery, DateTime lastKnownToExist)
         {
             this.eventType = checkNotNull(eventType, "eventType is null");
             this.flowId = checkNotNull(flowId, "flowId is null");
             this.uri = checkNotNull(uri, "uri is null");
             this.qosDelivery = checkNotNull(qosDelivery, "qosDelivery is null");
+            this.lastKnownToExist = checkNotNull(lastKnownToExist, "lastKnownToExist must not be null");
         }
 
         public String getEventType()
@@ -529,6 +542,11 @@ public class EventTapWriter implements EventWriter
         public QosDelivery getQosDelivery()
         {
             return qosDelivery;
+        }
+
+        public DateTime getLastKnownToExist()
+        {
+            return lastKnownToExist;
         }
     }
 }

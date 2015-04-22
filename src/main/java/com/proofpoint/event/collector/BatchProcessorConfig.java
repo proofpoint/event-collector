@@ -28,7 +28,7 @@ public class BatchProcessorConfig
 {
     private int maxBatchSize = 1000;
     private int queueSize = 250000;
-    private String dataDirectory = ".";
+    private String dataDirectory;
     private Duration throttleTime = new Duration(2, TimeUnit.SECONDS);
 
     @NotNull

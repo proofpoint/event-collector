@@ -38,7 +38,7 @@ public class TestBatchProcessorConfig
         assertRecordedDefaults(recordDefaults(BatchProcessorConfig.class)
                 .setMaxBatchSize(1000)
                         .setQueueSize(250000)
-                        .setDataDirectory(".")
+                        .setDataDirectory(null)
                         .setThrottleTime(new Duration(2, TimeUnit.SECONDS))
         );
     }
@@ -79,6 +79,7 @@ public class TestBatchProcessorConfig
     {
         assertFailsValidation(new BatchProcessorConfig().setDataDirectory(""), "dataDirectory", "may not be empty", NotEmpty.class);
         assertFailsValidation(new BatchProcessorConfig().setDataDirectory(null), "dataDirectory", "may not be null", NotNull.class);
+        assertFailsValidation(new BatchProcessorConfig(), "dataDirectory", "may not be null", NotNull.class);
     }
 
     @Test

@@ -23,6 +23,7 @@ import com.proofpoint.reporting.ReportExporter;
 import com.proofpoint.testing.FileUtils;
 import com.proofpoint.units.Duration;
 import org.joda.time.DateTime;
+import org.mockito.Matchers;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -39,6 +40,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -266,6 +268,27 @@ public class TestAsyncBatchProcessor
             blockingHandler.unlock();
             processor.stop();
         }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void test_EmptyEntries_Ignored()
+            throws Exception
+    {
+        config.setMaxBatchSize(100).setQueueSize(1).setThrottleTime(new Duration(100, TimeUnit.MILLISECONDS));
+
+        List<Event> events = Collections.emptyList();
+        BatchHandler<Event> mockHandler = mock(BatchHandler.class);
+
+        Queue<Event> mockQueue = mock(Queue.class);
+        when(mockQueue.dequeue(anyInt())).thenReturn(events);
+
+        BatchProcessor<Event> processor = new AsyncBatchProcessor<>("foo", mockHandler, config, mockQueue);
+        processor.start();
+
+        Thread.sleep(300);
+
+        verify(mockHandler, never()).processBatch(Matchers.<List<Event>>any());
     }
 
     @SuppressWarnings("unchecked")

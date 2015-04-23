@@ -98,9 +98,13 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
             try {
                 // re-enqueue entries in case of failure
                 List<T> entries = queue.dequeue(maxBatchSize);
+                if (entries.isEmpty()) {
+                    return;
+                }
+
                 if (!handler.processBatch(entries)) {
                     queue.enqueueAllOrDrop(entries);
-                    log.debug("Failed to send %s events. Re-enqueued events for later delivery.", entries.size());
+                    log.debug("Failed to send %s events. Re-queued events for later delivery.", entries.size());
                 }
                 else {
                     log.debug("Successfully sent %s events", entries.size());

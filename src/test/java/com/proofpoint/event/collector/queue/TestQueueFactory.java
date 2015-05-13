@@ -15,14 +15,25 @@
  */
 package com.proofpoint.event.collector.queue;
 
+import com.leansoft.bigqueue.utils.FileUtil;
 import com.proofpoint.event.collector.BatchProcessorConfig;
 import com.proofpoint.reporting.ReportExporter;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.fail;
+import static org.testng.AssertJUnit.assertFalse;
 
 public class TestQueueFactory
 {
@@ -59,4 +70,74 @@ public class TestQueueFactory
     {
         queueFactory.create("");
     }
+
+    @Test
+    public void testTerminateQueueNotCreated()
+    {
+        queueFactory.terminate("bogus");
+    }
+
+    @Test
+    public void testTerminateQueueCannotDeleteDirectory()
+            throws IOException
+    {
+        String queueName = "queueCannotDelete";
+        File queueDir = new File("target", queueName);
+        ReportExporter exporter = mock(ReportExporter.class);
+        BatchProcessorConfig config = mock(BatchProcessorConfig.class);
+        when(config.getDataDirectory()).thenReturn("target");
+        when(config.getQueueSize()).thenReturn(5);
+        FileUtil.deleteDirectory(queueDir);
+
+        queueFactory = new QueueFactory(config, exporter);
+
+        Set<PosixFilePermission> permissions = new HashSet<>();
+        permissions.add(PosixFilePermission.OWNER_READ);
+
+        queueFactory.create(queueName);
+        assertTrue(queueDir.exists());
+        Files.setPosixFilePermissions(queueDir.toPath(), permissions);
+
+        try {
+            queueFactory.terminate(queueName);
+            fail("Expected IllegalStateException");
+        }
+        catch (IllegalStateException e) {
+            assertTrue(true);
+        }
+
+        permissions = new HashSet<>();
+        permissions.add(PosixFilePermission.OWNER_WRITE);
+        permissions.add(PosixFilePermission.OWNER_READ);
+        permissions.add(PosixFilePermission.OWNER_EXECUTE);
+        Files.setPosixFilePermissions(queueDir.toPath(), permissions);
+        FileUtil.deleteDirectory(queueDir);
+    }
+
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    @Test
+    public void testTerminate()
+            throws IOException
+    {
+        String queueName = "queueTerminate";
+        File queueDir = new File("target", queueName);
+        FileUtil.deleteDirectory(queueDir);
+        assertFalse(queueDir.exists());
+
+        ReportExporter exporter = mock(ReportExporter.class);
+        BatchProcessorConfig config = mock(BatchProcessorConfig.class);
+        when(config.getDataDirectory()).thenReturn("target");
+        when(config.getQueueSize()).thenReturn(5);
+
+        queueFactory = new QueueFactory(config, exporter);
+
+        Queue queue = queueFactory.create(queueName);
+        assertTrue(queueDir.exists());
+
+        queueFactory.terminate(queueName);
+        assertFalse(queueDir.exists());
+        verify(exporter).unexport(QueueFactory.getMetricName(queue.getName()));
+    }
+
+
 }

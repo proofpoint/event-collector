@@ -23,6 +23,11 @@ public interface BatchProcessor<T>
 
     void stop();
 
+    /**
+     * Destroys the queue and all files on disk associated with it.
+     */
+    void terminateQueue();
+
     void put(T entry);
 
     interface BatchHandler<T>

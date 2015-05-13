@@ -15,13 +15,15 @@
  */
 package com.proofpoint.event.collector.queue;
 
+import com.google.common.reflect.TypeToken;
 import com.google.inject.Inject;
+import com.leansoft.bigqueue.utils.FileUtil;
 import com.proofpoint.event.collector.BatchProcessorConfig;
-import com.proofpoint.event.collector.Event;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.reporting.ReportExporter;
 import org.weakref.jmx.ObjectNameBuilder;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -30,13 +32,15 @@ import static com.proofpoint.json.JsonCodec.jsonCodec;
 import static org.weakref.jmx.internal.guava.base.Preconditions.checkArgument;
 import static org.weakref.jmx.internal.guava.base.Preconditions.checkNotNull;
 
-public class QueueFactory
+public class QueueFactory<T>
 {
-    public static final JsonCodec<Event> EVENT_CODEC = jsonCodec(Event.class);
+    public final JsonCodec<T> EVENT_CODEC = jsonCodec(new TypeToken<T>(getClass())
+    {
+    });
 
     private final BatchProcessorConfig config;
     private final ReportExporter reportExporter;
-    private final Map<String, Queue<Event>> map;
+    private final Map<String, Queue<T>> map;
     private final Object lock = new Object();
 
     @Inject
@@ -48,12 +52,12 @@ public class QueueFactory
         map = new HashMap<>();
     }
 
-    public Queue<Event> create(String name)
+    public Queue<T> create(String name)
             throws IOException
     {
         checkArgument(name != null && !name.isEmpty(), "name is null or empty");
 
-        Queue<Event> queue;
+        Queue<T> queue;
         synchronized (lock) {
             queue = map.get(name);
             if (queue == null) {
@@ -66,14 +70,33 @@ public class QueueFactory
         return queue;
     }
 
-    private void setupQueueMetric(String flowId, Queue<Event> queue)
+    private void setupQueueMetric(String flowId, Queue<T> queue)
     {
-        String metricName = new ObjectNameBuilder("com.proofpoint.event.collector")
+        reportExporter.export(getMetricName(flowId), queue);
+    }
+
+    /**
+     * If a queue exists by the specified name, then the queue is destroyed by removing all files
+     * on disk associated with the queue.
+     *
+     * @param name name of the queue to terminate
+     */
+    public void terminate(String name)
+    {
+        Queue<T> queue = map.get(name);
+        if (queue != null) {
+            reportExporter.unexport(getMetricName(name));
+            FileUtil.deleteDirectory(new File(config.getDataDirectory(), name));
+            map.remove(name);
+        }
+    }
+
+    public static String getMetricName(String flowId)
+    {
+        return new ObjectNameBuilder("com.proofpoint.event.collector")
                 .withProperty("type", "EventCollector")
                 .withProperty("name", "Queue")
                 .withProperty("flowId", flowId)
                 .build();
-
-        reportExporter.export(metricName, queue);
     }
 }

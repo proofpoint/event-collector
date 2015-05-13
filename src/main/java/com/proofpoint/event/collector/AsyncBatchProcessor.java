@@ -17,6 +17,7 @@ package com.proofpoint.event.collector;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.event.collector.queue.Queue;
+import com.proofpoint.event.collector.queue.QueueFactory;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
 
@@ -35,22 +36,26 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
     private static final Logger log = Logger.get(AsyncBatchProcessor.class);
     private final BatchHandler<T> handler;
     private final int maxBatchSize;
+    private final QueueFactory<T> queueFactory;
     private final Queue<T> queue;
     private final ScheduledExecutorService executor;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final Duration throttleTime;
 
-    public AsyncBatchProcessor(String name, BatchHandler<T> handler, BatchProcessorConfig config, Queue<T> queue)
+    public AsyncBatchProcessor(String name, BatchHandler<T> handler, BatchProcessorConfig config, QueueFactory<T> queueFactory)
+            throws IOException
     {
         checkNotNull(name, "name is null");
         checkNotNull(handler, "handler is null");
-        checkNotNull(queue, "queue is null");
+        checkNotNull(queueFactory, "queueFactory is null");
 
         this.handler = handler;
-        this.queue = queue;
+        this.queueFactory = queueFactory;
         this.maxBatchSize = checkNotNull(config, "config is null").getMaxBatchSize();
         this.executor = newSingleThreadScheduledExecutor(new ThreadFactoryBuilder().setNameFormat(format("batch-processor-%s", name)).build());
         throttleTime = checkNotNull(config.getThrottleTime(), "throttle time is null");
+
+        queue = queueFactory.create(name);
     }
 
     @Override
@@ -71,6 +76,12 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
         catch (IOException e) {
             log.error(e, "Could not close queue");
         }
+    }
+
+    @Override
+    public void terminateQueue()
+    {
+        queueFactory.terminate(queue.getName());
     }
 
     @Override

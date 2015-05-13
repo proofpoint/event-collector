@@ -30,8 +30,6 @@ import com.proofpoint.discovery.client.ServiceType;
 import com.proofpoint.event.collector.EventTapWriter.EventTypePolicy.FlowPolicy;
 import com.proofpoint.event.collector.EventTapWriter.FlowInfo.Builder;
 import com.proofpoint.event.collector.StaticEventTapConfig.FlowKey;
-import com.proofpoint.event.collector.queue.Queue;
-import com.proofpoint.event.collector.queue.QueueFactory;
 import com.proofpoint.event.collector.util.Clock;
 import com.proofpoint.log.Logger;
 import com.proofpoint.units.Duration;
@@ -89,7 +87,6 @@ public class EventTapWriter implements EventWriter
 
     private ScheduledFuture<?> refreshJob;
     private final Duration flowRefreshDuration;
-    private final QueueFactory queueFactory;
     private final Clock clock;
 
     @Inject
@@ -99,7 +96,6 @@ public class EventTapWriter implements EventWriter
             EventTapFlowFactory eventTapFlowFactory,
             EventTapConfig config,
             StaticEventTapConfig staticEventTapConfig,
-            QueueFactory queueFactory,
             Clock clock)
     {
         this.staticTapSpecs = createTapSpecFromConfig(checkNotNull(staticEventTapConfig, "staticEventTapConfig is null"), checkNotNull(clock, "clock must not be null"));
@@ -112,7 +108,6 @@ public class EventTapWriter implements EventWriter
         this.allowHttpConsumers = config.isAllowHttpConsumers();
         this.batchProcessorFactory = checkNotNull(batchProcessorFactory, "batchProcessorFactory is null");
         this.eventTapFlowFactory = checkNotNull(eventTapFlowFactory, "eventTapFlowFactory is null");
-        this.queueFactory = checkNotNull(queueFactory, "queueFactory is null");
         this.clock = checkNotNull(clock, "clock must not be null");
     }
 
@@ -284,8 +279,7 @@ public class EventTapWriter implements EventWriter
                 log.debug("  -> made flow for %s with destinations %s", eventType, destinations);
 
                 String queueName = createBatchProcessorName(eventType, flowId);
-                Queue<Event> queue = queueFactory.create(createBatchProcessorName(eventType, flowId));
-                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), eventTapFlow, queue);
+                BatchProcessor<Event> batchProcessor = batchProcessorFactory.createBatchProcessor(createBatchProcessorName(eventType, flowId), eventTapFlow);
 
                 FlowPolicy flowPolicy = new FlowPolicy(batchProcessor, eventTapFlow, updatedFlowInfo.qosEnabled);
                 newPolicies.put(flowId, flowPolicy);
@@ -328,9 +322,16 @@ public class EventTapWriter implements EventWriter
             FlowPolicy newFlowPolicy = newPolicy.flowPolicies.get(flowId);
 
             if (newFlowPolicy == null || newFlowPolicy.processor != existingFlowPolicy.processor) {
-                stopBatchProcessor(eventType, flowId, existingFlowPolicy.processor);
+                terminateQueue(eventType, flowId, existingFlowPolicy.processor);
             }
         }
+    }
+
+    private void terminateQueue(String eventType, String flowId, BatchProcessor<Event> processor)
+    {
+        log.info("Stopping processor and terminating queue %s: no longer required", createBatchProcessorName(eventType, flowId));
+        processor.stop();
+        processor.terminateQueue();
     }
 
     private EventTypePolicy getPolicyForEvent(Event event)

@@ -16,25 +16,29 @@
 package com.proofpoint.event.collector;
 
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
-import com.proofpoint.event.collector.queue.Queue;
+import com.proofpoint.event.collector.queue.QueueFactory;
 
 import javax.inject.Inject;
+import java.io.IOException;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class BatchProcessorFactoryImpl implements BatchProcessorFactory
 {
     private final BatchProcessorConfig config;
+    private QueueFactory<Event> queueFactory;
 
     @Inject
-    public BatchProcessorFactoryImpl(BatchProcessorConfig config)
+    public BatchProcessorFactoryImpl(BatchProcessorConfig config, QueueFactory<Event> queueFactory)
     {
         this.config = checkNotNull(config, "config is null");
+        this.queueFactory = checkNotNull(queueFactory, "queueFactory is null");
     }
 
     @Override
-    public BatchProcessor<Event> createBatchProcessor(String name, BatchHandler<Event> batchHandler, Queue<Event> queue)
+    public BatchProcessor<Event> createBatchProcessor(String name, BatchHandler<Event> batchHandler)
+            throws IOException
     {
-        return new AsyncBatchProcessor<>(name, batchHandler, config, queue);
+        return new AsyncBatchProcessor<>(name, batchHandler, config, queueFactory);
     }
 }

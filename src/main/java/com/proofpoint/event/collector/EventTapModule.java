@@ -20,6 +20,7 @@ import com.google.inject.Binder;
 import com.google.inject.Key;
 import com.google.inject.Module;
 import com.google.inject.Provides;
+import com.google.inject.TypeLiteral;
 import com.proofpoint.event.collector.queue.QueueFactory;
 import org.weakref.jmx.ObjectNameBuilder;
 
@@ -50,7 +51,9 @@ public class EventTapModule implements Module
         binder.bind(EventTapFlowFactory.class).to(HttpEventTapFlowFactory.class);
         binder.bind(HttpEventTapFlowFactory.class).in(SINGLETON);
         binder.bind(EventTapWriter.class).in(SINGLETON);
-        binder.bind(QueueFactory.class).in(SINGLETON);
+        binder.bind(new TypeLiteral<QueueFactory<Event>>()
+        {
+        }).in(SINGLETON);
 
         String metricNamePrefix = new ObjectNameBuilder(this.getClass().getPackage().getName())
                 .withProperty("type", "EventCollector.EventTap.Queue")

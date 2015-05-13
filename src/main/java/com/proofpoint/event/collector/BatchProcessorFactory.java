@@ -16,9 +16,11 @@
 package com.proofpoint.event.collector;
 
 import com.proofpoint.event.collector.BatchProcessor.BatchHandler;
-import com.proofpoint.event.collector.queue.Queue;
+
+import java.io.IOException;
 
 public interface BatchProcessorFactory
 {
-    public BatchProcessor<Event> createBatchProcessor(String name, BatchHandler<Event> batchHandler, Queue<Event> queue);
+    BatchProcessor<Event> createBatchProcessor(String name, BatchHandler<Event> batchHandler)
+            throws IOException;
 }

@@ -80,6 +80,7 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
 
     @Override
     public void terminateQueue()
+            throws IOException
     {
         queueFactory.terminate(queue.getName());
     }

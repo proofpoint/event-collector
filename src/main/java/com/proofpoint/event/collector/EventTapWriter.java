@@ -302,6 +302,7 @@ public class EventTapWriter implements EventWriter
     }
 
     private void stopExistingPoliciesNoLongerInUse(Map<String, EventTypePolicy> existingPolicies, Map<String, EventTypePolicy> newPolicies)
+            throws IOException
     {
         // NOTE: If a flowId moved from QoS to non-QoS (or vice versa) a new EventTapFlow
         //       is created.
@@ -315,6 +316,7 @@ public class EventTapWriter implements EventWriter
     }
 
     private void stopExistingPolicyIfNoLongerInUse(String eventType, EventTypePolicy existingPolicy, EventTypePolicy newPolicy)
+            throws IOException
     {
         for (Entry<String, FlowPolicy> flowPolicyEntry : existingPolicy.flowPolicies.entrySet()) {
             String flowId = flowPolicyEntry.getKey();
@@ -328,6 +330,7 @@ public class EventTapWriter implements EventWriter
     }
 
     private void terminateQueue(String eventType, String flowId, BatchProcessor<Event> processor)
+            throws IOException
     {
         log.info("Stopping processor and terminating queue %s: no longer required", createBatchProcessorName(eventType, flowId));
         processor.stop();

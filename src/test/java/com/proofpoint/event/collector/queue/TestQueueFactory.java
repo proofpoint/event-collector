@@ -73,6 +73,7 @@ public class TestQueueFactory
 
     @Test
     public void testTerminateQueueNotCreated()
+            throws IOException
     {
         queueFactory.terminate("bogus");
     }

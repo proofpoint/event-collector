@@ -15,6 +15,7 @@
  */
 package com.proofpoint.event.collector;
 
+import java.io.IOException;
 import java.util.List;
 
 public interface BatchProcessor<T>
@@ -26,7 +27,8 @@ public interface BatchProcessor<T>
     /**
      * Destroys the queue and all files on disk associated with it.
      */
-    void terminateQueue();
+    void terminateQueue()
+            throws IOException;
 
     void put(T entry);
 

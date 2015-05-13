@@ -82,9 +82,11 @@ public class QueueFactory<T>
      * @param name name of the queue to terminate
      */
     public void terminate(String name)
+            throws IOException
     {
         Queue<T> queue = map.get(name);
         if (queue != null) {
+            queue.close();
             reportExporter.unexport(getMetricName(name));
             FileUtil.deleteDirectory(new File(config.getDataDirectory(), name));
             map.remove(name);

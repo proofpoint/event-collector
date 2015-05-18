@@ -154,11 +154,18 @@ public class S3Uploader
     public void destroy()
             throws IOException, InterruptedException
     {
-        uploadExecutor.shutdown();
-        uploadExecutor.awaitTermination(60, TimeUnit.SECONDS);
+        shutdownExecutorService(uploadExecutor);
+        shutdownExecutorService(retryExecutor);
+    }
 
-        retryExecutor.shutdown();
-        retryExecutor.awaitTermination(60, TimeUnit.SECONDS);
+    private void shutdownExecutorService(ExecutorService executor)
+            throws InterruptedException
+    {
+        executor.shutdown();
+
+        //noinspection StatementWithEmptyBody
+        while (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+        }
     }
 
     private void upload(EventPartition partition, File file)

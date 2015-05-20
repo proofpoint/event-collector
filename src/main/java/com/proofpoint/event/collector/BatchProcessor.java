@@ -25,7 +25,7 @@ public interface BatchProcessor<T>
     void stop();
 
     /**
-     * Destroys the queue and all files on disk associated with it.
+     * Destroys the queue and releases all resources used by the queue.
      */
     void terminateQueue()
             throws IOException;

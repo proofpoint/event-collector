@@ -15,6 +15,7 @@
  */
 package com.proofpoint.event.collector;
 
+import java.io.IOException;
 import java.util.List;
 
 public interface BatchProcessor<T>
@@ -22,6 +23,12 @@ public interface BatchProcessor<T>
     void start();
 
     void stop();
+
+    /**
+     * Destroys the queue and releases all resources used by the queue.
+     */
+    void terminateQueue()
+            throws IOException;
 
     void put(T entry);
 

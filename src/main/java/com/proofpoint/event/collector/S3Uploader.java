@@ -152,10 +152,20 @@ public class S3Uploader
 
     @PreDestroy
     public void destroy()
-            throws IOException
+            throws IOException, InterruptedException
     {
-        uploadExecutor.shutdown();
-        retryExecutor.shutdown();
+        shutdownExecutorService(uploadExecutor);
+        shutdownExecutorService(retryExecutor);
+    }
+
+    private void shutdownExecutorService(ExecutorService executor)
+            throws InterruptedException
+    {
+        executor.shutdown();
+
+        //noinspection StatementWithEmptyBody
+        while (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+        }
     }
 
     private void upload(EventPartition partition, File file)

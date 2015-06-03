@@ -18,6 +18,7 @@ package com.proofpoint.event.collector.queue;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.leansoft.bigqueue.BigQueueImpl;
 import com.leansoft.bigqueue.IBigQueue;
 import com.proofpoint.json.JsonCodec;
@@ -68,8 +69,8 @@ public class FileBackedQueue<T> implements Queue<T>
         this.queue = new BigQueueImpl(dataDirectory, name);
         this.capacity = capacity;
 
-        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
-        executor.schedule(new FileCleaner(), 1, TimeUnit.MINUTES);
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1, new ThreadFactoryBuilder().setNameFormat("FileBackedQueueCleaner-" + name + "-%s").build());
+        executor.scheduleAtFixedRate(new FileCleaner(), 1, 1, TimeUnit.MINUTES);
     }
 
     @Reported
@@ -194,7 +195,7 @@ public class FileBackedQueue<T> implements Queue<T>
             try {
                 queue.gc();
             }
-            catch (IOException e) {
+            catch (Exception e) {
                 log.error(e, "Could not remove old queue files.");
             }
         }

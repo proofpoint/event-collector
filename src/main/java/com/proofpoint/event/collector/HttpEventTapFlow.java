@@ -145,6 +145,8 @@ class HttpEventTapFlow implements EventTapFlow
 
     private boolean sendEvents(List<URI> taps, List<Event> entries)
     {
+        log.debug("About to send %s events to %s", entries.size(), taps);
+
         Iterable<URI> randomizedTaps;
 
         if (taps.size() > 1) {

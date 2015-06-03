@@ -17,6 +17,7 @@ package com.proofpoint.event.collector;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.base.MoreObjects;
 import org.joda.time.DateTime;
 
 import javax.annotation.concurrent.Immutable;
@@ -112,5 +113,16 @@ public class Event
         }
 
         return Objects.equals(this.type, other.type) && Objects.equals(this.uuid, other.uuid) && Objects.equals(this.host, other.host) && Objects.equals(this.data, other.data);
+    }
+
+    @Override
+    public String toString()
+    {
+        return MoreObjects.toStringHelper(this)
+                .add("type", type)
+                .add("uuid", uuid)
+                .add("host", host)
+                .add("timestamp", timestamp)
+                .toString();
     }
 }

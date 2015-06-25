@@ -29,12 +29,15 @@ import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 
 import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.UNSUPPORTED;
 import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.VALID;
 import static com.proofpoint.event.collector.EventCollectorStats.ProcessType.DISTRIBUTE;
 import static com.proofpoint.event.collector.EventCollectorStats.ProcessType.WRITE;
+import static javax.ws.rs.core.Response.Status.ACCEPTED;
+import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -42,8 +45,6 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
-import static javax.ws.rs.core.Response.Status.ACCEPTED;
-import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 
 public class TestEventResource
 {
@@ -181,6 +182,40 @@ public class TestEventResource
         verifyWrittenAndDistributedEvents(ImmutableList.<Event>of(), events);
 
         verifyMetrics(DISTRIBUTE, ImmutableList.of(new EventMetric(eventTypeA, VALID, 2), new EventMetric(eventTypeB, VALID, 1)));
+    }
+
+    @Test
+    public void testFilterPercent()
+            throws IOException
+    {
+        ServerConfig config = new ServerConfig();
+        config.setFilterPercent(20);
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), config, eventCollectorStats);
+
+        Event event = new Event("TapPrsMessage", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+
+        int limit = new Random().nextInt(10000);
+        for (int i = 0; i < limit; i++) {
+            resource.write(ImmutableList.of(event));
+        }
+
+        assertEquals(writer.getWrittenEvents().size() / (double) limit, .80, .1);
+    }
+
+    @Test
+    public void testFilterPercentNoFilter()
+            throws IOException
+    {
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(), eventCollectorStats);
+
+        Event event = new Event("TapPrsMessage", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+
+        int limit = new Random().nextInt(10000);
+        for (int i = 0; i < limit; i++) {
+            resource.write(ImmutableList.of(event));
+        }
+
+        assertEquals(writer.getWrittenEvents().size() / (double) limit, 1.0, 0);
     }
 
     private void verifyAcceptedResponse(Response response)

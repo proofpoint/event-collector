@@ -23,6 +23,7 @@ import com.proofpoint.units.Duration;
 import org.testng.annotations.Test;
 
 import javax.validation.constraints.AssertTrue;
+import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Pattern;
@@ -51,6 +52,7 @@ public class TestServerConfig
                 .setS3StagingLocation(null)
                 .setS3DataLocation(null)
                 .setS3MetadataLocation(null)
+                        .setFilterPercent(0)
                 .setCombinerEnabled(false)
                 .setCombinerStartDaysAgo(14)
                 .setCombinerEndDaysAgo(-1)
@@ -80,6 +82,7 @@ public class TestServerConfig
                 .put("collector.s3-staging-location", "s3://example-staging/")
                 .put("collector.s3-data-location", "s3://example-data/")
                 .put("collector.s3-metadata-location", "s3://example-metadata/")
+                .put("collector.filter-percent", "25")
                 .put("collector.combiner.enabled", "true")
                 .put("collector.combiner.days-ago-to-start", "10")
                 .put("collector.combiner.days-ago-to-end", "1")
@@ -105,6 +108,7 @@ public class TestServerConfig
                 .setS3StagingLocation("s3://example-staging/")
                 .setS3DataLocation("s3://example-data/")
                 .setS3MetadataLocation("s3://example-metadata/")
+                .setFilterPercent(25)
                 .setCombinerEnabled(true)
                 .setCombinerStartDaysAgo(10)
                 .setCombinerEndDaysAgo(1)
@@ -135,6 +139,7 @@ public class TestServerConfig
                 .put("collector.s3-staging-location", "s3://example-staging/")
                 .put("collector.s3-data-location", "s3://example-data/")
                 .put("collector.s3-metadata-location", "s3://example-metadata/")
+                .put("collector.filter-percent", "20")
                 .put("collector.combiner.enabled", "true")
                 .put("collector.combiner.days-ago-to-start", "10")
                 .put("collector.combiner.days-ago-to-end", "1")
@@ -156,6 +161,7 @@ public class TestServerConfig
                 .put("collector.s3-staging-location", "s3://example-staging/")
                 .put("collector.s3-data-location", "s3://example-data/")
                 .put("collector.s3-metadata-location", "s3://example-metadata/")
+                .put("collector.filter-percent", "20")
                 .put("collector.combiner.enabled", "true")
                 .put("collector.combiner.max-days-back", "10")
                 .put("collector.combiner.days-ago-to-end", "1")
@@ -176,6 +182,8 @@ public class TestServerConfig
         assertFailsValidation(new ServerConfig().setCombinerGroupId(""), "combinerGroupId", "must be non-empty", Size.class);
         assertFailsValidation(new ServerConfig().setCombinerThreadCount(0), "combinerThreadCount", "must be greater than or equal to 1", Min.class);
         assertFailsValidation(new ServerConfig().setCombinerHighPriorityEventTypes(ImmutableSet.of("TypeA", "TypeB")).setCombinerLowPriorityEventTypes(ImmutableSet.of("TypeB", "TypeC")), "highAndLowPriorityEventTypesDisjoint", "High- and Low-Priority event type lists must be disjoint.", AssertTrue.class);
+        assertFailsValidation(new ServerConfig().setFilterPercent(-1), "filterPercent", "must be greater than or equal to 0", Min.class);
+        assertFailsValidation(new ServerConfig().setFilterPercent(101), "filterPercent", "must be less than or equal to 100", Max.class);
 
         assertValidates(new ServerConfig()
                 .setLocalStagingDirectory(new File("testdir"))
@@ -184,7 +192,8 @@ public class TestServerConfig
                 .setS3StagingLocation("s3://example-staging/")
                 .setS3DataLocation("s3://example-data/")
                 .setS3MetadataLocation("s3://example-metadata/")
-                .setCombinerGroupId("someGroupId"));
+                .setCombinerGroupId("someGroupId"))
+        ;
     }
 
     @Test

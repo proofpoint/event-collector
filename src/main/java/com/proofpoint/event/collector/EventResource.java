@@ -29,6 +29,7 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import java.io.IOException;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -44,8 +45,9 @@ public class EventResource
 {
     private final Set<EventWriter> writers;
     private final Set<String> acceptedEventTypes;
-
     private final EventCollectorStats eventCollectorStats;
+    private final Random random = new Random();
+    private final int filterPercent;
 
     @Inject
     public EventResource(Set<EventWriter> writers, ServerConfig config, EventCollectorStats eventCollectorStats)
@@ -53,6 +55,8 @@ public class EventResource
         this.eventCollectorStats = checkNotNull(eventCollectorStats, "eventCollectorStats is null");
         this.writers = checkNotNull(writers, "writers are null");
         this.acceptedEventTypes = ImmutableSet.copyOf(checkNotNull(config, "config is null").getAcceptedEventTypes());
+
+        this.filterPercent = config.getFilterPercent();
     }
 
     @POST
@@ -80,7 +84,9 @@ public class EventResource
             if (acceptedEventType(event.getType())) {
 
                 for (EventWriter writer : writers) {
-                    processor.process(writer, event);
+                    if (acceptEvent()) {
+                        processor.process(writer, event);
+                    }
                 }
 
                 eventCollectorStats.inboundEvents(event.getType(), VALID, processType).add(1);
@@ -98,6 +104,11 @@ public class EventResource
         }
 
         return Response.status(Response.Status.ACCEPTED).build();
+    }
+
+    private boolean acceptEvent()
+    {
+        return filterPercent == 0 || random.nextInt(101) > filterPercent;
     }
 
     private boolean acceptedEventType(String type)

@@ -63,7 +63,7 @@ public class ServerConfig
     private Duration retryDelay = new Duration(0, TimeUnit.MINUTES);
     private String combinerGroupId = "default";
     private String serviceType = "collector";
-    private int filterPercent = 0;
+    private int distributeFilterPercent = 0;
 
 
     @NotNull
@@ -245,16 +245,16 @@ public class ServerConfig
 
     @Max(100)
     @Min(0)
-    public int getFilterPercent()
+    public int getDistributeFilterPercent()
     {
-        return filterPercent;
+        return distributeFilterPercent;
     }
 
-    @Config("collector.filter-percent")
-    @ConfigDescription("Filters out the specified percent of messages for all event types. Default is 0 (do not filter)")
-    public ServerConfig setFilterPercent(int filterPercent)
+    @Config("collector.distribute.filter-percent")
+    @ConfigDescription("Filters out the specified percent of messages for all event types when distribute is called. Default is 0 (do not filter)")
+    public ServerConfig setDistributeFilterPercent(int distributeFilterPercent)
     {
-        this.filterPercent = filterPercent;
+        this.distributeFilterPercent = distributeFilterPercent;
         return this;
     }
 

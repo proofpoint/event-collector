@@ -29,7 +29,6 @@ import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.UUID;
 
 import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.UNSUPPORTED;
@@ -185,37 +184,55 @@ public class TestEventResource
     }
 
     @Test
-    public void testFilterPercent()
+    public void testDistributeFilterPercent()
             throws IOException
     {
         ServerConfig config = new ServerConfig();
-        config.setFilterPercent(20);
+        config.setDistributeFilterPercent(20);
         EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), config, eventCollectorStats);
 
         Event event = new Event("TapPrsMessage", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
 
-        int limit = new Random().nextInt(10000);
+        int limit = 100000;
         for (int i = 0; i < limit; i++) {
-            resource.write(ImmutableList.of(event));
+            resource.distribute(ImmutableList.of(event));
         }
 
-        assertEquals(writer.getWrittenEvents().size() / (double) limit, .80, .1);
+        assertEquals(writer.getDistributedEvents().size() / (double) limit, .80, .1);
     }
 
     @Test
-    public void testFilterPercentNoFilter()
+    public void testDistributeFilterPercentNone()
             throws IOException
     {
         EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(), eventCollectorStats);
 
         Event event = new Event("TapPrsMessage", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
 
-        int limit = new Random().nextInt(10000);
+        int limit = 100000;
         for (int i = 0; i < limit; i++) {
-            resource.write(ImmutableList.of(event));
+            resource.distribute(ImmutableList.of(event));
         }
 
-        assertEquals(writer.getWrittenEvents().size() / (double) limit, 1.0, 0);
+        assertEquals(writer.getDistributedEvents().size() / (double) limit, 1.0, 0);
+    }
+
+    @Test
+    public void testDistributeFilterPercentAll()
+            throws IOException
+    {
+        ServerConfig config = new ServerConfig();
+        config.setDistributeFilterPercent(100);
+        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), config, eventCollectorStats);
+
+        Event event = new Event("TapPrsMessage", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
+
+        int limit = 100000;
+        for (int i = 0; i < limit; i++) {
+            resource.distribute(ImmutableList.of(event));
+        }
+
+        assertEquals(writer.getDistributedEvents().size() / (double) limit, 0.0, 0);
     }
 
     private void verifyAcceptedResponse(Response response)

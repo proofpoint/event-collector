@@ -18,7 +18,6 @@ package com.proofpoint.event.collector.queue;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.leansoft.bigqueue.BigQueueImpl;
 import com.leansoft.bigqueue.IBigQueue;
 import com.proofpoint.json.JsonCodec;
@@ -30,8 +29,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -46,12 +45,13 @@ public class FileBackedQueue<T> implements Queue<T>
     private final JsonCodec<T> codec;
     private final long capacity;
     private final String name;
+    private final ScheduledFuture<?> cleanupThread;
 
     private final AtomicLong itemsEnqueued = new AtomicLong(0);
     private final AtomicLong itemsDequeued = new AtomicLong(0);
     private final AtomicLong itemsDroppped = new AtomicLong(0);
 
-    public FileBackedQueue(String name, String dataDirectory, JsonCodec<T> codec, long capacity)
+    public FileBackedQueue(String name, String dataDirectory, JsonCodec<T> codec, long capacity, ScheduledExecutorService executor)
             throws IOException
     {
         this.codec = checkNotNull(codec, "codec is null");
@@ -69,8 +69,7 @@ public class FileBackedQueue<T> implements Queue<T>
         this.queue = new BigQueueImpl(dataDirectory, name);
         this.capacity = capacity;
 
-        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1, new ThreadFactoryBuilder().setNameFormat("FileBackedQueueCleaner-" + name + "-%s").build());
-        executor.scheduleAtFixedRate(new FileCleaner(), 1, 1, TimeUnit.MINUTES);
+        cleanupThread = executor.scheduleAtFixedRate(new FileCleaner(), 1, 1, TimeUnit.MINUTES);
     }
 
     @Reported
@@ -171,6 +170,7 @@ public class FileBackedQueue<T> implements Queue<T>
     public void close()
             throws IOException
     {
+        cleanupThread.cancel(false);
         queue.close();
     }
 
@@ -185,6 +185,11 @@ public class FileBackedQueue<T> implements Queue<T>
     public String getName()
     {
         return name;
+    }
+
+    ScheduledFuture<?> getCleanupThread()
+    {
+        return cleanupThread;
     }
 
     private class FileCleaner implements Runnable

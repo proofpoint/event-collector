@@ -16,6 +16,7 @@
 package com.proofpoint.event.collector.queue;
 
 import com.google.common.reflect.TypeToken;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.Inject;
 import com.leansoft.bigqueue.utils.FileUtil;
 import com.proofpoint.event.collector.BatchProcessorConfig;
@@ -27,6 +28,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
 import static com.proofpoint.json.JsonCodec.jsonCodec;
 import static org.weakref.jmx.internal.guava.base.Preconditions.checkArgument;
@@ -42,6 +45,8 @@ public class QueueFactory<T>
     private final ReportExporter reportExporter;
     private final Map<String, Queue<T>> map;
     private final Object lock = new Object();
+    private final ScheduledExecutorService executor;
+
 
     @Inject
     public QueueFactory(BatchProcessorConfig config, ReportExporter reportExporter)
@@ -50,6 +55,7 @@ public class QueueFactory<T>
         this.reportExporter = checkNotNull(reportExporter, "reportExporter is null");
 
         map = new HashMap<>();
+        executor = Executors.newScheduledThreadPool(3, new ThreadFactoryBuilder().setNameFormat("FileBackedQueueCleaner-%s").build());
     }
 
     public Queue<T> create(String name)
@@ -61,7 +67,7 @@ public class QueueFactory<T>
         synchronized (lock) {
             queue = map.get(name);
             if (queue == null) {
-                queue = new FileBackedQueue<>(name, config.getDataDirectory(), EVENT_CODEC, config.getQueueSize());
+                queue = new FileBackedQueue<>(name, config.getDataDirectory(), EVENT_CODEC, config.getQueueSize(), executor);
                 setupQueueMetric(name, queue);
                 map.put(name, queue);
             }

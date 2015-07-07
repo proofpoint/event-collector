@@ -276,7 +276,7 @@
                         <exclude>.idea/**</exclude>
                         <exclude>var/**</exclude>
                         <exclude>staging/**</exclude>
-                        <exclude>**/manifext.xml</exclude>
+                        <exclude>**/manifest.xml</exclude>
                     </excludes>
                 </configuration>
                 <executions>

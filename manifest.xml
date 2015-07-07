@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+
+    <services>
+
+        <service name='d4::event-collector' action='update'>
+
+            <property name='[dc:awsuse]taps:AttachmentFeed@collector.uris' value='https://tap-events-at1.prism.ppops.net/v2/event/distribute' action='add'/>
+            <property name='[dc:awsuse]taps:Campaign@collector.uris' value='https://tap-events-at1.prism.ppops.net/v2/event/distribute' action='add'/>
+            <property name='[dc:awsuse]taps:DashboardJoinedThreatMessage@collector.uris'
+                      value='http://m0079119.prism.ppops.net:8083/v2/event/distribute, http://m0079108.prism.ppops.net:8083/v2/event/distribute' action='add'/>
+            <property name='[dc:awsuse]taps:DashboardJoinedUrlThreatClick@collector.uris'
+                      value='http://m0079119.prism.ppops.net:8083/v2/event/distribute, http://m0079108.prism.ppops.net:8083/v2/event/distribute' action='add'/>
+            <property name='[dc:awsuse]taps:UrlFeed@collector.uris' value='https://tap-events-at1.prism.ppops.net/v2/event/distribute' action='add'/>
+            <property name='event-tap.batch-size-max' value='1000' action='add'/>
+            <property name='aws-access-key' value='<add key here>' action='add'/>
+            <property name='aws-secret-key' value='<add secret here>' action='add'/>
+            <property name='event-tap.cache-expiration' value='2h' action='add'/>
+            <property name='event-tap.data-directory' value='/opt/proofpoint/event-collector/var/client-data-cache' action='add'/>
+            <property name='event-tap.queue-size' value='1000000' action='add'/>
+            <property name='event-tap.throttle-time' value='500ms' action='add'/>
+            <property name='pulse:query-uri' value='http://pulse-2107208448.us-east-1.elb.amazonaws.com:8080' action='add'/>
+            <property name='s3-data-location' value='s3://proofpoint-production/events/' action='add'/>
+            <property name='s3-metadata-location' value='s3://proofpoint-production/metadata/' action='add'/>
+            <property name='s3-staging-location' value='s3://proofpoint-production/collector-staging/' action='add'/>
+
+            <property name='version' value='1.19.33-1' action='add'/>
+
+        </service>
+
+    </services>
+
+    <modules/>
+
+    <packages>
+        <package name='event-collector-1.19.33-1'/>
+    </packages>
+
+</manifest>

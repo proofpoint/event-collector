@@ -13,8 +13,8 @@
                       value='http://m0079119.prism.ppops.net:8083/v2/event/distribute, http://m0079108.prism.ppops.net:8083/v2/event/distribute' action='add'/>
             <property name='[dc:awsuse]taps:UrlFeed@collector.uris' value='https://tap-events-at1.prism.ppops.net/v2/event/distribute' action='add'/>
             <property name='event-tap.batch-size-max' value='1000' action='add'/>
-            <property name='aws-access-key' value='<add key here>' action='add'/>
-            <property name='aws-secret-key' value='<add secret here>' action='add'/>
+            <property name='aws-access-key' value='{add key here}' action='add'/>
+            <property name='aws-secret-key' value='{add secret here}' action='add'/>
             <property name='event-tap.cache-expiration' value='2h' action='add'/>
             <property name='event-tap.data-directory' value='/opt/proofpoint/event-collector/var/client-data-cache' action='add'/>
             <property name='event-tap.queue-size' value='1000000' action='add'/>

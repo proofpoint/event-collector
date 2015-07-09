@@ -183,58 +183,6 @@ public class TestEventResource
         verifyMetrics(DISTRIBUTE, ImmutableList.of(new EventMetric(eventTypeA, VALID, 2), new EventMetric(eventTypeB, VALID, 1)));
     }
 
-    @Test
-    public void testDistributeFilterPercent()
-            throws IOException
-    {
-        ServerConfig config = new ServerConfig();
-        config.setDistributeFilterPercent(20);
-        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), config, eventCollectorStats);
-
-        Event event = new Event("TapPrsMessage", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
-
-        int limit = 100000;
-        for (int i = 0; i < limit; i++) {
-            resource.distribute(ImmutableList.of(event));
-        }
-
-        assertEquals(writer.getDistributedEvents().size() / (double) limit, .80, .1);
-    }
-
-    @Test
-    public void testDistributeFilterPercentNone()
-            throws IOException
-    {
-        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), new ServerConfig(), eventCollectorStats);
-
-        Event event = new Event("TapPrsMessage", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
-
-        int limit = 100000;
-        for (int i = 0; i < limit; i++) {
-            resource.distribute(ImmutableList.of(event));
-        }
-
-        assertEquals(writer.getDistributedEvents().size() / (double) limit, 1.0, 0);
-    }
-
-    @Test
-    public void testDistributeFilterPercentAll()
-            throws IOException
-    {
-        ServerConfig config = new ServerConfig();
-        config.setDistributeFilterPercent(100);
-        EventResource resource = new EventResource(ImmutableSet.<EventWriter>of(writer), config, eventCollectorStats);
-
-        Event event = new Event("TapPrsMessage", UUID.randomUUID().toString(), "test.local", new DateTime(), ARBITRARY_DATA);
-
-        int limit = 100000;
-        for (int i = 0; i < limit; i++) {
-            resource.distribute(ImmutableList.of(event));
-        }
-
-        assertEquals(writer.getDistributedEvents().size() / (double) limit, 0.0, 0);
-    }
-
     private void verifyAcceptedResponse(Response response)
     {
         assertEquals(response.getStatus(), ACCEPTED.getStatusCode());

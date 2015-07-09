@@ -63,7 +63,6 @@ public class ServerConfig
     private Duration retryDelay = new Duration(0, TimeUnit.MINUTES);
     private String combinerGroupId = "default";
     private String serviceType = "collector";
-    private int distributeFilterPercent = 0;
 
 
     @NotNull
@@ -240,21 +239,6 @@ public class ServerConfig
     public ServerConfig setS3MetadataLocation(String s3MetadataLocation)
     {
         this.s3MetadataLocation = s3MetadataLocation;
-        return this;
-    }
-
-    @Max(100)
-    @Min(0)
-    public int getDistributeFilterPercent()
-    {
-        return distributeFilterPercent;
-    }
-
-    @Config("collector.distribute.filter-percent")
-    @ConfigDescription("Filters out the specified percent of messages for all event types when distribute is called. Default is 0 (do not filter)")
-    public ServerConfig setDistributeFilterPercent(int distributeFilterPercent)
-    {
-        this.distributeFilterPercent = distributeFilterPercent;
         return this;
     }
 

@@ -29,7 +29,6 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import java.io.IOException;
 import java.util.List;
-import java.util.Random;
 import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -45,8 +44,8 @@ public class EventResource
 {
     private final Set<EventWriter> writers;
     private final Set<String> acceptedEventTypes;
+
     private final EventCollectorStats eventCollectorStats;
-    private final ServerConfig config;
 
     @Inject
     public EventResource(Set<EventWriter> writers, ServerConfig config, EventCollectorStats eventCollectorStats)
@@ -54,8 +53,6 @@ public class EventResource
         this.eventCollectorStats = checkNotNull(eventCollectorStats, "eventCollectorStats is null");
         this.writers = checkNotNull(writers, "writers are null");
         this.acceptedEventTypes = ImmutableSet.copyOf(checkNotNull(config, "config is null").getAcceptedEventTypes());
-
-        this.config = config;
     }
 
     @POST
@@ -83,7 +80,7 @@ public class EventResource
             if (acceptedEventType(event.getType())) {
 
                 for (EventWriter writer : writers) {
-                    processor.process(config, writer, event);
+                    processor.process(writer, event);
                 }
 
                 eventCollectorStats.inboundEvents(event.getType(), VALID, processType).add(1);
@@ -103,7 +100,6 @@ public class EventResource
         return Response.status(Response.Status.ACCEPTED).build();
     }
 
-
     private boolean acceptedEventType(String type)
     {
         return acceptedEventTypes.isEmpty() || acceptedEventTypes.contains(type);
@@ -114,7 +110,7 @@ public class EventResource
         WRITER
                 {
                     @Override
-                    void process(ServerConfig config, EventWriter writer, Event event)
+                    void process(EventWriter writer, Event event)
                             throws IOException
                     {
                         writer.write(event);
@@ -123,19 +119,14 @@ public class EventResource
         DISTRIBUTOR
                 {
                     @Override
-                    void process(ServerConfig config, EventWriter writer, Event event)
+                    void process(EventWriter writer, Event event)
                             throws IOException
                     {
-                        int filterPercent = config.getDistributeFilterPercent();
-                        if (filterPercent == 0 || random.nextInt(101) > filterPercent) {
-                            writer.distribute(event);
-                        }
+                        writer.distribute(event);
                     }
                 };
 
-        private final static Random random = new Random();
-
-        abstract void process(ServerConfig config, EventWriter writer, Event event)
+        abstract void process(EventWriter writer, Event event)
                 throws IOException;
     }
 }

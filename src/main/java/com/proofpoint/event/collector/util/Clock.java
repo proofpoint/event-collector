@@ -13,29 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.proofpoint.event.collector;
+package com.proofpoint.event.collector.util;
 
-import java.io.IOException;
-import java.util.List;
+import org.joda.time.DateTime;
 
-public interface BatchProcessor<T>
+public interface Clock
 {
-    void start();
-
-    void stop();
-
-    /**
-     * Destroys the queue and releases all resources used by the queue.
-     */
-    void terminateQueue()
-            throws IOException;
-
-    void put(T entry);
-
-    interface BatchHandler<T>
-    {
-        boolean processBatch(List<T> entries);
-
-        void notifyEntriesDropped(int count);
-    }
+    DateTime now();
 }
+

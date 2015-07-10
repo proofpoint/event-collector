@@ -43,6 +43,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Bound in MainModule this writer is used to upload data to s3
+ */
+
 public class SpoolingEventWriter
         implements EventWriter
 {

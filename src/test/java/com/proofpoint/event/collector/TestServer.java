@@ -81,6 +81,7 @@ public class TestServer
                 .put("collector.s3-staging-location", "s3://test-staging/")
                 .put("collector.s3-data-location", "s3://test-data/")
                 .put("collector.s3-metadata-location", "s3://test-metadata/")
+                .put("collector.event-tap.data-directory", "target")
                 .build();
 
         Bootstrap app = Bootstrap.bootstrapApplication("event-collector")

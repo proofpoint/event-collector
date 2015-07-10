@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.proofpoint.event</groupId>
     <artifactId>event-collector</artifactId>
-    <version>1.19.40-SNAPSHOT</version>
+    <version>1.19.42-SNAPSHOT</version>
 
     <name>event-collector</name>
     <description>Event collector</description>
@@ -12,7 +12,7 @@
     <parent>
         <groupId>com.proofpoint.platform</groupId>
         <artifactId>rest-server-base</artifactId>
-        <version>1.16</version>
+        <version>1.18</version>
     </parent>
 
     <licenses>
@@ -25,6 +25,7 @@
 
     <properties>
         <main-class>com.proofpoint.event.collector.Main</main-class>
+        <project.rpm.username>platform</project.rpm.username>
     </properties>
 
     <scm>
@@ -42,16 +43,16 @@
     </repositories>
 
     <distributionManagement>
-        <snapshotRepository>
-            <id>sonatype-nexus-snapshots</id>
-            <name>Sonatype Nexus Snapshots</name>
-            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
-        </snapshotRepository>
         <repository>
-            <id>sonatype-nexus-staging</id>
-            <name>Nexus Release Repository</name>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+            <id>proofpoint</id>
+            <name>Proofpoint Releases Repository</name>
+            <url>http://maven.us.proofpoint.com/nexus/content/repositories/proofpoint-eng</url>
         </repository>
+        <snapshotRepository>
+            <id>proofpoint-snapshots</id>
+            <name>Proofpoint Snapshots Repository</name>
+            <url>http://maven.us.proofpoint.com/nexus/content/repositories/proofpoint-eng-snapshots</url>
+        </snapshotRepository>
     </distributionManagement>
 
     <dependencies>
@@ -230,6 +231,7 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
+            <version>1.9.5</version>
             <scope>test</scope>
         </dependency>
 
@@ -274,6 +276,7 @@
                         <exclude>.idea/**</exclude>
                         <exclude>var/**</exclude>
                         <exclude>staging/**</exclude>
+                        <exclude>**/manifest.xml</exclude>
                     </excludes>
                 </configuration>
                 <executions>
@@ -304,6 +307,7 @@
                 <groupId>com.ning.maven.plugins</groupId>
                 <artifactId>maven-duplicate-finder-plugin</artifactId>
                 <configuration>
+                    <skip>false</skip>
                     <exceptions>
                         <exception>
                             <conflictingDependencies>

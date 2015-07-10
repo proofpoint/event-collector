@@ -22,7 +22,13 @@ import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.google.inject.*;
+import com.google.inject.Binder;
+import com.google.inject.Inject;
+import com.google.inject.Key;
+import com.google.inject.Module;
+import com.google.inject.Provider;
+import com.google.inject.Provides;
+import com.google.inject.Scopes;
 import com.proofpoint.discovery.client.announce.AnnouncementHttpServerInfo;
 import com.proofpoint.discovery.client.announce.ServiceAnnouncement;
 import com.proofpoint.discovery.client.announce.ServiceAnnouncement.ServiceAnnouncementBuilder;
@@ -34,6 +40,8 @@ import com.proofpoint.event.collector.combiner.S3StorageSystem;
 import com.proofpoint.event.collector.combiner.ScheduledCombiner;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObjectCombiner;
+import com.proofpoint.event.collector.util.Clock;
+import com.proofpoint.event.collector.util.SystemClock;
 import org.weakref.jmx.ObjectNameBuilder;
 
 import javax.inject.Named;
@@ -59,6 +67,8 @@ public class MainModule
     {
         binder.requireExplicitBindings();
         binder.disableCircularProxies();
+
+        binder.bind(Clock.class).toInstance(new SystemClock());
 
         binder.bind(EventClient.class).to(LocalEventClient.class).in(Scopes.SINGLETON);
 

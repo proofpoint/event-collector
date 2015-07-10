@@ -15,11 +15,14 @@
  */
 package com.proofpoint.event.collector;
 
+import com.google.common.base.Charsets;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.io.CharStreams;
 import com.google.common.io.Files;
 import com.google.common.io.Resources;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.event.collector.combiner.CombinedStoredObject;
 import com.proofpoint.event.collector.combiner.StorageSystem;
 import com.proofpoint.event.collector.combiner.StoredObject;
@@ -28,16 +31,24 @@ import com.proofpoint.stats.SparseCounterStat;
 import com.proofpoint.stats.SparseTimeStat;
 import com.proofpoint.testing.SerialScheduledExecutorService;
 import com.proofpoint.units.Duration;
+import org.iq80.snappy.SnappyInputStream;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.proofpoint.event.collector.S3UploaderStats.FileProcessedStatus.CORRUPT;
 import static com.proofpoint.event.collector.S3UploaderStats.FileProcessedStatus.UPLOADED;
@@ -47,6 +58,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertTrue;
 
 public class TestS3Uploader
@@ -306,6 +318,65 @@ public class TestS3Uploader
         assertFalse(new File(tempStageDir.getPath(), invalidFile.getName()).exists());
 
         assertTrue(directory.exists());
+    }
+
+    @Test
+    public void test_invalidSnappyFileGetsDecompressed()
+            throws Exception
+    {
+        String json = unsnappy("invalidjson.snappy");
+        assertNotNull(json);
+    }
+
+    private String unsnappy(String fileName)
+            throws URISyntaxException, IOException
+    {
+        File file = new File(Resources.getResource(fileName).toURI());
+        SnappyInputStream input = new SnappyInputStream(new FileInputStream(file));
+        return CharStreams.toString(new InputStreamReader(input, Charsets.UTF_8));
+    }
+
+    @Test
+    public void test_destroy_waitsForTasksToComplete()
+            throws Exception
+    {
+        ExecutorService uploadExecutor = Executors.newFixedThreadPool(5, new ThreadFactoryBuilder().setNameFormat("S3Uploader-%s").build());
+        ScheduledExecutorService retryExecutor = Executors.newSingleThreadScheduledExecutor();
+        uploader = new S3Uploader(storageSystem, serverConfig, new EventPartitioner(), uploadExecutor, retryExecutor, s3UploaderStats);
+        uploader.start();
+
+        final AtomicInteger counter = new AtomicInteger(0);
+        executor.submit(new LoopingIncrementor(counter));
+        retryExecutor.submit(new LoopingIncrementor(counter));
+
+        uploader.destroy();
+
+        assertEquals(counter.get(), 2);
+    }
+
+    private class LoopingIncrementor implements Runnable
+    {
+        private final AtomicInteger counter;
+
+        private LoopingIncrementor(AtomicInteger counter)
+        {
+            this.counter = counter;
+        }
+
+        @Override
+        public void run()
+        {
+            try {
+                for (int i = 0; i < 10; i++) {
+                    Thread.yield();
+                    Thread.sleep(50);
+                }
+                counter.incrementAndGet();
+            }
+            catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     private class DummyStorageSystem

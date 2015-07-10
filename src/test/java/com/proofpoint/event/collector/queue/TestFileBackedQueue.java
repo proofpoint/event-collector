@@ -17,6 +17,7 @@ package com.proofpoint.event.collector.queue;
 
 import com.beust.jcommander.internal.Lists;
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.proofpoint.json.JsonCodec;
 import com.proofpoint.log.Logging;
 import com.proofpoint.testing.FileUtils;
@@ -27,10 +28,22 @@ import org.testng.annotations.Test;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import static com.proofpoint.json.JsonCodec.jsonCodec;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyLong;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.AssertJUnit.assertFalse;
+import static org.testng.AssertJUnit.assertNotNull;
 import static org.testng.AssertJUnit.assertTrue;
 
 public class TestFileBackedQueue
@@ -42,13 +55,20 @@ public class TestFileBackedQueue
     private static final JsonCodec<String> EVENT_CODEC = jsonCodec(String.class).withoutPretty();
     private static final String DATA_DIRECTORY = "target/queue";
     private FileBackedQueue<String> queue;
+    private ScheduledExecutorService executor;
 
     @BeforeMethod
     public void setup()
             throws IOException
     {
         FileUtils.deleteRecursively(new File(DATA_DIRECTORY));
-        queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, Long.MAX_VALUE);
+        ScheduledFuture future = mock(ScheduledFuture.class);
+
+        executor = mock(ScheduledExecutorService.class);
+        //noinspection unchecked
+        when(executor.scheduleAtFixedRate(any(Runnable.class), anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(future);
+
+        queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, Long.MAX_VALUE, executor);
     }
 
     @AfterMethod
@@ -62,42 +82,42 @@ public class TestFileBackedQueue
     public void testConstructorNullNameInvalid()
             throws IOException
     {
-        new FileBackedQueue<>(null, DATA_DIRECTORY, EVENT_CODEC, 10);
+        new FileBackedQueue<>(null, DATA_DIRECTORY, EVENT_CODEC, 10, executor);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "name cannot be null or empty")
     public void testConstructorEmptyNameInvalid()
             throws IOException
     {
-        new FileBackedQueue<>("", DATA_DIRECTORY, EVENT_CODEC, 10);
+        new FileBackedQueue<>("", DATA_DIRECTORY, EVENT_CODEC, 10, executor);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "dataDirectory is null")
     public void testConstructorDataDirectoryNullFails()
             throws IOException
     {
-        new FileBackedQueue<>("queue", null, EVENT_CODEC, 10);
+        new FileBackedQueue<>("queue", null, EVENT_CODEC, 10, executor);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "codec is null")
     public void testConstructorCodecNullFails()
             throws IOException
     {
-        new FileBackedQueue<>("queue", DATA_DIRECTORY, null, 10);
+        new FileBackedQueue<>("queue", DATA_DIRECTORY, null, 10, executor);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "dataDirectory is empty")
     public void testConstructorDataDirectoryEmptyFails()
             throws IOException
     {
-        new FileBackedQueue<>("queue", "", EVENT_CODEC, 10);
+        new FileBackedQueue<>("queue", "", EVENT_CODEC, 10, executor);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = "capacity must be greater than zero")
     public void testConstructorCapacityLessThanOneInvalid()
             throws IOException
     {
-        new FileBackedQueue<>("queue", "data", EVENT_CODEC, 0);
+        new FileBackedQueue<>("queue", "data", EVENT_CODEC, 0, executor);
     }
 
     @Test(expectedExceptions = NullPointerException.class, expectedExceptionsMessageRegExp = "item is null")
@@ -202,7 +222,7 @@ public class TestFileBackedQueue
     public void testOfferQueueFull()
             throws IOException
     {
-        queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, 3);
+        queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, 3, executor);
 
         assertTrue(queue.offer("foo"));
         assertTrue(queue.offer("fi"));
@@ -217,7 +237,7 @@ public class TestFileBackedQueue
     public void testEnqueueQueueFull()
             throws IOException
     {
-        queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, 3);
+        queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, 3, executor);
 
         queue.enqueueOrDrop("foo");
         queue.enqueueOrDrop("fi");
@@ -235,7 +255,7 @@ public class TestFileBackedQueue
     public void testEnqueueAllQueueFull()
             throws IOException
     {
-        queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, 3);
+        queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, 3, executor);
 
         List<String> enqueued = queue.enqueueAllOrDrop(ImmutableList.of("foo", "fi", "bar", "fum", "far"));
 
@@ -244,6 +264,24 @@ public class TestFileBackedQueue
         assertEquals(queue.getItemsEnqueued(), 3);
         assertEquals(queue.getItemsDequeued(), 0);
         assertEquals(queue.getItemsDropped(), 2);
+    }
+
+    @Test
+    public void testCleanupScheduled()
+            throws IOException
+    {
+        queue = new FileBackedQueue<>("queue", DATA_DIRECTORY, EVENT_CODEC, 3,
+                Executors.newScheduledThreadPool(3, new ThreadFactoryBuilder().setNameFormat("FileBackedQueueCleaner").build()));
+
+        verify(executor, times(1)).scheduleAtFixedRate(any(Runnable.class), eq(1L), eq(1L), eq(TimeUnit.MINUTES));
+        assertNotNull(queue.getCleanupThread());
+        assertFalse(queue.getCleanupThread().isCancelled());
+        assertFalse(queue.getCleanupThread().isDone());
+
+        queue.close();
+
+        assertTrue(queue.getCleanupThread().isCancelled());
+        assertTrue(queue.getCleanupThread().isDone());
     }
 
     @Test

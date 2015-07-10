@@ -39,7 +39,8 @@ public class TestEventTapConfig
                 .setEventTapRefreshDuration(new Duration(10, TimeUnit.SECONDS))
                 .setEventTapQosRetryCount(10)
                 .setEventTapQosRetryDelay(new Duration(30, TimeUnit.SECONDS))
-                .setAllowHttpConsumers(true);
+                .setAllowHttpConsumers(true)
+                .setEventTapCacheExpiration(new Duration(0, TimeUnit.MILLISECONDS));
 
         ConfigAssertions.assertRecordedDefaults(recordedDefaults);
     }
@@ -53,6 +54,7 @@ public class TestEventTapConfig
                 .put("collector.event-tap.qos-retry-count", "17")
                 .put("collector.event-tap.qos-retry-delay", "1h")
                 .put("collector.event-tap.allow-http-consumers", "false")
+                .put("collector.event-tap.cache-expiration", "2h")
                 .build();
 
         @SuppressWarnings("deprecation")
@@ -61,7 +63,8 @@ public class TestEventTapConfig
                 .setEventTapQosRetryDelay(new Duration(1, TimeUnit.HOURS))
                 .setEventTapQosRetryCount(17)
                 .setEventTapRefreshDuration(new Duration(30, TimeUnit.MINUTES))
-                .setAllowHttpConsumers(false);
+                .setAllowHttpConsumers(false)
+                .setEventTapCacheExpiration(new Duration(120, TimeUnit.MINUTES));
 
         ConfigAssertions.assertFullMapping(properties, expected);
     }
@@ -74,15 +77,18 @@ public class TestEventTapConfig
                 .setEventTapThreads(0)
                 .setEventTapRefreshDuration(null)
                 .setEventTapQosRetryCount(-1)
-                .setEventTapQosRetryDelay(null);
+                .setEventTapQosRetryDelay(null)
+                .setEventTapCacheExpiration(null);
 
         assertFailsValidation(config, "eventTapThreads", "must be greater than or equal to 1", Min.class);
         assertFailsValidation(config, "eventTapRefreshDuration", "may not be null", NotNull.class);
         assertFailsValidation(config, "eventTapQosRetryCount", "must be greater than or equal to 0", Min.class);
         assertFailsValidation(config, "eventTapQosRetryDelay", "may not be null", NotNull.class);
+        assertFailsValidation(config, "eventTapCacheExpiration", "may not be null", NotNull.class);
         assertValidates(new EventTapConfig()
                 .setEventTapRefreshDuration(new Duration(1, TimeUnit.SECONDS))
                 .setEventTapQosRetryCount(0)
-                .setEventTapQosRetryDelay(new Duration(1, TimeUnit.DAYS)));
+                .setEventTapQosRetryDelay(new Duration(1, TimeUnit.DAYS))
+                .setEventTapCacheExpiration(new Duration(1, TimeUnit.MINUTES)));
     }
 }

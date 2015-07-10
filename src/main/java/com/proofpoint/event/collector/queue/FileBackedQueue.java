@@ -29,8 +29,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -45,12 +45,13 @@ public class FileBackedQueue<T> implements Queue<T>
     private final JsonCodec<T> codec;
     private final long capacity;
     private final String name;
+    private final ScheduledFuture<?> cleanupThread;
 
     private final AtomicLong itemsEnqueued = new AtomicLong(0);
     private final AtomicLong itemsDequeued = new AtomicLong(0);
     private final AtomicLong itemsDroppped = new AtomicLong(0);
 
-    public FileBackedQueue(String name, String dataDirectory, JsonCodec<T> codec, long capacity)
+    public FileBackedQueue(String name, String dataDirectory, JsonCodec<T> codec, long capacity, ScheduledExecutorService executor)
             throws IOException
     {
         this.codec = checkNotNull(codec, "codec is null");
@@ -68,8 +69,7 @@ public class FileBackedQueue<T> implements Queue<T>
         this.queue = new BigQueueImpl(dataDirectory, name);
         this.capacity = capacity;
 
-        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
-        executor.schedule(new FileCleaner(), 1, TimeUnit.MINUTES);
+        cleanupThread = executor.scheduleAtFixedRate(new FileCleaner(), 1, 1, TimeUnit.MINUTES);
     }
 
     @Reported
@@ -170,6 +170,7 @@ public class FileBackedQueue<T> implements Queue<T>
     public void close()
             throws IOException
     {
+        cleanupThread.cancel(false);
         queue.close();
     }
 
@@ -186,6 +187,11 @@ public class FileBackedQueue<T> implements Queue<T>
         return name;
     }
 
+    ScheduledFuture<?> getCleanupThread()
+    {
+        return cleanupThread;
+    }
+
     private class FileCleaner implements Runnable
     {
         @Override
@@ -194,7 +200,7 @@ public class FileBackedQueue<T> implements Queue<T>
             try {
                 queue.gc();
             }
-            catch (IOException e) {
+            catch (Exception e) {
                 log.error(e, "Could not remove old queue files.");
             }
         }

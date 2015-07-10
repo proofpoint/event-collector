@@ -152,10 +152,20 @@ public class S3Uploader
 
     @PreDestroy
     public void destroy()
-            throws IOException
+            throws IOException, InterruptedException
     {
-        uploadExecutor.shutdown();
-        retryExecutor.shutdown();
+        shutdownExecutorService(uploadExecutor);
+        shutdownExecutorService(retryExecutor);
+    }
+
+    private void shutdownExecutorService(ExecutorService executor)
+            throws InterruptedException
+    {
+        executor.shutdown();
+
+        //noinspection StatementWithEmptyBody
+        while (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+        }
     }
 
     private void upload(EventPartition partition, File file)
@@ -233,13 +243,23 @@ public class S3Uploader
             @Override
             public void run()
             {
-                File[] retryFiles = retryFileDir.listFiles();
-                for (final File file : retryFiles) {
-                    if (file.isFile()) {
-                        //moving out of retry to avoid requeueing the file before the uploader gets to it
-                        File stagingFile = moveToStaging(file);
-                        enqueueLocalFileForUpload(stagingFile);
+                try {
+                    File[] retryFiles = retryFileDir.listFiles();
+                    for (final File file : retryFiles) {
+                        if (file.isFile()) {
+                            try {
+                                //moving out of retry to avoid requeueing the file before the uploader gets to it
+                                File stagingFile = moveToStaging(file);
+                                enqueueLocalFileForUpload(stagingFile);
+                            }
+                            catch (Exception e) {
+                                log.error(e, "Error enqueuing retry file %s for upload", file.getName());
+                            }
+                        }
                     }
+                }
+                catch (Exception e) {
+                    log.error(e, "Error processing retry folder");
                 }
             }
         }, (long) retryDelay.toMillis(), (long) retryPeriod.toMillis(), TimeUnit.MILLISECONDS);

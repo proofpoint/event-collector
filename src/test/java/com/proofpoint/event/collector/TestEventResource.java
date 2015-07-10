@@ -35,6 +35,8 @@ import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.UNS
 import static com.proofpoint.event.collector.EventCollectorStats.EventStatus.VALID;
 import static com.proofpoint.event.collector.EventCollectorStats.ProcessType.DISTRIBUTE;
 import static com.proofpoint.event.collector.EventCollectorStats.ProcessType.WRITE;
+import static javax.ws.rs.core.Response.Status.ACCEPTED;
+import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -42,8 +44,6 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
-import static javax.ws.rs.core.Response.Status.ACCEPTED;
-import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 
 public class TestEventResource
 {

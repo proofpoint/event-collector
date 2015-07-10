@@ -30,6 +30,7 @@ public class EventTapConfig
     private int eventTapQosRetryCount = 10;
     private Duration eventTapQosRetryDelay = new Duration(30, TimeUnit.SECONDS);
     private boolean allowHttpConsumers = true;
+    private Duration eventTapCacheExpiration = new Duration(0, TimeUnit.SECONDS);
 
     @Deprecated
     @Min(1)
@@ -98,6 +99,20 @@ public class EventTapConfig
     public EventTapConfig setAllowHttpConsumers(boolean allowHttpConsumers)
     {
         this.allowHttpConsumers = allowHttpConsumers;
+        return this;
+    }
+
+    @NotNull
+    public Duration getEventTapCacheExpiration()
+    {
+        return eventTapCacheExpiration;
+    }
+
+    @Config("collector.event-tap.cache-expiration")
+    @ConfigDescription("The duration of tap information caching. Used to handle situations where taps drop out of discovery temporarily. Set to 0s to disable caching and refresh taps on every discovery poll.")
+    public EventTapConfig setEventTapCacheExpiration(Duration eventTapCacheExpiration)
+    {
+        this.eventTapCacheExpiration = eventTapCacheExpiration;
         return this;
     }
 }

@@ -61,7 +61,7 @@ public class AsyncBatchProcessor<T> implements BatchProcessor<T>
     @Override
     public void start()
     {
-        executor.scheduleAtFixedRate(new EventPoster(), (long) throttleTime.getValue(), (long) throttleTime.getValue(), throttleTime.getUnit());
+        executor.scheduleWithFixedDelay(new EventPoster(), (long) throttleTime.getValue(), (long) throttleTime.getValue(), throttleTime.getUnit());
         running.set(true);
     }
 

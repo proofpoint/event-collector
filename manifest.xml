@@ -24,7 +24,7 @@
             <property name='s3-metadata-location' value='s3://proofpoint-production/metadata/' action='add'/>
             <property name='s3-staging-location' value='s3://proofpoint-production/collector-staging/' action='add'/>
 
-            <property name='version' value='latest' action='add'/>
+            <property name='version' value="1.19.52-SNAPSHOT20160220000737" />
 
         </service>
 

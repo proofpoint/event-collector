@@ -268,7 +268,7 @@
                     <useDefaultExcludes>true</useDefaultExcludes>
                     <excludes>
                         <exclude>**/README.txt</exclude>
-                        <exclude>**/config.properties</exclude>
+                        <exclude>**/*.properties</exclude>
                         <exclude>**/log.properties</exclude>
                         <exclude>**/logback-test.xml</exclude>
                         <exclude>**/*.json</exclude>
